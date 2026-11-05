@@ -198,3 +198,23 @@ def test_nonterminal_close_rejected(tmp_path):
         relay.close(handle.req.id, Outcome(RequestState.RUNNING, 0, 0, False, ""))
     assert handle.poll() is None
     handle.kill()
+
+
+def test_feed_select_slice_bounds_cancellation(tmp_path, monkeypatch):
+    relay, device = setup_relay(tmp_path)
+    handle = relay.submit(request(device))
+    slices = []
+
+    def cancel_during_select(readers, writers, errors, timeout):
+        slices.append(timeout)
+        handle.kill()
+        return [], [], []
+
+    monkeypatch.setattr("dirtside.relay.select.select", cancel_during_select)
+    try:
+        assert not relay.feed(handle.req.id, 0, b"data")
+        assert slices == [0.25]
+        assert handle.wait(0) == 130
+    finally:
+        handle.kill()
+        handle.stdout.close()

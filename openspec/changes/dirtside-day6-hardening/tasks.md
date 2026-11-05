@@ -23,3 +23,7 @@
 ## 4. Integration evidence
 
 - [x] 4.1 Run every requested acceptance check, record exact outputs and justified minimal budget deviations in the private report, and verify unchanged Git history with no archive.
+
+## 5. Correction 1
+
+- [x] 5.1 Reduce feed select slices to 250 ms without changing the total bound or existing assertions; prove the slice regression red/green, run both requested test modules and the full suite, and append Correction 1 evidence.

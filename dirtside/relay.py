@@ -130,7 +130,7 @@ class Relay:
             if remaining <= 0:
                 return False
             try:
-                if select.select([], [fd], [], min(1, remaining))[1]:
+                if select.select([], [fd], [], min(0.25, remaining))[1]:
                     view = view[os.write(fd, view):]
             except BlockingIOError:
                 continue
