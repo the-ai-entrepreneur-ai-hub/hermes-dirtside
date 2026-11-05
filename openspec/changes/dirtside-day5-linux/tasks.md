@@ -20,6 +20,12 @@
 - [x] 4.1 Run full pytest, ruff, size budgets, strict change validation and the isolated plugin doctor; retain exact outputs and fix in-scope failures without skipping tests or weakening assertions.
 - [x] 4.2 Review the full diff, confirm unchanged four-commit history and clean core, scan changed files for prohibited names/prose and deliver the private day-5 report with final source lines and Linux limitations.
 
+## 5. Correction 1
+
+- [x] 5.1 Move CI home, runtime and acceptance TMPDIR outside the checkout, create them before checks, and verify that pytest retains its own isolated state while doctor stages the actual checkout.
+- [x] 5.2 Acknowledge both background log fragments before allowing exit, retaining exact output, exit 7, multiple polls, local/remote equality and failure cleanup without fixed readiness sleeps.
+- [x] 5.3 Rerun all acceptance checks, confirm the current five-commit history and clean pinned core remain unchanged, and append exact correction evidence to the private report.
+
 ## Workflow follow-up
 
 - The owner runs GitHub-hosted Ubuntu and returns the exact log if any check fails.

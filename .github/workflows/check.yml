@@ -14,8 +14,6 @@ jobs:
         shell: bash
     env:
       PYTHONDONTWRITEBYTECODE: "1"
-      HERMES_HOME: ${{ github.workspace }}/.notes/ci-home
-      HERMES_RUNTIME_DIR: ${{ github.workspace }}/.notes/ci-runtime
       OPENSPEC_TELEMETRY: "0"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -35,10 +33,16 @@ jobs:
       - name: Install OpenSpec
         run: npm i -g @fission-ai/openspec@1.16.0
       - name: Run acceptance checks
+        env:
+          HERMES_HOME: ${{ runner.temp }}/ci-home
+          HERMES_RUNTIME_DIR: ${{ runner.temp }}/ci-runtime
+          TMPDIR: ${{ runner.temp }}/ci-tmp
         run: |
           set -eu
+          mkdir -p "$HERMES_HOME" "$HERMES_RUNTIME_DIR" "$TMPDIR"
           "$HERMES_SRC/venv/bin/python" -m pytest -q
           "$HERMES_SRC/venv/bin/python" -m ruff check .
           "$HERMES_SRC/venv/bin/python" tools/check_sizes.py
           openspec validate dirtside-day1-gate --strict
+          openspec validate dirtside-day5-linux --strict
           "$HERMES_SRC/venv/bin/hermes" plugins doctor . --ci

@@ -178,10 +178,15 @@ def test_conformance_stop(tmp_path):
 
 def background(env, root):
     registry = ProcessRegistry()
-    release = root / "background-release"
-    command = f"printf first; while [ ! -e {shlex.quote(str(release))} ]; do sleep 0.01; done; printf second; exit 7"
+    first = root / "background-first"
+    second = root / "background-second"
+    # Core can detect exit after reading a delta, without a final log read.
+    command = (
+        'for part in first second; do printf %s "$part"; '
+        f'while [ ! -e {shlex.quote(str(root))}/background-"$part" ]; do sleep 0.01; done; done; exit 7'
+    )
     session = registry.spawn_via_env(env, command)
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 30
     statuses = []
     saw_delta = False
     try:
@@ -190,7 +195,9 @@ def background(env, root):
             statuses.append(status)
             saw_delta |= status["output_preview"] == "first"
             if saw_delta:
-                release.touch()
+                first.touch()
+            if status["output_preview"] == "firstsecond":
+                second.touch()
             if status["status"] == "exited":
                 break
             threading.Event().wait(0.05)
@@ -201,7 +208,8 @@ def background(env, root):
     finally:
         if not session.exited:
             registry.kill_process(session.id)
-        release.unlink(missing_ok=True)
+        first.unlink(missing_ok=True)
+        second.unlink(missing_ok=True)
 
 
 def test_spawn_via_env(tmp_path):

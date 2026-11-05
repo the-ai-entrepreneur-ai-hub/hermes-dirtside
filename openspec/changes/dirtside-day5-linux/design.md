@@ -51,6 +51,16 @@ For parallelism, use a poll-observed Event after all three requests have been ac
 - Inspect all tests and helpers for bash path/version, `ps`/`kill` flags, `readlink -f`, random-data throughput and real timing contracts. Keep PATH bash resolution and POSIX syntax. Existing random-byte conformance uses one pre-generated file; benchmark bytes come from `/dev/zero`, not random-device throughput.
 - Keep genuine performance and loss/cancellation bounds unchanged. The Linux runner must still meet them; no blanket timeout or threshold widening is permitted.
 
+### Correction 1: CI scratch and background log acknowledgement
+
+The owner's workflow run `42100714688` on `a927f83` passes all 262 tests on Ubuntu, then fails doctor staging. The macOS job exposes an incomplete background-log handshake.
+
+Core defaults scratch to `HERMES_HOME/cache/scratch` (`hermes_bootstrap.py:456-466`). Doctor creates its temporary staging directory there and refuses overlap with the plugin source (`hermes_cli/plugin_dev.py:31-56,68-78`). Set home, runtime and TMPDIR under `runner.temp` in the acceptance step's environment, where the runner context is supported, and create those directories before checks. The runner context is unavailable in job-level environment expressions. Doctor must still stage the actual checkout. `conftest.py:12-24` remains the sole owner of pytest state: it overrides inherited home, runtime, HOME and temporary settings only within pytest and its children, not the parent shell or subsequent doctor process.
+
+Core's environment poller reads a log delta, appends it, then checks process liveness (`tools/process_registry.py:1427-1458,1460-1471`). On exit it finishes and returns without another log read. `read_log` only reads the retained buffer (`tools/process_registry.py:2017-2045`), so waiting after exit cannot recover a missed final delta. No Dirtside log-path defect is established.
+
+The test command prints each fragment and waits for its own file acknowledgement. Release the first gate after observing `first`, and the exit gate only after the registry reports exact `firstsecond`. Then require exit 7 and the exact retained log as before. Reuse the existing conditional file-poll interval, without a fixed readiness sleep. A 30-second readiness deadline allows the extra core poll on a busy runner. Clean up both gates and any unfinished owned job. No production or core code changes are needed for this correction.
+
 ## Risks / Trade-offs
 
 - A very busy gateway can still lose the deadline race despite the grace. Explicit device-timeout normalization makes the visible result independent of that race.

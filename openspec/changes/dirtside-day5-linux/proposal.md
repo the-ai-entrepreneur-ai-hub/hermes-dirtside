@@ -11,6 +11,7 @@ The Ubuntu gate fails the same five execution tests while macOS passes. Timeout 
 - Preserve timeout identity when the device also caps output.
 - Keep bash alive in whole-group signal tests. Observe actual worker starts and acknowledged dispatch instead of depending on submission order or fixed sleeps.
 - Audit every test for shell, temporary-directory, process-inspection and scheduling assumptions. Replace incidental host paths and readiness delays without weakening behavior or performance assertions.
+- Keep CI scratch outside the plugin checkout and acknowledge the complete background log before allowing the test command to exit.
 
 ## Capabilities
 
