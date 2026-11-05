@@ -6,11 +6,16 @@ import threading
 import time
 from contextvars import ContextVar
 
-from tools.environments.base import BaseEnvironment
+from tools.environments.base import BaseEnvironment, EnvironmentConnectionError
 
 from .model import ExecRequest, Outcome, RequestId, RequestState
 
 _COMMAND = ContextVar("dirtside_command", default="")
+
+def require_online(device, relay):
+    if not relay.is_online(device.id):
+        raise EnvironmentConnectionError(f"Dirtside: device '{device.name}' is offline. Nothing was run on the server.",
+                                         retry_hint="Start hermes dirtside serve on it, or run /dirtside use server.")
 
 class RemoteProcessHandle:
     def __init__(self, relay, req):
@@ -65,6 +70,7 @@ class DirtsideEnvironment(BaseEnvironment):
             _COMMAND.reset(token)
 
     def _run_bash(self, cmd_string, *, login=False, timeout=120, stdin_data=None):
+        require_online(self._device, self._relay)
         req = ExecRequest(RequestId("r_" + secrets.token_hex(12)), self._device.id,
                           self._session_key, self._task_id, _COMMAND.get(), cmd_string,
                           login, timeout, stdin_data, self.cwd)

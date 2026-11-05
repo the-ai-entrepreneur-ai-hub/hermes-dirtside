@@ -484,6 +484,15 @@ Built the same evening from A14 steps 6 and 7 plus every route in A11, through t
 - Python's default executor here is `min(32, cpu_count + 4)` (14 on this Mac), so the router owns its own 16-thread pool for polls and feeds, as A5 requires.
 - Integration point left open on purpose: `PUT /sessions/{key}/target` writes `set_target(key, None)` for `server`, and the second builder's targets change (A16, step 8) decides the stored sentinel. Resolve at merge time and test with a non-server default.
 
+### A16.2 Day-3 inside the real core
+
+Built the same night from the A14 step 5 and 6 checks, step 10 and the step 11 script, through the OpenSpec change `dirtside-day3-integration`; 193 tests and the loopback reliability matrix (8 of 8 rows) pass on the owner's run. The tests load the plugin through core's own loader into an isolated home, drive core's `terminal` and file tool entry points against a paired agent subprocess, and mount the router through core's dashboard discovery with the auth gate on. Two defects that only the real core could show, both fixed:
+
+- **Cached environments skipped the offline check.** Core reuses an environment without calling the provider again, so the creation-time check in `resolve_target` did not protect the next command after an outage; the model got a generic timeout. `environment.require_online` now runs before every dispatch in `_run_bash` and reports the offline device with "Nothing was run on the server" (A6, A7).
+- **An abandoned long poll could claim work.** When an agent restarted, its old handler stayed blocked in `relay.next` and consumed the next queued request after the connection was gone, while the new agent kept heartbeating. The poll route now watches the ASGI receive channel and passes a cancelled Event into `relay.next`, which wakes every 100 ms while a watcher exists (A5, A11).
+
+Core behaviors to know, none patched around: an explicit `terminal.cwd: "~"` is expanded on the gateway before the provider runs, so the config leaves it unset and the device home applies; file reads through a remote backend are recorded as partial by core (`file_tools.py` takes a version baseline only for host paths), so a remote patch result carries a pagination warning that the local backend does not; the displayed terminal result strips trailing whitespace and bounds large output while the recovery file keeps the shell trailers; concurrent calls with different child task ids share one `session:<key>` environment; a URL-safe pairing code can start with `-`, so the CLI documents `--code=<value>`; the plugin doctor refuses a `TMPDIR` inside the tree it validates. `install-service` renders launchd and systemd user units with pinned paths and private logs, with `--dry-run` and `--remove`; real loading was not exercised. The matrix is a 15-line bash entry over `tools/run_matrix.py`, because signed requests and owned fault injection need Python; evidence transcripts are written under `evidence/` and kept out of git because they carry local paths.
+
 ---
 
 # Part B. Explanation

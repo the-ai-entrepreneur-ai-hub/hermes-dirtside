@@ -73,12 +73,14 @@ class Relay:
             return False
         return self.close(request_id, outcome)
 
-    def next(self, device_id, wait_s):
+    def next(self, device_id, wait_s, cancelled=None):
         deadline = time.monotonic() + wait_s
         with self._condition:
             while True:
                 if device_id in self._revoked:
                     raise PermissionError("device revoked")
+                if cancelled is not None and cancelled.is_set():
+                    return None, []
                 req = next((h.req for h in self.handles.values()
                             if h.req.device_id == device_id and h.state is RequestState.QUEUED), None)
                 cancels = list(self.cancels.pop(device_id, ()))
@@ -87,7 +89,7 @@ class Relay:
                 remaining = deadline - time.monotonic()
                 if req is not None or cancels or remaining <= 0:
                     return req, cancels
-                self._condition.wait(remaining)
+                self._condition.wait(min(remaining, 0.1) if cancelled is not None else remaining)
 
     def _writer(self, handle, deadline):
         with self._condition:

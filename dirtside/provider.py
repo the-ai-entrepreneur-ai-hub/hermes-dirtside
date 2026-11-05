@@ -4,7 +4,7 @@ from gateway.session_context import get_session_env
 from tools.environments.base import EnvironmentConnectionError
 from tools.environments.local import LocalEnvironment
 
-from .environment import DirtsideEnvironment
+from .environment import DirtsideEnvironment, require_online
 from .model import OnDevice, Server, SessionKey
 
 def session_identity():
@@ -19,9 +19,7 @@ def resolve_target(session_key, is_cron, default_target, registry, relay):
                                          retry_hint="Run /dirtside use server, or pair the device again.")
     if device is None:
         return Server()
-    if not relay.is_online(device.id):
-        raise EnvironmentConnectionError(f"Dirtside: device '{device.name}' is offline.",
-                                         retry_hint="Start hermes dirtside serve on it, or run /dirtside use server. Nothing was run on the server.")
+    require_online(device, relay)
     return OnDevice(device)
 
 class DirtsideProvider(TerminalEnvironmentProvider):

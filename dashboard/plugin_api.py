@@ -1,6 +1,7 @@
 """Signed device transport and dashboard-session controls."""
 import asyncio
 import base64
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
@@ -72,8 +73,18 @@ async def pair(request: Request):
 @router.post("/device/poll")
 async def poll(request: Request):
     device, _, _ = await accepted(request, "poll", empty)
-    req, cancels = await asyncio.get_running_loop().run_in_executor(POLL_POOL, relay.next,
-                                                                   device.id, model.POLL_HOLD_S)
+    cancelled = threading.Event()
+    waiting = asyncio.get_running_loop().run_in_executor(POLL_POOL, relay.next,
+                                                        device.id, model.POLL_HOLD_S, cancelled)
+    # The core's receive wrapper needs a real await, not is_disconnected's cancelled probe.
+    disconnected = asyncio.create_task(request.receive())
+    disconnected.add_done_callback(lambda _: cancelled.set())
+    try:
+        req, cancels = await waiting
+    finally:
+        cancelled.set()
+        disconnected.cancel()
+        await asyncio.gather(disconnected, return_exceptions=True)
     body = {"exec": {k: getattr(req, k) for k in wire.WireExec.__annotations__}} if req else {}
     return wire.sign(relay_key, "poll", "relay", body | {"cancel": cancels})
 
