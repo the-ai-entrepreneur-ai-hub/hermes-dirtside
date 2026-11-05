@@ -25,7 +25,7 @@ class Runtime:
         web_server._configure_auth_gate("127.0.0.1", False, None, None)
         assert web_server.app.state.auth_required
         self.blocked = threading.Event()
-        self.active, self.lock = {}, threading.Lock()
+        self.active, self.lock, self.prompt_agents = {}, threading.Lock(), {}
         self.listener = socket.socket()
         self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listener.bind(("127.0.0.1", port))
@@ -63,8 +63,23 @@ class Runtime:
     def target(self, args):
         device = self.auth.registry.active_device(args["name"]) if args["name"] != "server" else None
         assert device is not None or args["name"] == "server", "device is not paired"
-        self.auth.registry.set_target(args["session"], device.id if device else None)
+        self.auth.registry.set_target(args["session"], device.id if device else "server")
         return {}
+
+    def slash(self, args):
+        from hermes_cli.plugin_command_dispatch import invoke_plugin_command
+        command = self.manager._plugin_commands["dirtside"]
+        assert command["argument_mode"] == "text" and command["args_hint"] == "<use|devices|pair|revoke>"
+        return invoke_plugin_command(command["handler"], args["raw_args"])
+
+    def prompt(self, args):
+        from agent.system_prompt import _frozen_plugin_prompt_sections
+        agent = self.prompt_agents.setdefault(args.get("snapshot", args["session"]),
+                    SimpleNamespace(session_id=args["session"], platform="telegram", model="", provider=""))
+        section = self.manager._system_prompt_sections["dirtside.target"]
+        assert section.position == "after_memory" and section.max_chars == 600
+        return [section.content for section in _frozen_plugin_prompt_sections(agent)
+                if section.id == "dirtside.target"]
 
     def state(self, args):
         from tools.terminal_tool import _resolve_container_task_id
@@ -126,14 +141,14 @@ class Runtime:
         args = message.get("params", {})
         session = args.get("session", "integration")
         args = {"session": session, **args}
-        tokens = set_session_vars(session_key=session, session_id=session, source="cli",
+        tokens = set_session_vars(session_key=session, session_id=session, source=args.get("source", "cli"),
                                   cron_session=args.get("cron", ""))
         with self.lock:
             self.active[message["id"]] = threading.get_ident()
         try:
             handlers = {name: getattr(self, name) for name in (
                 "info", "target", "state", "turn_end", "reap", "terminal", "file",
-                "queue", "cancel", "interrupt", "network")}
+                "queue", "cancel", "interrupt", "network", "slash", "prompt")}
             return handlers[message["method"]](args)
         finally:
             set_interrupt(False)

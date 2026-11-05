@@ -106,7 +106,7 @@ async def devices():
 
 @router.get("/sessions/{key}/target")
 async def target(key: str):
-    chosen = await asyncio.to_thread(registry.target_device_id, key)
+    chosen = await asyncio.to_thread(registry.target, key)
     device = await asyncio.to_thread(registry.device_by_id, chosen) if chosen and chosen != "server" else None
     if chosen and chosen != "server" and device is None:
         raise HTTPException(404, "target device is no longer paired")
@@ -118,7 +118,7 @@ async def set_target(key: str, request: Request):
     device = await asyncio.to_thread(registry.active_device, name) if name != "server" else None
     if name != "server" and device is None:
         raise HTTPException(404, "device is not paired")
-    await asyncio.to_thread(registry.set_target, key, device.id if device else None)
+    await asyncio.to_thread(registry.set_target, key, device.id if device else "server")
     return {"target": name}
 
 @router.get("/requests")

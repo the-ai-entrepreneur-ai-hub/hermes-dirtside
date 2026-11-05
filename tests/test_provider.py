@@ -35,6 +35,7 @@ def test_provider_flags(tmp_path):
     (True, True, "server", True, OnDevice),
     (True, False, "spare", True, OnDevice),
     (True, False, "server", False, EnvironmentConnectionError),
+    ("server", False, "macbook", False, Server),
 ])
 def test_resolve_target_table(tmp_path, chosen, cron, default, online, expected):
     registry = Registry(tmp_path / "data.db")
@@ -42,7 +43,7 @@ def test_resolve_target_table(tmp_path, chosen, cron, default, online, expected)
     spare, _, _ = paired(registry, tmp_path, "spare")
     relay = Relay(registry)
     if chosen:
-        registry.set_target("chat", device.id)
+        registry.set_target("chat", "server" if chosen == "server" else device.id)
     if online:
         relay.touch(device.id)
         relay.touch(spare.id)
@@ -123,7 +124,7 @@ def test_server_target_local(tmp_path):
     tokens = set_session_vars(session_key="server-chat")
     try:
         env = provider.create_environment(cwd=str(tmp_path), timeout=120)
-        assert type(env) is LocalEnvironment
+        assert type(env._current()) is LocalEnvironment
         assert env.execute("pwd")["output"].strip() == str(tmp_path)
         destination = tmp_path / "project"
         destination.mkdir()
@@ -132,7 +133,7 @@ def test_server_target_local(tmp_path):
         assert env.cwd == str(destination)
         env.cleanup()
         env = provider.create_environment(cwd="~", timeout=120)
-        assert type(env) is LocalEnvironment and os.path.isabs(env.cwd)
+        assert type(env._current()) is LocalEnvironment and os.path.isabs(env.cwd)
         assert env.execute("pwd")["output"].strip() == env.cwd
         env.cleanup()
     finally:

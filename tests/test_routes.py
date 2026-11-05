@@ -112,11 +112,12 @@ def test_desktop_routes_and_device_scope(routes, tmp_path):
     path = API + "/sessions/telegram:42/target"
     assert client.get(path, headers=desktop).json() == {"target": "server"}
     assert client.put(path, headers=desktop, json={"target": device.name}).json() == {"target": device.name}
-    assert reg.target_device_id("telegram:42") == device.id
+    assert reg.target("telegram:42") == device.id
     assert client.get(path, headers=desktop).json() == {"target": device.name}
     assert client.put(path, headers=desktop, json={"target": "missing"}).status_code == 404
     assert client.put(path, headers=desktop, json={"target": 1}).status_code == 400
     assert client.put(path, headers=desktop, json={"target": "server"}).json() == {"target": "server"}
+    assert reg.target("telegram:42") == "server"
     assert client.get(path, headers=desktop).json() == {"target": "server"}
     relay.touch(device.id)
     handle = relay.submit(request(device, session="telegram:42"))
@@ -136,6 +137,19 @@ def test_desktop_routes_and_device_scope(routes, tmp_path):
     assert reg.credential_for(token, int(time.time())) is None and not relay.is_online(device.id)
     assert client.get(path, headers=desktop).status_code == 404
     assert client.get(API + "/requests", headers=desktop).json()[0]["tail"] == ""
+
+def test_server_target_overrides_device_default_and_clear_restores_it(routes, tmp_path):
+    client, reg, _, module, _ = routes
+    device, _, _ = paired(reg, tmp_path)
+    module.auth.default_target = device.name
+    path, desktop = API + "/sessions/default-test/target", headers(DESKTOP_TOKEN)
+    assert client.get(path, headers=desktop).json() == {"target": device.name}
+    assert client.put(path, headers=desktop, json={"target": "server"}).json() == {"target": "server"}
+    assert reg.target("default-test") == "server"
+    assert client.get(path, headers=desktop).json() == {"target": "server"}
+    assert client.get(API + "/sessions/other/target", headers=desktop).json() == {"target": device.name}
+    reg.set_target("default-test", None)
+    assert client.get(path, headers=desktop).json() == {"target": device.name}
 
 
 def test_poll_uses_stable_signed_key_and_does_not_block(routes, tmp_path):

@@ -34,7 +34,7 @@ def test_terminal_and_file_entry_points_agree_with_local(tmp_path):
                 states.append(remote.call("state", session="chat"))
                 assert states[-1]["cwd"] == local.call("state", session="chat")["cwd"]
                 assert remote.call("turn_end", session="chat")["identity"] == states[-1]["identity"]
-            assert states[0]["environment"] == "DirtsideEnvironment"
+            assert states[0]["environment"] == "ConversationEnvironment"
             assert states[0]["persistent"] and states[0]["key"] == "session:chat"
             assert len({s["identity"] for s in states}) == 1
             assert remote.terminal("pwd")["output"].strip() == str(Path("/tmp").resolve())
@@ -97,7 +97,7 @@ def test_cached_device_offline_fails_closed_then_no_target_is_local(tmp_path):
         assert result["exit_code"] != 0 and not marker.exists()
         assert time.monotonic() - started < 20
         assert core.terminal("pwd", session="unselected")["output"].strip() == core.env["HOME"]
-        assert core.call("state", session="unselected")["environment"] == "LocalEnvironment"
+        assert core.call("state", session="unselected")["environment"] == "ConversationEnvironment"
         assert core.terminal("cd /tmp", session="unselected")["exit_code"] == 0
         core.call("turn_end", session="unselected")
         assert core.terminal("pwd", session="unselected")["output"].strip() == str(Path("/tmp").resolve())
@@ -110,4 +110,4 @@ def test_file_first_uses_selected_environment(tmp_path):
         result = file(rig.core, "write_file", path=str(path), content="file-first\n")
         assert not result.get("error"), result
         assert path.read_text() == "file-first\n"
-        assert rig.core.call("state", session="chat")["environment"] == "DirtsideEnvironment"
+        assert rig.core.call("state", session="chat")["environment"] == "ConversationEnvironment"

@@ -1,4 +1,6 @@
 """Resolve a conversation's target without falling back from an explicit device."""
+import threading
+
 from agent.terminal_env_provider import TerminalEnvironmentProvider
 from gateway.session_context import get_session_env
 from tools.environments.base import EnvironmentConnectionError
@@ -10,8 +12,10 @@ from .model import OnDevice, Server, SessionKey
 def session_identity():
     return SessionKey(get_session_env("HERMES_SESSION_KEY") or get_session_env("HERMES_SESSION_ID"))
 
-def resolve_target(session_key, is_cron, default_target, registry, relay):
-    chosen = registry.target_device_id(session_key) if session_key else None
+def resolve_target(session_key, is_cron, default_target, registry, relay, *, require_contact=True):
+    chosen = registry.target(session_key) if session_key else None
+    if chosen == "server":
+        return Server()
     default = None if is_cron or default_target == "server" else registry.active_device(default_target)
     device = registry.device_by_id(chosen) if chosen else default
     if device is None and chosen:
@@ -19,8 +23,48 @@ def resolve_target(session_key, is_cron, default_target, registry, relay):
                                          retry_hint="Run /dirtside use server, or pair the device again.")
     if device is None:
         return Server()
-    require_online(device, relay)
+    if require_contact:
+        require_online(device, relay)
     return OnDevice(device)
+
+class ConversationEnvironment:
+    # Core caches this object; file operations must not latch a host-filesystem shortcut.
+    _persistent = True
+    uses_host_filesystem = is_local = False
+
+    def __init__(self, provider, key, cron, cwd, timeout, task_id):
+        self._provider, self._key, self._cron = provider, key, cron
+        self._cwd, self._timeout, self._task_id = cwd, timeout, task_id
+        self._environments, self._lock = {}, threading.RLock()
+        self._current(True)
+
+    def _current(self, require_contact=False):
+        p = self._provider
+        target = resolve_target(self._key, self._cron, p._default_target, p._registry, p._relay,
+                                require_contact=require_contact)
+        identity = target.device.id if isinstance(target, OnDevice) else "server"
+        with self._lock:
+            if identity not in self._environments:
+                self._environments[identity] = (
+                    DirtsideEnvironment(p._relay, target.device, self._key, self._task_id, self._cwd, self._timeout)
+                    if isinstance(target, OnDevice)
+                    else LocalEnvironment(cwd="" if self._cwd == "~" else self._cwd, timeout=self._timeout))
+            return self._environments[identity]
+
+    def __getattr__(self, name):
+        return getattr(self._current(name == "execute"), name)
+
+    @property
+    def cwd(self):
+        return self._current().cwd
+
+    @cwd.setter
+    def cwd(self, value):
+        self._current().cwd = value
+
+    def cleanup(self):
+        for env in self._environments.values():
+            env.cleanup()
 
 class DirtsideProvider(TerminalEnvironmentProvider):
     name = "dirtside"
@@ -40,11 +84,5 @@ class DirtsideProvider(TerminalEnvironmentProvider):
 
     def create_environment(self, *, cwd, timeout, task_id="default", image=None,
                            container_config=None, **kwargs):
-        key = session_identity()
-        target = resolve_target(key, get_session_env("HERMES_CRON_SESSION") == "1",
-                                self._default_target, self._registry, self._relay)
-        match target:
-            case Server():
-                return LocalEnvironment(cwd="" if cwd == "~" else cwd, timeout=timeout)
-            case OnDevice(device):
-                return DirtsideEnvironment(self._relay, device, key, task_id, cwd, timeout)
+        return ConversationEnvironment(self, session_identity(), get_session_env("HERMES_CRON_SESSION") == "1",
+                                       cwd, timeout, task_id)

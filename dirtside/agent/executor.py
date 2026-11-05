@@ -35,7 +35,6 @@ class _Output:
         self.id, self.limit, self.send = req.id, policy.max_output_bytes, send
         self.pending, self.seq, self.total = bytearray(), 0, 0
         self.first, self.truncated, self.eof = 0.0, False, False
-
     def add(self, data):
         take = min(len(data), max(0, self.limit - self.total))
         self.truncated |= take < len(data)
@@ -43,7 +42,6 @@ class _Output:
             self.first = time.monotonic()
         self.pending.extend(data[:take])
         self.total += take
-
     def flush(self, exited):
         due = not exited and time.monotonic() - self.first >= FLUSH_MS / 1000
         if self.pending and (len(self.pending) >= CHUNK_BYTES or due):
@@ -58,7 +56,9 @@ class _Output:
         return Chunk(self.id, self.seq, bytes(self.pending)) if self.pending else None
 def _read(proc, output, idle):
     if output.eof:
-        time.sleep(0.1)
+        # EOF can precede exit; wait briefly rather than add a fixed command delay.
+        with suppress(subprocess.TimeoutExpired):
+            proc.wait(timeout=0.01)
         return 3
     if select.select([proc.stdout], [], [], 0.1)[0]:
         data = os.read(proc.stdout.fileno(), CHUNK_BYTES)

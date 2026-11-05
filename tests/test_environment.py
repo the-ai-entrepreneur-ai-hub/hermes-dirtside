@@ -38,7 +38,7 @@ def test_roundtrip_fake_device(tmp_path):
     try:
         with fake:
             env = DirtsideProvider(relay.registry, relay).create_environment(cwd="~", timeout=120)
-            assert isinstance(env, DirtsideEnvironment)
+            assert isinstance(env._current(), DirtsideEnvironment)
             assert env._stdin_mode == "payload" and env._persistent
             assert not env._passwordless_sudo_probe_supported
             result = env.execute("pwd")

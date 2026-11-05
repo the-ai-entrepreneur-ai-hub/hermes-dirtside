@@ -464,7 +464,7 @@ Deviations the builder found in the source and that are now part of the design:
 
 Open for the next steps, with the section each one changes:
 
-- Target representation (A4, A7, step 8): a `targets.device_id` column cannot express an explicit `server` choice over a non-server default, because clearing the row restores the default. Store `target TEXT` holding `server` or a device id; no row means the default. `resolve_target` reads it in that order.
+- Target representation (A4, A7, step 8), resolved in A16.3: a `targets.device_id` column cannot express an explicit `server` choice over a non-server default. The implemented `target TEXT` stores `server` or a device id; no row means the default.
 - CI (A14 step 1) runs on GitHub-hosted runners: clone core at the pinned SHA, `uv sync`, then the five checks. The first draft assumed a prepared checkout on a self-hosted runner.
 - Device stop waits up to 3 seconds for exit after SIGTERM instead of sleeping 3 seconds, so a cancel is as fast as the process allows.
 - Parallel calls on one environment share core's snapshot file, as they do on the ssh backend. Not serialized; noted, not fixed.
@@ -482,7 +482,7 @@ Built the same evening from A14 steps 6 and 7 plus every route in A11, through t
 - `DeviceConfig` accepts HTTPS, or HTTP on loopback only; pairing pins the relay public key; the default deny list covers `sudo`, `rm -rf /`, `mkfs`, `dd if=`, shutdown and reboot, service stops, fork bombs and `curl | sh`.
 - Workers in the loop track cancel Events, not processes; the executor owns the process groups. A 410 during execution cancels that request; a 410 after a natural exit cannot kill a surviving background job, which keeps R10.
 - Python's default executor here is `min(32, cpu_count + 4)` (14 on this Mac), so the router owns its own 16-thread pool for polls and feeds, as A5 requires.
-- Integration point left open on purpose: `PUT /sessions/{key}/target` writes `set_target(key, None)` for `server`, and the second builder's targets change (A16, step 8) decides the stored sentinel. Resolve at merge time and test with a non-server default.
+- Integration point originally left open: `PUT /sessions/{key}/target` used `set_target(key, None)` for `server`. A16.3 resolves this with the stored sentinel and non-server-default route tests.
 
 ### A16.2 Day-3 inside the real core
 
@@ -493,13 +493,25 @@ Built the same night from the A14 step 5 and 6 checks, step 10 and the step 11 s
 
 Core behaviors to know, none patched around: an explicit `terminal.cwd: "~"` is expanded on the gateway before the provider runs, so the config leaves it unset and the device home applies; file reads through a remote backend are recorded as partial by core (`file_tools.py` takes a version baseline only for host paths), so a remote patch result carries a pagination warning that the local backend does not; the displayed terminal result strips trailing whitespace and bounds large output while the recovery file keeps the shell trailers; concurrent calls with different child task ids share one `session:<key>` environment; a URL-safe pairing code can start with `-`, so the CLI documents `--code=<value>`; the plugin doctor refuses a `TMPDIR` inside the tree it validates. `install-service` renders launchd and systemd user units with pinned paths and private logs, with `--dry-run` and `--remove`; real loading was not exercised. The matrix is a 15-line bash entry over `tools/run_matrix.py`, because signed requests and owned fault injection need Python; evidence transcripts are written under `evidence/` and kept out of git because they carry local paths.
 
+### A16.3 Day-4 user surfaces
+
+The active `dirtside-day4-surfaces` change implements A14 steps 8 and 9 and the A15.1 signed-loopback benchmark against the same pinned core. These amendments supersede the earlier API sketches:
+
+- Targets migrate transactionally to `target TEXT NOT NULL` without a device foreign key, preserving selections and timestamps. `set_target(key, target: str | None)` persists literal `server` or a paired device id; `None` deletes the row. `target(key) -> str | None` replaces the old reader. Both route callers preserve their JSON shapes.
+- Core caches environments, so changing the row alone cannot redirect the next command. The provider now returns `ConversationEnvironment`, which resolves on dispatch and keeps per-target delegates and shell snapshots. It disables the host-filesystem shortcut so cached file operations also follow the target. Removed and offline explicit targets fail closed.
+- Core's recorded conversation cwd still crosses targets; the execution boundary does not distinguish it from explicit `workdir`. No heuristic translation is added. A path absent on the new target needs an explicit valid workdir.
+- The bound text command, online-device picker and bounded quoted target facts use the existing registration contracts. Core freezes the prompt once; changing targets does not invalidate it.
+- Native Desktop discovers `desktop/plugin.js` without another manifest. The opt-in pane uses SDK REST and React Query, stops device/request polling while hidden, and scopes reads and writes by connection, profile, activation and focused durable session key. A foreign or missing owner cannot write through the active gateway.
+- The benchmark compares 50 paired commands, verifies all 10,000,000 output bytes and measures early running-command cancellation to tool return. It exposed a fixed 100 ms EOF-before-exit delay in the device executor, replaced by a bounded 10 ms process wait. No core code changes. HTTP and late cancellation are not certified by that measurement; core's adaptive polling can delay the latter by up to 200 ms.
+- README contains installation, four-command pairing, security disclosures and dated measurements. The private day-4 report records acceptance outputs and limits. Desktop runtime, physical two-host and real service-manager checks remain unperformed.
+
 ---
 
 # Part B. Explanation
 
 ## B1. Why a global backend with per-conversation targets
 
-Core freezes `TERMINAL_ENV` into each session's policy in `gateway/session_policy.py` and binds it per turn through `policy_scope()`. That is gateway-internal; a plugin cannot set a different backend per session. So Dirtside is the backend for every session and decides inside `create_environment`. The cost is that server-target sessions carry Dirtside's provider flags (`is_remote = True`), so their prompt loses the host OS hints. The alternative, switching `terminal.backend` by hand per conversation, defeats the product. The right long-term fix is an upstream seam, which the catalog README invites as an issue.
+Core freezes `TERMINAL_ENV` into each session's policy in `gateway/session_policy.py` and binds it per turn through `policy_scope()`. That is gateway-internal; a plugin cannot set a different backend per session. So Dirtside is the backend for every session and its cached conversation adapter decides the target at dispatch (A16.3). The cost is that server-target sessions carry Dirtside's provider flags (`is_remote = True`), so their prompt loses the host OS hints. The alternative, switching `terminal.backend` by hand per conversation, defeats the product. The right long-term fix is an upstream seam, which the catalog README invites as an issue.
 
 ## B2. Why inherit `BaseEnvironment` instead of writing an executor
 

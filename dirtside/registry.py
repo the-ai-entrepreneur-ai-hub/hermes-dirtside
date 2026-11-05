@@ -12,19 +12,19 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from .model import PAIR_TTL_S, Device, DeviceId, Pending, RequestRow, RequestState
+from .model import PAIR_TTL_S, Device, Pending, RequestRow, RequestState
 
 _COLUMNS = "id,name,pubkey,os,arch,home,temp_dir,agent_version"
 _ACTIVE = "revoked_at IS NULL AND pubkey IS NOT NULL AND expires_at IS NULL"
-_SCHEMA = """
+_TARGETS = "CREATE TABLE IF NOT EXISTS targets (session_key TEXT PRIMARY KEY, target TEXT NOT NULL, set_at INTEGER NOT NULL)"
+_SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS devices (
  id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash BLOB NOT NULL,
  pubkey BLOB, os TEXT, arch TEXT, home TEXT, temp_dir TEXT, agent_version TEXT,
  created_at INTEGER NOT NULL, expires_at INTEGER, revoked_at INTEGER);
 CREATE UNIQUE INDEX IF NOT EXISTS devices_active_name ON devices(name)
  WHERE revoked_at IS NULL AND pubkey IS NOT NULL;
-CREATE TABLE IF NOT EXISTS targets (session_key TEXT PRIMARY KEY,
- device_id TEXT NOT NULL REFERENCES devices(id), set_at INTEGER NOT NULL);
+{_TARGETS};
 CREATE TABLE IF NOT EXISTS requests (
  id TEXT PRIMARY KEY, device_id TEXT NOT NULL, session_key TEXT NOT NULL, task_id TEXT NOT NULL,
  state TEXT NOT NULL, preview TEXT NOT NULL, created_at INTEGER NOT NULL,
@@ -42,6 +42,12 @@ class Registry:
         self.path, self._local = Path(path), threading.local()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection().executescript(_SCHEMA)
+        with self._tx() as conn:
+            if any(row["name"] == "device_id" for row in conn.execute("PRAGMA table_info(targets)")):
+                conn.execute("ALTER TABLE targets RENAME TO old_targets")
+                conn.execute(_TARGETS)
+                conn.execute("INSERT INTO targets SELECT session_key,device_id,set_at FROM old_targets")
+                conn.execute("DROP TABLE old_targets")
         self.relay_seed = self._seed()
 
     def _connection(self):
@@ -134,18 +140,20 @@ class Registry:
             conn.execute("UPDATE devices SET revoked_at=? WHERE name=? AND revoked_at IS NULL", (now, name))
             return device
 
-    def set_target(self, session_key, device_id):
+    def set_target(self, session_key, target: str | None):
         if not session_key:
             raise ValueError("a conversation identity is required")
+        if target not in (None, "server") and self.device_by_id(target) is None:
+            raise ValueError("device is not paired")
         with self._tx() as conn:
             conn.execute("DELETE FROM targets WHERE session_key=?", (session_key,))
-            if device_id is not None:
-                conn.execute("INSERT INTO targets VALUES(?,?,?)", (session_key, device_id, int(time.time())))
+            if target is not None:
+                conn.execute("INSERT INTO targets VALUES(?,?,?)", (session_key, target, int(time.time())))
 
-    def target_device_id(self, session_key):
+    def target(self, session_key) -> str | None:
         with self._tx() as conn:
-            row = conn.execute("SELECT device_id FROM targets WHERE session_key=?", (session_key,)).fetchone()
-            return DeviceId(row[0]) if row else None
+            row = conn.execute("SELECT target FROM targets WHERE session_key=?", (session_key,)).fetchone()
+            return row[0] if row else None
 
     def log(self, req):
         with self._tx() as conn:

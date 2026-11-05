@@ -2,6 +2,7 @@
 import os
 import re
 import shlex
+import subprocess
 import sys
 import threading
 import time
@@ -10,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import psutil
 import pytest
 
-from dirtside.agent.executor import run
+from dirtside.agent.executor import _read, run
 from dirtside.agent.policy import evaluate
 from dirtside.model import CHUNK_BYTES, MAX_OUTPUT_BYTES, Policy, Refused, RequestState
 from dirtside.protocol import WireExec
@@ -152,6 +153,14 @@ def test_rejected_post_kills_group(tmp_path):
 def test_closed_stdout_still_observes_timeout(tmp_path):
     out, _ = execute(tmp_path, "exec 1>&- 2>&-; sleep 60", timeout=1)
     assert out.exit_code == 124
+
+
+def test_eof_wait_is_bounded_until_process_exits():
+    class Closing:
+        def wait(self, timeout):
+            assert timeout == 0.01
+            raise subprocess.TimeoutExpired("closing-child", timeout)
+    assert _read(Closing(), type("Output", (), {"eof": True})(), 0) == 3
 
 
 def test_invalid_cwd_is_reported(tmp_path):

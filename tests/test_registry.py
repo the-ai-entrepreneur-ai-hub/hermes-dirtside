@@ -96,17 +96,36 @@ def test_revoke(tmp_path):
 def test_targets(tmp_path):
     reg = Registry(tmp_path / "data.db")
     device, _, _ = paired(reg, tmp_path)
-    assert reg.target_device_id("chat") is None
+    assert reg.target("chat") is None
     reg.set_target("chat", device.id)
-    assert Registry(reg.path).target_device_id("chat") == device.id
+    assert Registry(reg.path).target("chat") == device.id
     reg.revoke(device.name, 102)
-    assert reg.target_device_id("chat") == device.id
+    assert reg.target("chat") == device.id
+    reg.set_target("chat", "server")
+    assert Registry(reg.path).target("chat") == "server"
     reg.set_target("chat", None)
-    assert reg.target_device_id("chat") is None
-    with pytest.raises(sqlite3.IntegrityError):
+    assert reg.target("chat") is None
+    with pytest.raises(ValueError, match="not paired"):
         reg.set_target("chat", "missing")
     with pytest.raises(ValueError):
         reg.set_target("", device.id)
+
+def test_legacy_targets_migrate_without_losing_revoked_selections(tmp_path):
+    reg = Registry(tmp_path / "data.db")
+    device, _, _ = paired(reg, tmp_path)
+    with sqlite3.connect(reg.path) as conn:
+        conn.execute("DROP TABLE targets")
+        conn.execute("CREATE TABLE targets (session_key TEXT PRIMARY KEY, "
+                     "device_id TEXT NOT NULL REFERENCES devices(id), set_at INTEGER NOT NULL)")
+        conn.execute("INSERT INTO targets VALUES(?,?,?)", ("chat", device.id, 123))
+    reg.revoke(device.name, 124)
+    migrated = Registry(reg.path)
+    assert migrated.target("chat") == device.id
+    with sqlite3.connect(reg.path) as conn:
+        assert conn.execute("SELECT * FROM targets").fetchall() == [("chat", device.id, 123)]
+        assert conn.execute("PRAGMA foreign_key_list(targets)").fetchall() == []
+    migrated.set_target("other", "server")
+    assert Registry(reg.path).target("other") == "server"
 
 
 def test_request_log(tmp_path):
