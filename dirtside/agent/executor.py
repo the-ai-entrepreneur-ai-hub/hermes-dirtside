@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from contextlib import suppress
-from ..model import CHUNK_BYTES, FLUSH_MS, Outcome, RequestState
+from ..model import CHUNK_BYTES, FLUSH_MS, Outcome, RequestState, device_timeout_s
 from ..protocol import Chunk
 from .policy import evaluate
 def _signal(proc, sig):
@@ -68,7 +68,7 @@ def _read(proc, output, idle):
     return idle + 1 if proc.poll() is not None else 0
 
 def _drain(proc, req, policy, output, cancel):
-    deadline, idle = time.monotonic() + min(req.timeout_s, policy.max_timeout_s), 0
+    deadline, idle = time.monotonic() + device_timeout_s(req.timeout_s, policy), 0
     while idle < 3 or proc.poll() is None:
         expired = time.monotonic() >= deadline
         if cancel.is_set() or expired:
@@ -105,6 +105,6 @@ def run(req, policy, send, *, cancel=None):
     finally:
         proc.stdout.close()
     if output.truncated:
-        reason = f"output capped at {policy.max_output_bytes} bytes on the device"
+        reason = "; ".join(filter(None, (reason, f"output capped at {policy.max_output_bytes} bytes on the device")))
     return Outcome(RequestState.FINISHED, code, int((time.monotonic() - start) * 1000),
                    output.truncated, reason), output.tail()

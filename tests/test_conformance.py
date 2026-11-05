@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from network_support import until
 from tools.environments.local import LocalEnvironment
 from tools.file_operations import ShellFileOperations
 from tools.interrupt import set_interrupt
@@ -27,7 +28,7 @@ def compare(local, remote, command, **kwargs):
 
 @pytest.mark.parametrize("commands", [
     ["pwd"],
-    ["cd /tmp", "pwd"],
+    ["cd 'cwd with spaces'", "pwd"],
     ["export X=1", "echo $X"],
     ["exit 3"],
     ["nosuchcommand"],
@@ -37,6 +38,7 @@ def compare(local, remote, command, **kwargs):
     ["cd does-not-exist"],
 ])
 def test_conformance(tmp_path, commands):
+    (tmp_path / "cwd with spaces").mkdir()
     relay, device, fake = device_setup(tmp_path)
     local = LocalEnvironment(cwd=str(tmp_path), timeout=120)
     try:
@@ -71,6 +73,7 @@ def test_conformance_timeout(tmp_path):
             remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
             result = compare(local, remote, "printf partial; sleep 5", timeout=1)
             assert result["returncode"] == 124 and "partial" in result["output"]
+            assert result["hermes_timed_out"] is True
     finally:
         local.cleanup()
 
@@ -151,14 +154,15 @@ def test_conformance_stop(tmp_path):
                 def execute():
                     ids.append(threading.get_ident())
                     try:
-                        return env.execute(f"echo $$ > stop-{index}.pid; printf partial; sleep 60")
+                        return env.execute(f"printf partial; echo $$ > stop-{index}.pid; sleep 60")
                     finally:
                         set_interrupt(False)
 
                 with ThreadPoolExecutor(1) as pool:
                     future = pool.submit(execute)
                     pid = int(await_file(tmp_path / f"stop-{index}.pid"))
-                    time.sleep(0.3)
+                    if env is remote:
+                        until(lambda: any(relay.tail(rid) == b"partial" for rid in list(relay.handles)))
                     set_interrupt(True, ids[0])
                     result = future.result(timeout=1)
                 assert result["returncode"] == 130
@@ -172,23 +176,32 @@ def test_conformance_stop(tmp_path):
         local.cleanup()
 
 
-def background(env):
+def background(env, root):
     registry = ProcessRegistry()
-    session = registry.spawn_via_env(env, "printf first; sleep 3; printf second; exit 7")
+    release = root / "background-release"
+    command = f"printf first; while [ ! -e {shlex.quote(str(release))} ]; do sleep 0.01; done; printf second; exit 7"
+    session = registry.spawn_via_env(env, command)
     deadline = time.monotonic() + 10
     statuses = []
     saw_delta = False
-    while time.monotonic() < deadline:
-        status = registry.poll(session.id)
-        statuses.append(status)
-        saw_delta |= status["output_preview"] == "first"
-        if status["status"] == "exited":
-            break
-        threading.Event().wait(0.05)
-    assert statuses[-1]["status"] == "exited" and len(statuses) >= 2 and saw_delta
-    assert statuses[-1]["exit_code"] == 7
-    assert registry.read_log(session.id)["output"] == "firstsecond"
-    return statuses[-1]["output_preview"], statuses[-1]["exit_code"], env.cwd
+    try:
+        while time.monotonic() < deadline:
+            status = registry.poll(session.id)
+            statuses.append(status)
+            saw_delta |= status["output_preview"] == "first"
+            if saw_delta:
+                release.touch()
+            if status["status"] == "exited":
+                break
+            threading.Event().wait(0.05)
+        assert statuses[-1]["status"] == "exited" and len(statuses) >= 2 and saw_delta
+        assert statuses[-1]["exit_code"] == 7
+        assert registry.read_log(session.id)["output"] == "firstsecond"
+        return statuses[-1]["output_preview"], statuses[-1]["exit_code"], env.cwd
+    finally:
+        if not session.exited:
+            registry.kill_process(session.id)
+        release.unlink(missing_ok=True)
 
 
 def test_spawn_via_env(tmp_path):
@@ -197,6 +210,6 @@ def test_spawn_via_env(tmp_path):
     try:
         with fake:
             remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
-            assert background(local) == background(remote)
+            assert background(local, tmp_path) == background(remote, tmp_path)
     finally:
         local.cleanup()

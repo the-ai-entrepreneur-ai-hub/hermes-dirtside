@@ -62,7 +62,7 @@ def test_cli_pair_real_http_pwd_cd_stop_revoke(tmp_path, capsys):
         code = reg.mint("laptop", int(time.time()))
         scope = set_hermes_home_override(install)
         try:
-            args = parser().parse_args(["dirtside", "pair", url, "--name", "laptop", "--code", code])
+            args = parser().parse_args(["dirtside", "pair", url, "--name", "laptop", "--code=" + code])
             assert args.func(args) is None
             cfg = DeviceConfig.load()
             output = capsys.readouterr().out

@@ -11,6 +11,7 @@ import pytest
 from fake_device import FakeDevice
 from gateway.session_context import clear_session_vars, set_session_vars
 from nacl.signing import SigningKey
+from network_support import until
 from tools.file_operations import ShellFileOperations
 from tools.interrupt import set_interrupt
 
@@ -107,6 +108,7 @@ def test_timeout_retains_partial_and_kills_device_process(tmp_path):
         env = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
         result = env.execute("echo $$ > pid; printf partial; sleep 60", timeout=1)
         assert result["returncode"] == 124 and result["output"] == "partial\n[Command timed out after 1s]"
+        assert result["hermes_timed_out"] is True
         pid = int((tmp_path / "pid").read_text())
         deadline = time.monotonic() + 5
         while alive(pid) and time.monotonic() < deadline:
@@ -118,12 +120,10 @@ def test_stop_retains_partial_and_kills_device_process(tmp_path):
     relay, device, fake = device_setup(tmp_path)
     with fake:
         env = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
-        started = threading.Event()
         tids = []
 
         def execute():
             tids.append(threading.get_ident())
-            started.set()
             try:
                 return env.execute("echo $$ > pid; printf partial; sleep 60")
             finally:
@@ -131,11 +131,8 @@ def test_stop_retains_partial_and_kills_device_process(tmp_path):
 
         with ThreadPoolExecutor(1) as pool:
             future = pool.submit(execute)
-            assert started.wait(1)
             pid = int(await_file(tmp_path / "pid"))
-            deadline = time.monotonic() + 2
-            while not relay.tail(next(iter(relay.handles))) and time.monotonic() < deadline:
-                threading.Event().wait(0.01)
+            until(lambda: any(relay.tail(rid) == b"partial" for rid in list(relay.handles)))
             set_interrupt(True, tids[0])
             result = future.result(timeout=1)
         assert result["returncode"] == 130 and result["output"] == "partial\n[Command interrupted]"

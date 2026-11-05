@@ -48,6 +48,20 @@ class RemoteProcessHandle:
     def returncode(self):
         return self._returncode
 
+class _GatewayWait:
+    def __init__(self, proc):
+        self._proc = proc
+
+    def __getattr__(self, name):
+        return getattr(self._proc, name)
+
+    def poll(self):
+        code, out = self._proc.poll(), self._proc.outcome
+        if out and (out.state, out.exit_code, out.reason.partition("; ")[0]) == (
+                RequestState.FINISHED, 124, "command timed out"):
+            return None  # Let core own the timeout suffix, capture and flag.
+        return code
+
 class DirtsideEnvironment(BaseEnvironment):
     _stdin_mode = "payload"
     _persistent = True
@@ -77,9 +91,10 @@ class DirtsideEnvironment(BaseEnvironment):
         return self._relay.submit(req)
 
     def _wait_for_process(self, proc, *args, **kwargs):
-        result = super()._wait_for_process(proc, *args, **kwargs)
+        result = super()._wait_for_process(_GatewayWait(proc), *args, **kwargs)
         if proc.outcome and (proc.outcome.truncated or proc.outcome.state is RequestState.REFUSED):
-            result["output"] += f"\n[Dirtside: {proc.outcome.reason}]"
+            reason = proc.outcome.reason.rsplit("; ", 1)[-1] if proc.outcome.truncated else proc.outcome.reason
+            result["output"] += f"\n[Dirtside: {reason}]"
         return result
 
     def cleanup(self):

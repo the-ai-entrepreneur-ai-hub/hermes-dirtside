@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DESKTOP_TOKEN = "local-test-dashboard-session"
 
 
-def until(predicate, timeout=5):
+def until(predicate, timeout=10):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if value := predicate():

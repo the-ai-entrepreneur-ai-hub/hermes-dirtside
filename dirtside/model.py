@@ -102,3 +102,6 @@ FLUSH_MS = 200
 FEED_BLOCK_S = 10
 PANE_TAIL_BYTES = 4096
 MAX_OUTPUT_BYTES = 64 << 20
+
+def device_timeout_s(requested: int, policy: Policy) -> int:
+    return min(requested + 1, policy.max_timeout_s)

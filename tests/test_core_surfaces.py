@@ -6,6 +6,8 @@ from core_rig import Rig
 
 
 def test_target_put_redirects_cached_terminal_and_file_operations(tmp_path):
+    workdir = tmp_path / "cwd with spaces"
+    workdir.mkdir()
     with Rig(tmp_path / "rig") as rig:
         rig.pair().start_agent()
         core = rig.core
@@ -20,12 +22,12 @@ def test_target_put_redirects_cached_terminal_and_file_operations(tmp_path):
         assert not written.get("error"), written
         assert (Path(device_home) / "target.txt").read_text() == "device"
         assert not (Path(server_home) / "target.txt").exists()
-        assert core.terminal("export TARGET_SIDE=device; cd /tmp")["exit_code"] == 0
+        assert core.terminal("export TARGET_SIDE=device; cd " + shlex.quote(str(workdir)))["exit_code"] == 0
         assert core.http("PUT", path, json={"target": "server"}).status_code == 200
         assert core.terminal("printf '%s' \"$HOME\"")["output"] == server_home
         assert core.terminal("echo ${TARGET_SIDE-unset}")["output"].strip() == "unset"
         assert core.http("PUT", path, json={"target": rig.name}).status_code == 200
-        assert core.terminal("pwd")["output"].strip() == str(Path("/tmp").resolve())
+        assert core.terminal("pwd")["output"].strip() == str(workdir.resolve())
         assert core.terminal("echo $TARGET_SIDE")["output"].strip() == "device"
         assert core.call("state", session="chat")["identity"] == cached
         rows = core.http("GET", "/requests?session_key=chat").json()

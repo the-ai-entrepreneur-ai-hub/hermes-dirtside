@@ -6,6 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, replace
 import httpx
+from ..model import device_timeout_s
 from ..protocol import ProtocolError, ReplayGuard, parse_poll, sign, verify
 from .activity import Activity
 from .executor import run
@@ -52,14 +53,15 @@ class _Agent:
 
     def execute(self, req, cancel):
         try:
-            deadline = time.monotonic() + min(req.timeout_s, self.cfg.policy.max_timeout_s)
+            deadline = time.monotonic() + device_timeout_s(req.timeout_s, self.cfg.policy)
             self.activity.write("started", id=req.id)
             def send(seq, data):
                 return self.post("chunk", dict(id=req.id, seq=seq, data=base64.b64encode(data).decode()),
                                  cancel, deadline)
             out, tail = run(req, self.cfg.policy, send, cancel=cancel)
-            if out.reason == "gateway no longer accepts output" and time.monotonic() >= deadline:
-                out = replace(out, exit_code=124, reason="command timed out")
+            if out.reason.partition("; ")[0] == "gateway no longer accepts output" and time.monotonic() >= deadline:
+                out = replace(out, exit_code=124,
+                              reason=out.reason.replace("gateway no longer accepts output", "command timed out", 1))
             body = dict(id=req.id, **(asdict(out) | {"state": out.state.value}))
             if tail:
                 body.update(seq=tail.seq, data=base64.b64encode(tail.data).decode())

@@ -20,12 +20,14 @@ def file(core, tool, **args):
 
 
 def test_terminal_and_file_entry_points_agree_with_local(tmp_path):
+    workdir = tmp_path / "cwd with spaces"
+    workdir.mkdir()
     with Rig(tmp_path / "rig") as rig:
         rig.pair().start_agent().choose()
         device_user = Path(rig.device_env["HOME"])
         with Core(tmp_path / "local", backend="local", user_home=device_user) as local:
             remote = rig.core
-            commands = ["pwd", "cd /tmp", "pwd", "export X=1", "echo $X", "exit 3"]
+            commands = ["pwd", "cd " + shlex.quote(str(workdir)), "pwd", "export X=1", "echo $X", "exit 3"]
             states = []
             for command in commands:
                 actual = remote.terminal(command)
@@ -37,7 +39,7 @@ def test_terminal_and_file_entry_points_agree_with_local(tmp_path):
             assert states[0]["environment"] == "ConversationEnvironment"
             assert states[0]["persistent"] and states[0]["key"] == "session:chat"
             assert len({s["identity"] for s in states}) == 1
-            assert remote.terminal("pwd")["output"].strip() == str(Path("/tmp").resolve())
+            assert remote.terminal("pwd")["output"].strip() == str(workdir.resolve())
             # Core bounds the foreground view but retains a recovery file with all bytes.
             flood = "head -c 1048576 /dev/zero | tr '\\0' x"
             actual, expected = remote.terminal(flood), local.terminal(flood)
@@ -53,7 +55,7 @@ def test_terminal_and_file_entry_points_agree_with_local(tmp_path):
             normalized = [re.sub(br"(__HERMES_(?:PIPE|CWD)_)[a-f0-9]{12}__", br"\1session__", data)
                           for data in recovered]
             trailer = ("\n__HERMES_PIPE_session__0 0__HERMES_PIPE_session__\n\n"
-                       f"__HERMES_CWD_session__{Path('/tmp').resolve()}__HERMES_CWD_session__\n").encode()
+                       f"__HERMES_CWD_session__{workdir.resolve()}__HERMES_CWD_session__\n").encode()
             assert normalized[0] == normalized[1] == b"x" * 1048576 + trailer
             path = tmp_path / "payload.txt"
             content = "unique-original\n" + "0123456789abcdef\n" * 5882
@@ -98,9 +100,9 @@ def test_cached_device_offline_fails_closed_then_no_target_is_local(tmp_path):
         assert time.monotonic() - started < 20
         assert core.terminal("pwd", session="unselected")["output"].strip() == core.env["HOME"]
         assert core.call("state", session="unselected")["environment"] == "ConversationEnvironment"
-        assert core.terminal("cd /tmp", session="unselected")["exit_code"] == 0
+        assert core.terminal("cd " + shlex.quote(str(tmp_path)), session="unselected")["exit_code"] == 0
         core.call("turn_end", session="unselected")
-        assert core.terminal("pwd", session="unselected")["output"].strip() == str(Path("/tmp").resolve())
+        assert core.terminal("pwd", session="unselected")["output"].strip() == str(tmp_path.resolve())
 
 
 def test_file_first_uses_selected_environment(tmp_path):

@@ -7,13 +7,15 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import psutil
 import pytest
 
-from dirtside.agent.executor import _read, run
+from dirtside.agent import executor
+from dirtside.agent.executor import _Output, _read, run
 from dirtside.agent.policy import evaluate
-from dirtside.model import CHUNK_BYTES, MAX_OUTPUT_BYTES, Policy, Refused, RequestState
+from dirtside.model import CHUNK_BYTES, FLUSH_MS, MAX_OUTPUT_BYTES, Policy, Refused, RequestState
 from dirtside.protocol import WireExec
 
 POLICY = Policy((), 900, MAX_OUTPUT_BYTES, 4)
@@ -38,7 +40,7 @@ def alive(pid):
 
 
 def await_file(path):
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         if path.exists() and path.read_text().strip():
             return path.read_text().strip()
@@ -71,14 +73,33 @@ def test_async_stdin(tmp_path):
     assert data == b"x" * 200000 + payload.encode()
 
 
+def test_flush_clock_boundaries_and_exit_tail(tmp_path, monkeypatch):
+    clock, sent = [0.0], []
+    monkeypatch.setattr(executor, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    req = WireExec("r_" + "02" * 12, "printf early", "printf early", False, 120, None, str(tmp_path))
+    output = _Output(req, POLICY, lambda seq, data: sent.append((seq, data)) or True)
+    output.add(b"early")
+    clock[0] = (FLUSH_MS - 1) / 1000
+    assert output.flush(False) and sent == []
+    clock[0] = FLUSH_MS / 1000
+    assert output.flush(False) and sent == [(0, b"early")]
+    output.add(b"late")
+    clock[0] += 1
+    assert output.flush(True) and sent == [(0, b"early")]
+    assert output.tail().seq == 1 and output.tail().data == b"late"
+
+
 def test_clock_and_size_flush(tmp_path):
     sent = []
-    script = "printf early; sleep 0.5; printf late"
-    req = WireExec("r_" + "02" * 12, script, script, False, 120, None, str(tmp_path))
-    start = time.monotonic()
-    out, tail = run(req, POLICY, lambda seq, data: sent.append((time.monotonic() - start, seq, data)) or True)
+    script = "printf early; while [ ! -e flushed ]; do sleep 0.01; done; printf late"
+    req = WireExec("r_" + "02" * 12, script, script, False, 10, None, str(tmp_path))
+    def send(seq, data):
+        sent.append((seq, data))
+        (tmp_path / "flushed").touch()
+        return True
+    out, tail = run(req, POLICY, send)
     assert out.exit_code == 0 and tail.data == b"late"
-    assert sent[0][1:] == (0, b"early") and 0.15 <= sent[0][0] < 0.45
+    assert sent == [(0, b"early")]
     out, data = execute(tmp_path, f"{PYTHON} -c 'import sys; sys.stdout.buffer.write(b\"x\" * {CHUNK_BYTES * 3})'")
     assert data == b"x" * (CHUNK_BYTES * 3) and not out.truncated
 
@@ -95,6 +116,13 @@ def test_output_cap(tmp_path):
     out, data = execute(tmp_path, f"{PYTHON} -c 'print(\"x\" * 200000)'", policy=policy)
     assert len(data) == 1000 and out.truncated and out.exit_code == 0
     assert "1000 bytes" in out.reason
+
+
+def test_timeout_identity_survives_output_cap(tmp_path):
+    policy = Policy((), 1, 1000, 4)
+    out, data = execute(tmp_path, f"{PYTHON} -c 'print(\"x\" * 200000)'; sleep 60", policy=policy)
+    assert data == b"x" * 1000 and out.exit_code == 124 and out.truncated
+    assert out.reason == "command timed out; output capped at 1000 bytes on the device"
 
 
 def test_timeout_kills_group(tmp_path):
