@@ -1,0 +1,44 @@
+name: Day-1 gate
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      HERMES_HOME: ${{ github.workspace }}/.notes/ci-home
+      HERMES_RUNTIME_DIR: ${{ github.workspace }}/.notes/ci-runtime
+      OPENSPEC_TELEMETRY: "0"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+      - name: Prepare the core checkout
+        run: |
+          set -eu
+          HERMES_SRC="$RUNNER_TEMP/hermes-agent"
+          git init "$HERMES_SRC"
+          git -C "$HERMES_SRC" remote add origin https://github.com/NousResearch/hermes-agent
+          git -C "$HERMES_SRC" fetch --depth=1 origin 84a0301415edd6d1385207ec96e4d7f2b6c1fcd9
+          git -C "$HERMES_SRC" checkout --detach FETCH_HEAD
+          cd "$HERMES_SRC"
+          UV_PROJECT_ENVIRONMENT=venv uv sync --frozen
+          uv pip install --python venv/bin/python pynacl pytest ruff httpx
+          printf 'HERMES_SRC=%s\n' "$HERMES_SRC" >> "$GITHUB_ENV"
+      - name: Install OpenSpec
+        run: npm i -g @fission-ai/openspec@1.16.0
+      - name: Run acceptance checks
+        run: |
+          set -eu
+          "$HERMES_SRC/venv/bin/python" -m pytest -q
+          "$HERMES_SRC/venv/bin/python" -m ruff check .
+          "$HERMES_SRC/venv/bin/python" tools/check_sizes.py
+          openspec validate dirtside-day1-gate --strict
+          "$HERMES_SRC/venv/bin/hermes" plugins doctor . --ci

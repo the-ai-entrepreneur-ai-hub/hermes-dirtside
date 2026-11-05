@@ -1,0 +1,25 @@
+name: dirtside
+label: Dirtside
+kind: backend
+version: 0.1.0
+author: George Kioko
+description: >
+  Run terminal and file tools on a personal device chosen per conversation.
+  Disclosure: adds a terminal backend and can execute shell scripts with the
+  device user's privileges. Approvals stay enabled. This day-1 gate registers
+  only the provider; pairing routes, commands, the network agent and Desktop
+  controls are not shipped yet. Device execution uses signed messages and
+  deny patterns, timeout and output caps, not a filesystem sandbox.
+  No telemetry. No network service or outbound network calls in this gate.
+requires_hermes: ">=0.22.7"
+provides_tools: []
+provides_hooks: []
+provides_middleware: []
+requires_env: []
+config_schema:
+  default_target:
+    type: str
+    default: server
+    description: Default target before a conversation chooses a device (server or a paired name).
+python_dependencies:
+  - "pynacl>=1.5,<2"
