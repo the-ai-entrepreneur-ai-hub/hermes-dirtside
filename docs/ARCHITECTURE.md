@@ -470,6 +470,20 @@ Open for the next steps, with the section each one changes:
 - Parallel calls on one environment share core's snapshot file, as they do on the ssh backend. Not serialized; noted, not fixed.
 - A device output cap can cut the cwd marker. The environment keeps the previous cwd and the notice says so.
 
+### A16.1 Day-2 network path
+
+Built the same evening from A14 steps 6 and 7 plus every route in A11, through the OpenSpec change `dirtside-day2-network`; 169 tests, the five checks and the name scan pass on the owner's run against the same core SHA. What the source forced or the builder chose:
+
+- The dashboard router module is loaded in its own namespace, so it reaches the registry and relay through the registered auth provider: `hermes_cli.dashboard_auth.get_provider("dirtside")` returns the `DirtsideDeviceAuth` instance, which carries both. That adds `hermes_cli.dashboard_auth.get_provider` and `hermes_constants.get_hermes_home` to the allowed imports in A3.
+- The chunk and result routes check that the request belongs to the posting device (`relay.accept_chunk`, `relay.accept_result`) before feeding or closing, so one device cannot finish another device's request.
+- `complete_pairing` binds the exact code that was presented, so a reminted code for the same name cannot be consumed by an older device.
+- The relay gained read accessors for the pane: `device_status()` (device, online, last seen) and `recent()` (registry rows with live state and the output tail).
+- The device keeps a private rotating log of events (`agent/activity.py`, mode 0600, no commands, output or credentials); `hermes dirtside status` reads it instead of polling, so status can never claim work.
+- `DeviceConfig` accepts HTTPS, or HTTP on loopback only; pairing pins the relay public key; the default deny list covers `sudo`, `rm -rf /`, `mkfs`, `dd if=`, shutdown and reboot, service stops, fork bombs and `curl | sh`.
+- Workers in the loop track cancel Events, not processes; the executor owns the process groups. A 410 during execution cancels that request; a 410 after a natural exit cannot kill a surviving background job, which keeps R10.
+- Python's default executor here is `min(32, cpu_count + 4)` (14 on this Mac), so the router owns its own 16-thread pool for polls and feeds, as A5 requires.
+- Integration point left open on purpose: `PUT /sessions/{key}/target` writes `set_target(key, None)` for `server`, and the second builder's targets change (A16, step 8) decides the stored sentinel. Resolve at merge time and test with a non-server default.
+
 ---
 
 # Part B. Explanation

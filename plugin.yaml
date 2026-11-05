@@ -6,11 +6,11 @@ author: George Kioko
 description: >
   Run terminal and file tools on a personal device chosen per conversation.
   Disclosure: adds a terminal backend and can execute shell scripts with the
-  device user's privileges. Approvals stay enabled. This day-1 gate registers
-  only the provider; pairing routes, commands, the network agent and Desktop
-  controls are not shipped yet. Device execution uses signed messages and
-  deny patterns, timeout and output caps, not a filesystem sandbox.
-  No telemetry. No network service or outbound network calls in this gate.
+  device user's privileges. Approvals stay enabled. Adds signed HTTP device
+  routes and dashboard-session controls to the gateway. The foreground device
+  agent polls the paired gateway over outbound HTTP. Pairing pins its public key.
+  Device policy enforces deny patterns, timeout, output and parallelism caps,
+  not a filesystem sandbox. No telemetry.
 requires_hermes: ">=0.22.7"
 provides_tools: []
 provides_hooks: []

@@ -98,13 +98,14 @@ class Registry:
                     return _device(row) if row["pubkey"] is not None else Pending(row["name"], row["expires_at"])
         return None
 
-    def complete_pairing(self, name, hello, now):
+    def complete_pairing(self, name, hello, now, *, code=None):
         if hello.name != name:
             raise ValueError("pairing name does not match hello")
         bearer = secrets.token_urlsafe(32)
         with self._tx() as conn:
             row = conn.execute("SELECT id FROM devices WHERE name=? AND pubkey IS NULL "
-                               "AND revoked_at IS NULL AND expires_at>?", (name, now)).fetchone()
+                               "AND revoked_at IS NULL AND expires_at>? AND (? IS NULL OR token_hash=?)",
+                               (name, now, code, _hash(code) if code is not None else None)).fetchone()
             if row is None:
                 raise ValueError("pairing code is expired or already used")
             conn.execute(f"UPDATE devices SET revoked_at=? WHERE name=? AND {_ACTIVE}", (now, name))
@@ -122,6 +123,10 @@ class Registry:
 
     def device_by_id(self, device_id):
         return self._find("id", device_id)
+
+    def devices(self):
+        with self._tx() as conn:
+            return [_device(row) for row in conn.execute(f"SELECT * FROM devices WHERE {_ACTIVE} ORDER BY name")]
 
     def revoke(self, name, now):
         with self._tx() as conn:

@@ -4,6 +4,7 @@ import select
 import threading
 import time
 from collections import defaultdict
+from dataclasses import replace
 
 from .environment import RemoteProcessHandle
 from .model import FEED_BLOCK_S, LOST_GRACE_S, OFFLINE_AFTER_S, PANE_TAIL_BYTES, TERMINAL, Outcome, RequestState
@@ -42,6 +43,35 @@ class Relay:
     def tail(self, request_id):
         with self._condition:
             return bytes(self.tails.get(request_id, b""))
+
+    def device_status(self):
+        devices = self.registry.devices()
+        with self._condition:
+            seen = [(device, self.last_seen.get(device.id)) for device in devices]
+        now, wall = time.monotonic(), time.time()
+        return [(device, at is not None and now - at <= OFFLINE_AFTER_S,
+                 wall - (now - at) if at is not None else None) for device, at in seen]
+
+    def recent(self, limit, session_key=None):
+        rows = self.registry.recent(limit, session_key)
+        with self._condition:
+            return [(replace(row, state=self.handles[row.id].state) if row.id in self.handles else row,
+                     self.tail(row.id)) for row in rows]
+
+    def _owns(self, device_id, request_id):
+        with self._condition:
+            handle = self.handles.get(request_id)
+            return handle is not None and handle.req.device_id == device_id
+
+    def accept_chunk(self, device_id, chunk):
+        return self._owns(device_id, chunk.id) and self.feed(chunk.id, chunk.seq, chunk.data)
+
+    def accept_result(self, device_id, request_id, outcome, tail):
+        if not self._owns(device_id, request_id):
+            return False
+        if tail and not self.feed(tail.id, tail.seq, tail.data):
+            return False
+        return self.close(request_id, outcome)
 
     def next(self, device_id, wait_s):
         deadline = time.monotonic() + wait_s
