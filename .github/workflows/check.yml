@@ -45,4 +45,14 @@ jobs:
           "$HERMES_SRC/venv/bin/python" tools/check_sizes.py
           openspec validate dirtside-day1-gate --strict
           openspec validate dirtside-day5-linux --strict
+          openspec validate dirtside-day6-hardening --strict
           "$HERMES_SRC/venv/bin/hermes" plugins doctor . --ci
+          "$HERMES_SRC/venv/bin/python" tools/bench.py --loopback --report-only
+      - name: Report catalog admission and private import diagnostics
+        # The pinned scanner also rejects inert architecture examples and local test artifacts.
+        continue-on-error: true
+        env:
+          HERMES_HOME: ${{ runner.temp }}/ci-home
+          HERMES_RUNTIME_DIR: ${{ runner.temp }}/ci-runtime
+          TMPDIR: ${{ runner.temp }}/ci-tmp
+        run: '"$HERMES_SRC/venv/bin/hermes" plugins validate .'

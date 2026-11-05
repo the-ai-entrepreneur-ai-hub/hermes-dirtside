@@ -14,14 +14,14 @@ LIMITS = (("pwd added p50", 15, "ms", True), ("pwd added p95", 40, "ms", True),
 def percentile(samples, fraction):
     return sorted(samples)[math.ceil(len(samples) * fraction) - 1]
 
-def report(metrics):
+def report(metrics, *, report_only=False):
     print("| Measurement | Result | Loopback target | Status |\n|---|---:|---:|---|")
     passed = []
     for value, (name, limit, unit, upper) in zip(metrics, LIMITS, strict=True):
         ok = value <= limit if upper else value >= limit
         passed.append(ok)
         print(f"| {name} | {value:.2f} {unit} | {'<=' if upper else '>='} {limit} {unit} | {'PASS' if ok else 'FAIL'} |")
-    return 0 if all(passed) else 1
+    return 0 if report_only or all(passed) else 1
 
 def timed(env, command):
     start = time.perf_counter()
@@ -76,7 +76,8 @@ def measure(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--loopback", action="store_true", required=True)
-    parser.parse_args()
+    parser.add_argument("--report-only", action="store_true", help="Print threshold misses without failing")
+    args = parser.parse_args()
     sys.dont_write_bytecode = True
     sys.path[:0] = [os.environ["HERMES_SRC"], str(Path(__file__).resolve().parents[1])]
     with tempfile.TemporaryDirectory(prefix="dirtside-bench-") as temporary:
@@ -84,7 +85,7 @@ def main():
         for name in ("HOME", "HERMES_HOME", "HERMES_RUNTIME_DIR", "TMPDIR", "TERMINAL_TEMP_DIR"):
             os.environ[name] = temporary
         print("Signed in-process loopback; 50 paired pwd samples; 10,000,000 verified bytes; excludes HTTP/LAN.")
-        return report(measure(Path(temporary)))
+        return report(measure(Path(temporary)), report_only=args.report_only)
 
 if __name__ == "__main__":
     raise SystemExit(main())

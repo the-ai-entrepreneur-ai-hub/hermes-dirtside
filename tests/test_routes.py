@@ -69,15 +69,18 @@ def test_chunk_replay_inline_result_and_late_result(routes, tmp_path):
     device, token, key = paired(reg, tmp_path, now=int(time.time()))
     handle = relay.submit(request(device))
     relay.next(device.id, 0)
-    chunk = sign(key, "chunk", device.id, dict(id=handle.req.id, seq=0, data="YWJj"))
+    chunk = dict(id=handle.req.id, seq=0, data="YWJj")
     for _ in range(2):
-        assert client.post(API + "/device/chunk", headers=headers(token), json=chunk).status_code == 200
+        assert client.post(API + "/device/chunk", headers=headers(token),
+                           json=sign(key, "chunk", device.id, chunk)).status_code == 200
     body = result_body() | dict(id=handle.req.id, seq=1, data="ZGVm")
     wire = sign(key, "result", device.id, body)
     assert client.post(API + "/device/result", headers=headers(token), json=wire).status_code == 200
     assert handle.wait(0) == 0 and handle.stdout.read() == b"abcdef"
-    assert client.post(API + "/device/result", headers=headers(token), json=wire).status_code == 410
-    assert client.post(API + "/device/chunk", headers=headers(token), json=chunk).status_code == 410
+    assert client.post(API + "/device/result", headers=headers(token),
+                       json=sign(key, "result", device.id, body)).status_code == 410
+    assert client.post(API + "/device/chunk", headers=headers(token),
+                       json=sign(key, "chunk", device.id, chunk)).status_code == 410
     assert reg.recent(1)[0].state is RequestState.FINISHED
     cancelled = relay.submit(request(device, n=2))
     cancelled.kill()

@@ -479,7 +479,7 @@ Built the same evening from A14 steps 6 and 7 plus every route in A11, through t
 - `complete_pairing` binds the exact code that was presented, so a reminted code for the same name cannot be consumed by an older device.
 - The relay gained read accessors for the pane: `device_status()` (device, online, last seen) and `recent()` (registry rows with live state and the output tail).
 - The device keeps a private rotating log of events (`agent/activity.py`, mode 0600, no commands, output or credentials); `hermes dirtside status` reads it instead of polling, so status can never claim work.
-- `DeviceConfig` accepts HTTPS, or HTTP on loopback only; pairing pins the relay public key; the default deny list covers `sudo`, `rm -rf /`, `mkfs`, `dd if=`, shutdown and reboot, service stops, fork bombs and `curl | sh`.
+- `DeviceConfig` accepts HTTPS, or HTTP on loopback only; pairing pins the relay public key; the default deny list covers privilege escalation, recursive deletion of the root, filesystem formatting, raw disk writes, shutdown and reboot, service stops, fork bombs and piping a download into a shell (the exact patterns are in `agent/config.py`).
 - Workers in the loop track cancel Events, not processes; the executor owns the process groups. A 410 during execution cancels that request; a 410 after a natural exit cannot kill a surviving background job, which keeps R10.
 - Python's default executor here is `min(32, cpu_count + 4)` (14 on this Mac), so the router owns its own 16-thread pool for polls and feeds, as A5 requires.
 - Integration point originally left open: `PUT /sessions/{key}/target` used `set_target(key, None)` for `server`. A16.3 resolves this with the stored sentinel and non-server-default route tests.

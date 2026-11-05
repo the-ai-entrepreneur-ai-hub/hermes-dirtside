@@ -95,7 +95,7 @@ Revocation cancels waiting tool calls immediately. The device learns cancellatio
 - **Approvals stay enabled.** Dirtside adds a terminal backend, not a new model tool or an approval bypass. The gateway still decides what to dispatch through Hermes' normal approval path.
 - **The device is not sandboxed.** Scripts run as its user, with that user's filesystem and program access. A deny list is only a check against recognizable command patterns. It is not a filesystem allowlist or protection against a compromised gateway.
 - **Device-side limits apply.** The default policy rejects patterns such as `sudo` and destructive disk commands, caps each command at 900 seconds and 64 MiB of output, and permits four parallel requests. Policy is stored in the device's private `dirtside/device.json` under its selected Hermes home. Review it for your machine.
-- **Messages are signed.** Pairing pins Ed25519 public keys. Device requests need both the bearer credential and a valid device signature; the device verifies signed gateway polls. Timestamps, nonces and request/sequence checks constrain replay. Signatures do not encrypt scripts or output; HTTPS protects transport.
+- **Messages are signed.** Pairing pins Ed25519 public keys. Device requests need both the bearer credential and a valid device signature; the device verifies signed gateway polls. Both sides check timestamps within 300 seconds and reject repeated sender/nonces while retained in a 4,096-entry, 300-second cache (process-wide at the gateway, per agent at the device). Retries use fresh signatures; request/sequence checks prevent duplicate output. These bounded caches do not provide durable replay protection across restarts or cache eviction. Signatures do not encrypt scripts or output; HTTPS protects transport.
 - **The device only dials out.** It opens no listening port. The plugin adds signed device HTTP routes and authenticated conversation controls to the gateway. It does not set up a public proxy, open firewall ports or provide an external relay.
 - **Credentials remain private state.** The gateway stores token hashes. The device configuration contains its token and private key with mode 0600; the gateway signing key is also private. Treat pairing codes, these files and the gateway host as trusted credentials.
 - **History is limited, not absent.** Gateway request rows keep a 120-character command preview and execution metadata. A live 4,096-byte output tail is held in memory and removed when the request finishes. Device activity records contain request ids and outcomes, not a full-command audit log. Hermes' ordinary conversation/tool history may retain scripts and output.
@@ -129,7 +129,7 @@ export HERMES_SRC=/absolute/path/to/hermes-agent
 "$HERMES_SRC/venv/bin/python" tools/bench.py --loopback
 ```
 
-Any missed target exits nonzero.
+Any missed target exits nonzero. CI uses `--report-only` to print noisy shared-runner timings without failing on thresholds. Command failures and incomplete output still fail.
 
 ### Reliability matrix, historical signed HTTP loopback
 

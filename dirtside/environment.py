@@ -1,6 +1,7 @@
 """Core environment adapter and pipe-backed remote process handle."""
 import os
 import secrets
+import shlex
 import subprocess
 import threading
 import time
@@ -11,6 +12,17 @@ from tools.environments.base import BaseEnvironment, EnvironmentConnectionError
 from .model import ExecRequest, Outcome, RequestId, RequestState
 
 _COMMAND = ContextVar("dirtside_command", default="")
+_WAIT = ContextVar("dirtside_wait", default=(None, 0))
+
+def _status_suffix(proc, timeout, code):
+    out = proc.outcome if proc is not None else None
+    if out is None or not out.reason:
+        return "", False
+    timed_out = (out.state, code, out.exit_code, out.reason.partition("; ")[0]) == (
+        RequestState.FINISHED, 124, 124, "command timed out")
+    reason = out.reason.partition("; ")[2] if timed_out else out.reason
+    suffix = f"\n[Command timed out after {timeout}s]" if timed_out else ""
+    return suffix + (f"\n[Dirtside: {reason}]" if reason else ""), timed_out
 
 def require_online(device, relay):
     if not relay.is_online(device.id):
@@ -48,20 +60,6 @@ class RemoteProcessHandle:
     def returncode(self):
         return self._returncode
 
-class _GatewayWait:
-    def __init__(self, proc):
-        self._proc = proc
-
-    def __getattr__(self, name):
-        return getattr(self._proc, name)
-
-    def poll(self):
-        code, out = self._proc.poll(), self._proc.outcome
-        if out and (out.state, out.exit_code, out.reason.partition("; ")[0]) == (
-                RequestState.FINISHED, 124, "command timed out"):
-            return None  # Let core own the timeout suffix, capture and flag.
-        return code
-
 class DirtsideEnvironment(BaseEnvironment):
     _stdin_mode = "payload"
     _persistent = True
@@ -83,19 +81,36 @@ class DirtsideEnvironment(BaseEnvironment):
         finally:
             _COMMAND.reset(token)
 
-    def _run_bash(self, cmd_string, *, login=False, timeout=120, stdin_data=None):
+    def _run_bash(self, cmd_string, *, login=False, timeout=120, stdin_data=None, cwd=None):
         require_online(self._device, self._relay)
         req = ExecRequest(RequestId("r_" + secrets.token_hex(12)), self._device.id,
                           self._session_key, self._task_id, _COMMAND.get(), cmd_string,
-                          login, timeout, stdin_data, self.cwd)
+                          login, timeout, stdin_data, cwd or self.cwd)
         return self._relay.submit(req)
 
-    def _wait_for_process(self, proc, *args, **kwargs):
-        result = super()._wait_for_process(_GatewayWait(proc), *args, **kwargs)
-        if proc.outcome and (proc.outcome.truncated or proc.outcome.state is RequestState.REFUSED):
-            reason = proc.outcome.reason.rsplit("; ", 1)[-1] if proc.outcome.truncated else proc.outcome.reason
-            result["output"] += f"\n[Dirtside: {reason}]"
+    def _wait_for_process(self, proc, timeout=120, **kwargs):
+        token = _WAIT.set((proc, timeout))
+        try:
+            return super()._wait_for_process(proc, timeout=timeout, **kwargs)
+        finally:
+            _WAIT.reset(token)
+
+    def _finalize_wait_result(self, output, rendered, code):
+        suffix, timed_out = _status_suffix(*_WAIT.get(), code)
+        if suffix:
+            rendered = output.render(suffix=suffix)
+            if timed_out and output.total_chars == 0:
+                rendered = rendered.lstrip()
+        result = super()._finalize_wait_result(output, rendered, code)
+        if timed_out:
+            result["hermes_timed_out"] = True
         return result
 
     def cleanup(self):
-        pass
+        try:
+            if self._relay.is_online(self._device.id):
+                path = shlex.quote(self._snapshot_path)
+                proc = self._run_bash(f"rm -f -- {path} {path}.tmp.*", timeout=5, cwd=self._device.home)
+                self._wait_for_process(proc, timeout=5)
+        except Exception:
+            pass  # Cleanup cannot prevent core from releasing an environment.

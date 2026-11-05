@@ -93,6 +93,8 @@ class ReplayGuard:
             if len(self._seen) > 4096:
                 self._seen.popitem(last=False)
 
+GATEWAY_REPLAYS = ReplayGuard()
+
 def verify(pubkey, wire, now, guard=None):
     _need(type(wire) is dict)
     env = _record(Envelope, wire | {"sig": _bytes(wire.get("sig"))})
@@ -138,3 +140,8 @@ def parse_result(body):
 def parse_poll(body):
     _need(type(body) is dict and set(body) <= {"exec", "cancel"} and type(body.get("cancel", [])) is list)
     return parse_exec(body["exec"]) if "exec" in body else None, [_id(rid) for rid in body.get("cancel", [])]
+
+def parse_running(body):
+    _need(type(body) is dict and set(body) <= {"running"})
+    _need("running" not in body or type(body["running"]) is list)
+    return [_id(rid) for rid in body["running"]] if "running" in body else None

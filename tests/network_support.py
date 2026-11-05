@@ -81,6 +81,7 @@ def mounted(root, gate=True, relay=None):
         for device in registry.devices():
             relay.revoke(device.id)
         module.POLL_POOL.shutdown(wait=True)
+        module.FEED_POOL.shutdown(wait=True)
         for provider, old in previous:
             restore_registration(provider.name, provider, old)
 

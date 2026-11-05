@@ -60,10 +60,10 @@ def test_device_timeout_preserves_bounded_capture_and_spill(tmp_path):
 
 @pytest.mark.parametrize("state,code,reason,truncated,notice", [
     (RequestState.FINISHED, 124, "", False, ""),
-    (RequestState.FINISHED, 124, "command timed out elsewhere", False, ""),
-    (RequestState.FINISHED, 0, "command timed out", False, ""),
-    (RequestState.LOST, 124, "command timed out", False, ""),
-    (RequestState.CANCELLED, 130, "command cancelled", False, ""),
+    (RequestState.FINISHED, 124, "command timed out elsewhere", False, "\n[Dirtside: command timed out elsewhere]"),
+    (RequestState.FINISHED, 0, "command timed out", False, "\n[Dirtside: command timed out]"),
+    (RequestState.LOST, 124, "command timed out", False, "\n[Dirtside: command timed out]"),
+    (RequestState.CANCELLED, 130, "command cancelled", False, "\n[Dirtside: command cancelled]"),
     (RequestState.REFUSED, 126, "command matches deny pattern", False,
      "\n[Dirtside: command matches deny pattern]"),
     (RequestState.FINISHED, 124, "output capped at 1000 bytes on the device", True,

@@ -101,7 +101,7 @@ def test_loop_over_isolated_http(tmp_path):
         if dispatched.is_set():
             while not received:
                 await asyncio.sleep(0.01)
-            return JSONResponse({}, status_code=401)
+            return JSONResponse({"detail": "device revoked"}, status_code=401)
         dispatched.set()
         body = dict(id="r_" + "ab" * 12, command="pwd", script="pwd", login=False,
                     timeout_s=20, stdin=None, cwd=str(tmp_path))

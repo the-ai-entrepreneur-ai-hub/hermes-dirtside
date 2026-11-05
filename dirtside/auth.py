@@ -1,6 +1,6 @@
 """Token-only device recognition and exact-path token route registration."""
 import time
-from hermes_cli.dashboard_auth.base import DashboardAuthProvider, TokenPrincipal
+from hermes_cli.dashboard_auth import DashboardAuthProvider, TokenPrincipal
 from hermes_cli.dashboard_auth.token_auth import register_token_route
 from . import model, protocol
 

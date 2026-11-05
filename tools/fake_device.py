@@ -24,7 +24,7 @@ class FakeDevice:
         env = verify(VerifyKey(credential.pubkey), wire, int(time.time()))
         if env.sender != credential.id:
             raise ProtocolError("device sender mismatch")
-        self.relay.touch(credential.id)
+        self.relay.touch(credential.id, credential.pubkey)
         return env
     def _post(self, kind, body):
         env = self._accept(sign(self.key, kind, self.device.id, body))
@@ -48,8 +48,10 @@ class FakeDevice:
     def _loop(self):
         try:
             while not self.stop.is_set():
-                self._accept(sign(self.key, "poll", self.device.id, {}))
-                req, cancels = self.relay.next(self.device.id, 0.05)
+                with self.lock:
+                    running = list(self.running)
+                self._accept(sign(self.key, "poll", self.device.id, {"running": running}))
+                req, cancels = self.relay.next(self.device.id, 0.05, running=running, pubkey=self.device.pubkey)
                 body = {"exec": {k: getattr(req, k) for k in WireExec.__annotations__}} if req else {}
                 env = verify(self.relay_key.verify_key, sign(self.relay_key, "poll", "relay", body | {"cancel": cancels}),
                              int(time.time()), self.guard)

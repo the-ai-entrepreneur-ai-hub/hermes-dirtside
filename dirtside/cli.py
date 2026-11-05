@@ -36,7 +36,8 @@ def service_spec(system, executable, home, state):
     args = [executable, "dirtside", "serve"]
     if system == "Darwin":
         path = home / "Library/LaunchAgents/ai.hermes.dirtside.plist"
-        unit = plistlib.dumps(dict(Label="ai.hermes.dirtside", ProgramArguments=args, KeepAlive=True, RunAtLoad=True,
+        unit = plistlib.dumps(dict(Label="ai.hermes.dirtside", ProgramArguments=args,
+                                   KeepAlive={"SuccessfulExit": False}, RunAtLoad=True,
                                    EnvironmentVariables=env, StandardOutPath=str(log), StandardErrorPath=str(log))).decode()
         domain = f"gui/{os.getuid()}"
         return path, unit, log, "launchctl", [["bootstrap", domain, str(path)]], ["bootout", domain, str(path)]
@@ -50,7 +51,7 @@ def service_spec(system, executable, home, state):
     command = " ".join(quote(a).replace("$", "$$") for a in args)
     variables = " ".join(quote(k + "=" + v) for k, v in env.items())
     unit = "\n".join(("[Unit]", "Description=Hermes Dirtside device", "", "[Service]", "Type=simple",
-                      f"ExecStart={command}", f"Environment={variables}", "Restart=always", "RestartSec=2",
+                      f"ExecStart={command}", f"Environment={variables}", "Restart=on-failure", "RestartSec=2",
                       "UMask=0077", f"StandardOutput=append:{str(log).replace('%', '%%')}",
                       f"StandardError=append:{str(log).replace('%', '%%')}", "", "[Install]", "WantedBy=default.target", ""))
     return path, unit, log, "systemctl", [["--user", "daemon-reload"], ["--user", "enable", "--now", path.name]], ["--user", "disable", "--now", path.name]

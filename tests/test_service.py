@@ -24,7 +24,7 @@ def test_service_rendering_for_both_platforms(tmp_path):
     unit = plistlib.loads(text.encode())
     assert path == home / "Library/LaunchAgents/ai.hermes.dirtside.plist"
     assert unit["ProgramArguments"] == [executable, "dirtside", "serve"]
-    assert unit["KeepAlive"] is True and unit["RunAtLoad"] is True
+    assert unit["KeepAlive"] == {"SuccessfulExit": False} and unit["RunAtLoad"] is True
     assert unit["EnvironmentVariables"]["HOME"] == str(home)
     assert unit["EnvironmentVariables"]["HERMES_HOME"] == str(state)
     assert unit["StandardOutPath"] == unit["StandardErrorPath"] == str(log)
@@ -34,7 +34,7 @@ def test_service_rendering_for_both_platforms(tmp_path):
     assert path == home / ".config/systemd/user/hermes-dirtside.service"
     fields = dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
     assert shlex.split(fields["ExecStart"]) == [executable, "dirtside", "serve"]
-    assert fields["Restart"] == "always" and fields["UMask"] == "0077"
+    assert fields["Restart"] == "on-failure" and fields["UMask"] == "0077"
     assert "HERMES_HOME=" + str(state).replace("%", "%%") in shlex.split(fields["Environment"])
     assert fields["StandardOutput"] == fields["StandardError"] == "append:" + str(log).replace("%", "%%")
     assert tool == "systemctl" and load == [["--user", "daemon-reload"],

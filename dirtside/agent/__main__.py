@@ -3,4 +3,4 @@ from .config import DeviceConfig
 from .loop import serve
 
 if __name__ == "__main__":
-    serve(DeviceConfig.load())
+    raise SystemExit(serve(DeviceConfig.load()))

@@ -6,12 +6,27 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, replace
 import httpx
-from ..model import device_timeout_s
+from ..model import FEED_BLOCK_S, device_timeout_s
 from ..protocol import ProtocolError, ReplayGuard, parse_poll, sign, verify
 from .activity import Activity
 from .executor import run
 
 DEVICE_API = "api/plugins/dirtside/device/"
+
+def upload_timeout(deadline):
+    remaining = max(0, deadline - time.monotonic())
+    return httpx.Timeout(connect=min(5, remaining), read=min(FEED_BLOCK_S + 5, remaining),
+                         write=min(30, remaining), pool=min(5, remaining))
+
+def revoked(response):
+    if response.status_code != 401:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    return type(body) is dict and set(body) == {"detail"} and body["detail"] in (
+        "unknown device credential", "device revoked")
 
 def post_until_2xx(client, cfg, kind, body, cancel, stop, shutdown, deadline=float("inf")):
     delay = 1.0
@@ -20,8 +35,8 @@ def post_until_2xx(client, cfg, kind, body, cancel, stop, shutdown, deadline=flo
             return False
         try:
             response = client.post(DEVICE_API + kind, json=sign(cfg.key, kind, cfg.device_id, body),
-                                   timeout=min(2, max(0.01, deadline - time.monotonic())))
-            if response.status_code == 401:
+                                   timeout=upload_timeout(deadline))
+            if revoked(response):
                 shutdown()
                 return False
             if response.status_code == 410:
@@ -94,10 +109,13 @@ class _Agent:
         delay = 1.0
         while not self.stop.is_set():
             try:
+                with self.lock:
+                    body = {"running": list(self.running)}
                 response = self.client.post(DEVICE_API + "poll",
-                                            json=sign(self.cfg.key, "poll", self.cfg.device_id, {}))
-                if response.status_code == 401:
+                                            json=sign(self.cfg.key, "poll", self.cfg.device_id, body))
+                if revoked(response):
                     self.activity.write("revoked")
+                    self.shutdown()
                     return
                 response.raise_for_status()
                 self.dispatch(response.json())
@@ -129,3 +147,4 @@ def serve(cfg, *, stop=None):
                 signal.signal(sig, handler)
             activity.write("stopped")
             activity.close()
+    return 0

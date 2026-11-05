@@ -65,6 +65,7 @@ try:
     print("Directory registration, shared runtime, signed pairing and dispatch passed.")
 finally:
     api.POLL_POOL.shutdown(wait=True)
+    api.FEED_POOL.shutdown(wait=True)
     manager.unload()
 """
 

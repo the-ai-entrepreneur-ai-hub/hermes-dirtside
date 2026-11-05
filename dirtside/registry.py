@@ -114,11 +114,15 @@ class Registry:
                                (name, now, code, _hash(code) if code is not None else None)).fetchone()
             if row is None:
                 raise ValueError("pairing code is expired or already used")
-            conn.execute(f"UPDATE devices SET revoked_at=? WHERE name=? AND {_ACTIVE}", (now, name))
+            previous = conn.execute("SELECT id FROM devices WHERE name=? AND pubkey IS NOT NULL "
+                                    "ORDER BY revoked_at IS NULL DESC,created_at DESC,rowid DESC LIMIT 1", (name,)).fetchone()
+            identity = previous["id"] if previous else row["id"]
+            if previous:
+                conn.execute("DELETE FROM devices WHERE id=?", (row["id"],))
             facts = (hello.pubkey, hello.os, hello.arch, hello.home, hello.temp_dir, hello.agent_version)
             conn.execute("UPDATE devices SET pubkey=?,os=?,arch=?,home=?,temp_dir=?,agent_version=?,"
-                         "token_hash=?,expires_at=NULL WHERE id=?", (*facts, _hash(bearer), row["id"]))
-            return _device(conn.execute("SELECT * FROM devices WHERE id=?", (row["id"],)).fetchone()), bearer
+                         "token_hash=?,expires_at=NULL,revoked_at=NULL WHERE id=?", (*facts, _hash(bearer), identity))
+            return _device(conn.execute("SELECT * FROM devices WHERE id=?", (identity,)).fetchone()), bearer
 
     def _find(self, column, value):
         with self._tx() as conn:

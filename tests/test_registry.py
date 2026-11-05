@@ -55,9 +55,9 @@ def test_pairing_expired_and_reminted(tmp_path):
     with pytest.raises(ValueError):
         reg.complete_pairing("macbook", hello, 201 + PAIR_TTL_S)
     second, token, _ = paired(reg, tmp_path, now=1000)
-    assert second.id != device.id
+    assert second.id == device.id and second.pubkey != device.pubkey
     assert reg.credential_for(old, 1002) is None
-    assert reg.device_by_id(device.id) is None
+    assert reg.device_by_id(device.id) == second
     assert reg.credential_for(token, 1002) == second
 
 

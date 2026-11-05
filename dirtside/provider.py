@@ -42,21 +42,25 @@ class ConversationEnvironment:
         p = self._provider
         target = resolve_target(self._key, self._cron, p._default_target, p._registry, p._relay,
                                 require_contact=require_contact)
-        identity = target.device.id if isinstance(target, OnDevice) else "server"
+        identity = target.device if isinstance(target, OnDevice) else "server"
         with self._lock:
             if identity not in self._environments:
                 self._environments[identity] = (
                     DirtsideEnvironment(p._relay, target.device, self._key, self._task_id, self._cwd, self._timeout)
                     if isinstance(target, OnDevice)
                     else LocalEnvironment(cwd="" if self._cwd == "~" else self._cwd, timeout=self._timeout))
-            return self._environments[identity]
+            self._last = self._environments[identity]
+            return self._last
 
     def __getattr__(self, name):
-        return getattr(self._current(name == "execute"), name)
+        delegate = (self._current(name == "execute") if name in {
+            "execute", "_run_bash", "init_session", "get_temp_dir", "fetch_file", "fetch_realpath",
+        } else self.__dict__.get("_last"))
+        return getattr(delegate, name)
 
     @property
     def cwd(self):
-        return self._current().cwd
+        return self._last.cwd
 
     @cwd.setter
     def cwd(self, value):

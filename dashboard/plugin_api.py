@@ -10,7 +10,10 @@ from fastapi.routing import APIRoute
 from hermes_cli.dashboard_auth import get_provider
 from nacl.signing import SigningKey, VerifyKey
 
-POLL_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="dirtside-poll")
+# Lazy threads; 64 online devices per gateway, with feeds on an independent pool.
+POLL_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix="dirtside-poll")
+FEED_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="dirtside-feed")
+_PAIR_LOCK = threading.Lock()
 auth = get_provider("dirtside")
 registry, relay, wire, model = auth.registry, auth.relay, auth.protocol, auth.model
 relay_key = SigningKey(registry.relay_seed)
@@ -40,17 +43,13 @@ async def accepted(request, kind, parser):
     data = await request.json()
     key = (base64.b64decode(data["body"]["pubkey"], validate=True)
            if isinstance(credential, model.Pending) else credential.pubkey)
-    env = wire.verify(VerifyKey(key), data, int(time.time()))
+    env = wire.verify(VerifyKey(key), data, int(time.time()), wire.GATEWAY_REPLAYS)
     sender = credential.name if isinstance(credential, model.Pending) else credential.id
     if env.kind != kind or env.sender != sender:
         raise ValueError("message identity mismatch")
     if isinstance(credential, model.Device):
-        await asyncio.to_thread(relay.touch, credential.id)
+        await asyncio.to_thread(relay.touch, credential.id, credential.pubkey)
     return credential, parser(env.body), env.body.get("id")
-
-def empty(body):
-    if body != {}:
-        raise ValueError("poll body must be empty")
 
 def ack(accepted):
     if not accepted:
@@ -63,19 +62,24 @@ async def field(request, name):
         raise ValueError("invalid request body")
     return body[name]
 
+def complete_pairing(name, hello, code):
+    with _PAIR_LOCK:
+        device, token = registry.complete_pairing(name, hello, int(time.time()), code=code)
+        relay.paired(device)
+        return device, token
+
 @router.post("/device/pair")
 async def pair(request: Request):
     credential, hello, _ = await accepted(request, "hello", wire.parse_hello)
-    device, token = await asyncio.to_thread(registry.complete_pairing, credential.name, hello,
-                                          int(time.time()), code=bearer(request))
+    device, token = await asyncio.to_thread(complete_pairing, credential.name, hello, bearer(request))
     return dict(device_id=device.id, token=token, relay_pubkey=base64.b64encode(bytes(relay_key.verify_key)).decode())
 
 @router.post("/device/poll")
 async def poll(request: Request):
-    device, _, _ = await accepted(request, "poll", empty)
+    device, running, _ = await accepted(request, "poll", wire.parse_running)
     cancelled = threading.Event()
     waiting = asyncio.get_running_loop().run_in_executor(POLL_POOL, relay.next,
-                                                        device.id, model.POLL_HOLD_S, cancelled)
+                                                        device.id, model.POLL_HOLD_S, cancelled, running, device.pubkey)
     # The core's receive wrapper needs a real await, not is_disconnected's cancelled probe.
     disconnected = asyncio.create_task(request.receive())
     disconnected.add_done_callback(lambda _: cancelled.set())
@@ -91,12 +95,12 @@ async def poll(request: Request):
 @router.post("/device/chunk")
 async def chunk(request: Request):
     device, part, _ = await accepted(request, "chunk", wire.parse_chunk)
-    return ack(await asyncio.get_running_loop().run_in_executor(POLL_POOL, relay.accept_chunk, device.id, part))
+    return ack(await asyncio.get_running_loop().run_in_executor(FEED_POOL, relay.accept_chunk, device.id, part))
 
 @router.post("/device/result")
 async def result(request: Request):
     device, (outcome, tail), rid = await accepted(request, "result", wire.parse_result)
-    return ack(await asyncio.to_thread(relay.accept_result, device.id, rid, outcome, tail))
+    return ack(await asyncio.get_running_loop().run_in_executor(FEED_POOL, relay.accept_result, device.id, rid, outcome, tail))
 
 @router.get("/devices")
 async def devices():

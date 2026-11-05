@@ -14,7 +14,6 @@ description: >
 requires_hermes: ">=0.22.7"
 provides_tools: []
 provides_hooks: []
-provides_middleware: []
 requires_env: []
 config_schema:
   default_target:

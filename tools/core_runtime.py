@@ -165,6 +165,7 @@ class Runtime:
         self.listener.close()
         assert not self.thread.is_alive(), "dashboard did not stop"
         sys.modules["hermes_dashboard_plugin_dirtside"].POLL_POOL.shutdown(wait=True)
+        sys.modules["hermes_dashboard_plugin_dirtside"].FEED_POOL.shutdown(wait=True)
         cleanup_all_environments()
         self.manager.unload()
 
