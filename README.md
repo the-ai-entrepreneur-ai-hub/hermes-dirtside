@@ -294,25 +294,25 @@ Device, in `<hermes home>/dirtside/device.json` (written by `pair`, mode 0600): 
 
 ```text
 dirtside/                 one package, both halves
-  __init__.py             register(ctx): provider, auth, routes, CLI, /dirtside, prompt section
-  model.py                frozen dataclasses and the constants (45 s online, 25 s poll, 64 KiB chunks)
-  protocol.py             canonical JSON, Ed25519 sign and verify, replay guard, one parser per message
+  __init__.py             register(ctx): provider, auth, routes, CLI, commands
+  model.py                frozen dataclasses and the protocol constants
+  protocol.py             canonical JSON, Ed25519 sign and verify, replay guard
   registry.py             SQLite: devices, per-conversation targets, request log
-  relay.py                live requests behind one lock: queue, chunks, cancel, lost detection
-  environment.py          core's BaseEnvironment with a pipe as the process handle
+  relay.py                live requests behind one lock: queue, chunks, cancel
+  environment.py          core's BaseEnvironment with a pipe as the handle
   provider.py             the conversation environment and target resolution
-  auth.py                 the dashboard auth provider for the four device routes
+  auth.py                 dashboard auth provider for the four device routes
   commands.py             /dirtside
   prompt.py               the target facts for the system prompt
   cli.py                  hermes dirtside pair, serve, status, install-service
-  agent/                  the device half: config, poll loop, executor, policy, activity log
-dashboard/plugin_api.py   the routes, mounted under /api/plugins/dirtside/
-desktop/plugin.js         the Desktop pane and status chip, plain ESM, no build step
+  agent/                  the device half: config, loop, executor, policy, log
+dashboard/plugin_api.py   the routes, under /api/plugins/dirtside/
+desktop/plugin.js         Desktop pane and status chip, plain ESM, no build
 tools/                    benchmark, fake device, size budgets, matrix runner
 scripts/                  two_machine_matrix.sh
-tests/                    314 tests: units, the conformance battery, real-core and network runs
-docs/ARCHITECTURE.md      the design, with the reasons and the alternatives that lost
-openspec/                 the change records each build step was made from
+tests/                    314 tests: units, conformance, real core, network
+docs/ARCHITECTURE.md      the design, its reasons, the alternatives that lost
+openspec/                 the change record behind each build step
 ```
 
 ## Engineering notes
