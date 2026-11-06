@@ -263,7 +263,26 @@ Fifty paired samples, nearest-rank percentiles, nothing discarded. The negative 
 | Long poll | pass | 28.88 s |
 | User interrupt | pass | 4.75 s |
 
-8 of 8, over signed HTTP on loopback with a real gateway app and a real device agent process. Reproduce both:
+8 of 8, over signed HTTP on loopback with a real gateway app and a real device agent process.
+
+### Two machines over the internet
+
+Recorded 2026-11-06 at commit `dcb929b`. Gateway: the same Mac, its loopback port published through a Cloudflare quick tunnel, so the device reaches it over HTTPS across the public internet. Device: a Windows machine's WSL2 Arch Linux, with the same pinned core, paired and driven over SSH. The same eight rows:
+
+| Case | Result | Elapsed |
+|---|---|---:|
+| Device loses network | pass | 93.25 s |
+| Gateway restarts | pass | 22.25 s |
+| Device restarts | pass | 22.07 s |
+| Concurrent commands | pass | 19.54 s |
+| Clock skew | pass | 15.90 s |
+| Output flood | fail | 105.73 s |
+| Long poll | pass | 42.76 s |
+| User interrupt | pass | 17.88 s |
+
+7 of 8. Recovery, cancellation, restarts and signing behave exactly as on loopback. The output flood (64 MiB) did not finish inside the row's 120 s: the device posts output chunks one at a time, each chunk is one HTTP round trip, and a round trip through this tunnel measured about 0.7 s from the device, so 64 MiB needs far longer than the row allows. Short and medium outputs are unaffected. Larger or pipelined chunks on slow links are the next change.
+
+Reproduce the loopback runs:
 
 ```sh
 export HERMES_SRC=/absolute/path/to/hermes-agent     # a checkout with its venv
@@ -322,7 +341,7 @@ openspec/                 the change record behind each build step
 
 ## Status
 
-Verified: everything in this README on one machine over loopback, the suite on both CI runners, and the catalog validator's checks on a clean clone. Not yet verified: two physical hosts over the internet, the pane inside the running Desktop app, and service behaviour across login and reboot. The two-host matrix is one command away; the script has a remote mode.
+Verified: everything in this README on one machine over loopback, the reliability matrix across two physical machines over the internet (7 of 8, the open row is explained under Numbers), the suite on both CI runners, and the catalog validator's checks on a clean clone. Not yet verified: the pane inside the running Desktop app, and service behaviour across login and reboot.
 
 ## License
 
