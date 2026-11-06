@@ -56,19 +56,19 @@
 <text x="830.0" y="516" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#E6EDF3">Your files and tools</text>
 <text x="830.0" y="537" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#8B949E">no sandbox: it is your machine</text>
 <line x1="698" y1="196" x2="502" y2="196" stroke="#2DD4BF" stroke-width="2.5" marker-end="url(#arrow-teal)"/>
-<text x="600.0" y="170" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#E6EDF3">1  long poll</text>
-<text x="600.0" y="187" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8B949E">signed, outbound, parked 25 s</text>
+<text x="600.0" y="167" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#E6EDF3">1  long poll</text>
+<text x="600.0" y="184" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8B949E">signed, outbound, parked 25 s</text>
 <line x1="502" y1="306" x2="698" y2="306" stroke="#2DD4BF" stroke-width="2.5" marker-end="url(#arrow-teal)"/>
-<text x="600.0" y="280" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#E6EDF3">2  the script rides back</text>
-<text x="600.0" y="297" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8B949E">inside the poll response, signed</text>
+<text x="600.0" y="277" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#E6EDF3">2  the script rides back</text>
+<text x="600.0" y="294" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8B949E">inside the poll response, signed</text>
 <line x1="698" y1="416" x2="502" y2="416" stroke="#2DD4BF" stroke-width="2.5" marker-end="url(#arrow-teal)"/>
-<text x="600.0" y="390" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#E6EDF3">3  output chunks, result</text>
-<text x="600.0" y="407" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8B949E">signed, 64 KiB or 200 ms chunks</text>
+<text x="600.0" y="387" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#E6EDF3">3  output chunks, result</text>
+<text x="600.0" y="404" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8B949E">signed, 64 KiB or 200 ms chunks</text>
 <line x1="502" y1="520" x2="698" y2="520" stroke="#F85149" stroke-width="2.5" marker-end="url(#arrow-red)" stroke-dasharray="8 7"/>
-<line x1="591.0" y1="511" x2="609.0" y2="529" stroke="#F85149" stroke-width="3" stroke-linecap="round"/>
-<line x1="591.0" y1="529" x2="609.0" y2="511" stroke="#F85149" stroke-width="3" stroke-linecap="round"/>
-<text x="600.0" y="494" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#E6EDF3">no inbound connection</text>
-<text x="600.0" y="511" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8B949E">no open port, no VPN, no relay</text>
+<line x1="593.0" y1="513" x2="607.0" y2="527" stroke="#F85149" stroke-width="3" stroke-linecap="round"/>
+<line x1="593.0" y1="527" x2="607.0" y2="513" stroke="#F85149" stroke-width="3" stroke-linecap="round"/>
+<text x="600.0" y="491" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#E6EDF3">no inbound connection</text>
+<text x="600.0" y="508" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8B949E">no open port, no VPN, no relay</text>
 <text x="500" y="616" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="17" font-weight="600" fill="#E6EDF3">The device never listens. The gateway never reaches in.</text>
 <text x="500" y="644" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#8B949E">Every message is Ed25519-signed, timestamped within 300 s and replay-guarded on both ends.</text>
 <text x="500" y="666" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#8B949E">The gateway owns the timeout; the device deadline is a backstop. A command that never ran is never reported as run.</text>
