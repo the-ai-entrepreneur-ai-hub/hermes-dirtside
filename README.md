@@ -1,41 +1,36 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-    <img src="docs/assets/banner-light.svg" alt="Dirtside: remote brain, local hands" width="760">
+    <img src="docs/assets/banner-light.svg" alt="Dirtside: remote brain, local hands" width="440">
   </picture>
 </p>
 
 <p align="center">
-  Hermes Agent keeps thinking on your server.<br>
-  The terminal and file tools run on the machine you choose, one choice per conversation.
+  Hermes Agent keeps thinking on your server. The terminal and file tools run on the machine you choose, one choice per conversation.
 </p>
 
 <p align="center">
-  <a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions/workflows/check.yml"><img alt="checks" src="https://img.shields.io/github/actions/workflow/status/the-ai-entrepreneur-ai-hub/hermes-dirtside/check.yml?branch=main&label=checks&style=for-the-badge&logo=githubactions&logoColor=white"></a>
-  <a href="https://www.python.org/"><img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white"></a>
-  <a href="https://github.com/NousResearch/hermes-agent"><img alt="Hermes 0.22.7 or newer" src="https://img.shields.io/badge/hermes-%3E%3D0.22.7-1B2430?style=for-the-badge"></a>
-  <img alt="macOS, launchd" src="https://img.shields.io/badge/macOS-launchd-000000?style=for-the-badge&logo=apple&logoColor=white">
-  <img alt="Linux, systemd" src="https://img.shields.io/badge/linux-systemd-FCC624?style=for-the-badge&logo=linux&logoColor=black">
-  <img alt="314 tests passing" src="https://img.shields.io/badge/tests-314_passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white">
-  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-C9683A?style=for-the-badge"></a>
+  <a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions/workflows/check.yml"><img alt="checks" src="https://img.shields.io/github/actions/workflow/status/the-ai-entrepreneur-ai-hub/hermes-dirtside/check.yml?branch=main&label=checks&style=flat-square&labelColor=0B0F14&logo=githubactions&logoColor=white"></a>
+  <a href="https://www.python.org/"><img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-57606A?style=flat-square&labelColor=0B0F14&logo=python&logoColor=white"></a>
+  <a href="https://github.com/NousResearch/hermes-agent"><img alt="Hermes 0.22.7 or newer" src="https://img.shields.io/badge/hermes-%3E%3D0.22.7-57606A?style=flat-square&labelColor=0B0F14"></a>
+  <img alt="314 tests passing" src="https://img.shields.io/badge/tests-314_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
+  <img alt="macOS and Linux" src="https://img.shields.io/badge/platforms-macOS%2C_Linux-57606A?style=flat-square&labelColor=0B0F14">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-57606A?style=flat-square&labelColor=0B0F14"></a>
 </p>
 
-<table align="center">
-  <tr>
-    <td align="center" width="120"><a href="https://www.python.org/"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/python/python-original.svg" width="42" alt="Python"></a><br><sub><b>Python 3.11+</b></sub></td>
-    <td align="center" width="120"><a href="https://sqlite.org/wal.html"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/sqlite/sqlite-original.svg" width="42" alt="SQLite"></a><br><sub><b>SQLite, WAL</b></sub></td>
-    <td align="center" width="120"><a href="https://fastapi.tiangolo.com/"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/fastapi/fastapi-original.svg" width="42" alt="FastAPI"></a><br><sub><b>FastAPI routes</b></sub></td>
-    <td align="center" width="120"><a href="https://pynacl.readthedocs.io/"><img src="docs/assets/icon-key.svg" width="42" alt="Ed25519"></a><br><sub><b>Ed25519, PyNaCl</b></sub></td>
-    <td align="center" width="120"><a href="https://www.python-httpx.org/"><img src="docs/assets/icon-poll.svg" width="42" alt="httpx long poll"></a><br><sub><b>httpx long poll</b></sub></td>
-  </tr>
-  <tr>
-    <td align="center" width="120"><a href="https://docs.pytest.org/"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/pytest/pytest-original.svg" width="42" alt="pytest"></a><br><sub><b>pytest, 314 tests</b></sub></td>
-    <td align="center" width="120"><a href="https://docs.astral.sh/ruff/"><img src="https://cdn.simpleicons.org/ruff/8B949E" width="42" alt="Ruff"></a><br><sub><b>Ruff, mccabe 8</b></sub></td>
-    <td align="center" width="120"><a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/githubactions/githubactions-original.svg" width="42" alt="GitHub Actions"></a><br><sub><b>CI on two OSes</b></sub></td>
-    <td align="center" width="120"><img src="https://cdn.simpleicons.org/apple/8B949E" width="42" alt="macOS"><br><sub><b>macOS, launchd</b></sub></td>
-    <td align="center" width="120"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/linux/linux-original.svg" width="42" alt="Linux"><br><sub><b>Linux, systemd</b></sub></td>
-  </tr>
-</table>
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://cdn.simpleicons.org/python/8B949E" width="28" alt="Python" title="Python 3.11+"></a>
+  <a href="https://sqlite.org/wal.html"><img src="https://cdn.simpleicons.org/sqlite/8B949E" width="28" alt="SQLite" title="SQLite in WAL mode"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://cdn.simpleicons.org/fastapi/8B949E" width="28" alt="FastAPI" title="FastAPI routes"></a>
+  <a href="https://docs.pytest.org/"><img src="https://cdn.simpleicons.org/pytest/8B949E" width="28" alt="pytest" title="pytest"></a>
+  <a href="https://docs.astral.sh/ruff/"><img src="https://cdn.simpleicons.org/ruff/8B949E" width="28" alt="Ruff" title="Ruff"></a>
+  <a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions"><img src="https://cdn.simpleicons.org/githubactions/8B949E" width="28" alt="GitHub Actions" title="GitHub Actions"></a>
+  <img src="https://cdn.simpleicons.org/apple/8B949E" width="28" alt="macOS" title="launchd">
+  <img src="https://cdn.simpleicons.org/linux/8B949E" width="28" alt="Linux" title="systemd">
+  <a href="https://pynacl.readthedocs.io/"><img src="docs/assets/icon-key.svg" width="28" alt="Ed25519" title="Ed25519 through PyNaCl"></a>
+  <a href="https://www.python-httpx.org/"><img src="docs/assets/icon-poll.svg" width="28" alt="httpx long poll" title="httpx long polling"></a><br>
+  <sub>Python 3.11+, SQLite in WAL mode, FastAPI routes, Ed25519 through PyNaCl, httpx long polling, pytest, Ruff, GitHub Actions, launchd, systemd</sub>
+</p>
 
 <p align="center">
   <a href="#why-dirtside">Why</a> |
@@ -156,6 +151,7 @@ macOS gets a launchd agent, Linux a systemd user unit. Both restart the agent af
 One command, start to finish:
 
 ```mermaid
+%%{init: {"theme": "neutral"}}%%
 sequenceDiagram
     autonumber
     participant U as You
