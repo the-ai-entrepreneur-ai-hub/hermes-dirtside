@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Dirtside logo">
+<g transform="translate(0 0) scale(1.0)">
+  <rect width="128" height="128" rx="28" fill="#1B2430"/>
+  <circle cx="98" cy="28" r="3.5" fill="#2DD4BF"/>
+  <circle cx="110" cy="42" r="2.5" fill="#2DD4BF" opacity=".55"/>
+  <circle cx="86" cy="42" r="2.5" fill="#2DD4BF" opacity=".55"/>
+  <path d="M0 98 Q64 70 128 98 V128 H0 Z" fill="#C9683A"/>
+  <path d="M0 113 Q64 94 128 113 V128 H0 Z" fill="#8E4A2B"/>
+  <path d="M34 42 L58 62 L34 82" fill="none" stroke="#F3F4F6" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M66 82 H94" fill="none" stroke="#2DD4BF" stroke-width="10" stroke-linecap="round"/>
+</g>
+</svg>

@@ -1,169 +1,334 @@
-# Dirtside
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+    <img src="docs/assets/banner-light.svg" alt="Dirtside: remote brain, local hands" width="760">
+  </picture>
+</p>
 
-Dirtside is a Hermes terminal backend. It sends terminal commands and file operations to a personal device selected for the conversation. Other conversations can keep running on the gateway server or use another paired device.
+<p align="center">
+  Hermes Agent keeps thinking on your server.<br>
+  The terminal and file tools run on the machine you choose, one choice per conversation.
+</p>
 
-The device runs a foreground agent that polls your gateway over outbound HTTP. The same package provides chat commands, pairing, revocation and an optional native Desktop pane. It does not move the whole agent onto the device.
+<p align="center">
+  <a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions/workflows/check.yml"><img alt="checks" src="https://img.shields.io/github/actions/workflow/status/the-ai-entrepreneur-ai-hub/hermes-dirtside/check.yml?branch=main&label=checks&style=for-the-badge&logo=githubactions&logoColor=white"></a>
+  <a href="https://www.python.org/"><img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white"></a>
+  <a href="https://github.com/NousResearch/hermes-agent"><img alt="Hermes 0.22.7 or newer" src="https://img.shields.io/badge/hermes-%3E%3D0.22.7-1B2430?style=for-the-badge"></a>
+  <img alt="macOS, launchd" src="https://img.shields.io/badge/macOS-launchd-000000?style=for-the-badge&logo=apple&logoColor=white">
+  <img alt="Linux, systemd" src="https://img.shields.io/badge/linux-systemd-FCC624?style=for-the-badge&logo=linux&logoColor=black">
+  <img alt="314 tests passing" src="https://img.shields.io/badge/tests-314_passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-C9683A?style=for-the-badge"></a>
+</p>
 
-## Install
+<table align="center">
+  <tr>
+    <td align="center" width="120"><a href="https://www.python.org/"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/python/python-original.svg" width="42" alt="Python"></a><br><sub><b>Python 3.11+</b></sub></td>
+    <td align="center" width="120"><a href="https://sqlite.org/wal.html"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/sqlite/sqlite-original.svg" width="42" alt="SQLite"></a><br><sub><b>SQLite, WAL</b></sub></td>
+    <td align="center" width="120"><a href="https://fastapi.tiangolo.com/"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/fastapi/fastapi-original.svg" width="42" alt="FastAPI"></a><br><sub><b>FastAPI routes</b></sub></td>
+    <td align="center" width="120"><a href="https://pynacl.readthedocs.io/"><img src="docs/assets/icon-key.svg" width="42" alt="Ed25519"></a><br><sub><b>Ed25519, PyNaCl</b></sub></td>
+    <td align="center" width="120"><a href="https://www.python-httpx.org/"><img src="docs/assets/icon-poll.svg" width="42" alt="httpx long poll"></a><br><sub><b>httpx long poll</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="120"><a href="https://docs.pytest.org/"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/pytest/pytest-original.svg" width="42" alt="pytest"></a><br><sub><b>pytest, 314 tests</b></sub></td>
+    <td align="center" width="120"><a href="https://docs.astral.sh/ruff/"><img src="https://cdn.simpleicons.org/ruff/8B949E" width="42" alt="Ruff"></a><br><sub><b>Ruff, mccabe 8</b></sub></td>
+    <td align="center" width="120"><a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/githubactions/githubactions-original.svg" width="42" alt="GitHub Actions"></a><br><sub><b>CI on two OSes</b></sub></td>
+    <td align="center" width="120"><img src="https://cdn.simpleicons.org/apple/8B949E" width="42" alt="macOS"><br><sub><b>macOS, launchd</b></sub></td>
+    <td align="center" width="120"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/linux/linux-original.svg" width="42" alt="Linux"><br><sub><b>Linux, systemd</b></sub></td>
+  </tr>
+</table>
 
-Install on the gateway and each device, in the Hermes profile that will use it:
+<p align="center">
+  <a href="#why-dirtside">Why</a> |
+  <a href="#sixty-seconds-with-it">Sixty seconds</a> |
+  <a href="#quick-start">Quick start</a> |
+  <a href="#how-it-works">How it works</a> |
+  <a href="#security-model">Security</a> |
+  <a href="#numbers">Numbers</a> |
+  <a href="#engineering-notes">Engineering</a> |
+  <a href="docs/ARCHITECTURE.md">Architecture</a>
+</p>
+
+---
+
+## Why Dirtside
+
+Hermes runs on a server so it can answer you from Telegram, Discord, the dashboard or the Desktop app at any hour. That server is not where your code lives. It has no Xcode, no GPU, no photo library, no printer, no half-finished branch in a terminal you forgot to close. When you ask Hermes to build the app or free up disk space, the useful answer is on your laptop.
+
+Dirtside gives each conversation a choice of where the terminal and file tools run: the server, or a machine you paired. The model keeps thinking on the server. The commands land on the device you named. Switch a conversation to `macbook`, keep another one on `gpu-box`, leave your cron jobs on the server.
+
+| Without it | With Dirtside |
+|---|---|
+| Every command runs on the gateway host. | Each conversation picks a target: `server`, or any paired device. |
+| Reaching a machine at home means a VPN, an SSH tunnel or an open port. | The device dials out and long-polls. Nothing listens on it. |
+| Trusting the path between the two. | Every message is Ed25519-signed, timestamped and replay-guarded on both ends. |
+| A backend swap that changes what the model can do. | No new model tools, no approval bypass. Hermes decides what runs; Dirtside decides where. |
+
+Dirtside is a terminal environment provider, the backend seam Hermes exposes for exactly this. One small package serves both ends: the gateway half registers the provider, the signed routes and the chat commands; the device half is a foreground command that polls your gateway, verifies each script, runs it in a process group under your user and streams signed output back. Nothing is sandboxed. It is your machine.
+
+## Sixty seconds with it
+
+```text
+you      /dirtside pair macbook
+hermes   Pairing code Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk expires in 10 minutes. On the device run:
+         hermes dirtside pair <gateway-url> --name macbook --code=Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
+
+laptop $ hermes dirtside pair https://hermes.example.com --name macbook --code=Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
+Paired macbook to https://hermes.example.com. Run 'hermes dirtside serve' to connect.
+laptop $ hermes dirtside serve
+
+you      /dirtside use macbook
+hermes   This conversation now targets macbook (Darwin, online). The change applies to
+         this conversation from the next command.
+
+you      what is filling up my disk?
+hermes   runs du on macbook through the ordinary terminal tool, reads the output
+         back over the relay, and answers from it.
+```
+
+The replies above are the exact strings the plugin returns. The last line describes what happens; the model's own words depend on your setup.
+
+## Quick start
+
+### Install on both ends
+
+Install in the Hermes profile that will use it, on the gateway and on each device:
 
 ```sh
 hermes plugins install https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside
 hermes plugins enable dirtside
 ```
 
-On the gateway, select the backend:
+On the gateway, select the backend, then restart the gateway and open a new conversation:
 
 ```sh
 hermes config set terminal.backend dirtside
 ```
 
-Restart the gateway and open a new conversation after changing the backend. Review the install disclosure before enabling it. The manifest requires Hermes >=0.22.7; Python >=3.11 and `pynacl>=1.5,<2` are required. The checks below used core `84a0301415edd6d1385207ec96e4d7f2b6c1fcd9`, not every supported release.
+Read the install disclosure before enabling it. The manifest requires Hermes 0.22.7 or newer and Python 3.11 or newer. PyNaCl is the only added dependency. The checks in this README ran against core commit `84a0301415edd6d1385207ec96e4d7f2b6c1fcd9`, not against every supported release.
 
-The configured default is `server`. To change it, set `plugins.entries.dirtside.settings.default_target` to a paired device name. An explicit conversation selection wins over that default. Cron defaults to server unless its own conversation has an explicit selection.
+### Pair in four commands
 
-Leave `terminal.cwd` unset to start a fresh device environment in its home. Core expands an explicitly configured `~` on the gateway; Dirtside does not translate that path.
-
-## Pair in four commands
-
-After installing both ends, use these four commands. Chat commands run in an authenticated Hermes conversation on the gateway. Shell commands run on the device. Replace the example gateway URL and `PASTE_CODE` with your URL and the fresh code.
+Chat commands run in an authenticated Hermes conversation on the gateway. Shell commands run on the device.
 
 1. In chat, mint a single-use code:
    ```text
    /dirtside pair macbook
    ```
-2. In the device's shell, pair:
+2. In the device's shell, pair with your gateway URL and the fresh code:
    ```sh
    hermes dirtside pair https://gateway.example --name macbook --code=PASTE_CODE
    ```
-3. In that shell, keep the agent running:
+3. In that shell, keep the device agent running:
    ```sh
    hermes dirtside serve
    ```
-4. In the conversation that should use it, select the device:
+4. In the conversation that should use it:
    ```text
    /dirtside use macbook
    ```
 
-Codes expire after ten minutes. Keep them private; command arguments can enter shell history and process listings. Names use 1 to 32 lowercase letters, digits or hyphens. Use a name other than `server`, which is the server selector. Non-loopback URLs must use HTTPS; plain HTTP is accepted only for loopback.
+Codes expire after ten minutes. Treat them as secrets; command arguments can land in shell history and process listings. Names are 1 to 32 lowercase letters, digits or hyphens, and `server` is reserved. Any URL that is not loopback must be HTTPS.
 
-`hermes dirtside status` shows the device's pairing, policy and recent local request activity. Optional per-user service commands are `hermes dirtside install-service --dry-run`, `hermes dirtside install-service` and `hermes dirtside install-service --remove`. Inspect the unit first. Actual service loading, login and reboot recovery were not validated here.
+### Keep it running
 
-## Chat commands
-
-| Command | Effect |
-|---|---|
-| `/dirtside` | Show this conversation's target and online devices. |
-| `/dirtside devices` | List paired devices, OS and online state. |
-| `/dirtside use` | Ask for an online device or server. Cancelling changes nothing. |
-| `/dirtside use <name>` | Select that paired device for this conversation, even if currently offline. |
-| `/dirtside use server` | Persist an explicit server choice, including over a device default. |
-| `/dirtside pair <name>` | Mint a code and show the exact device-side pairing command. |
-| `/dirtside revoke <name>` | Revoke its credential and cancel its live gateway requests. |
-
-A target change applies from the next command, including when core already cached the conversation's environment. Work already dispatched keeps its original target. Selecting an offline or revoked device never silently runs that work on the server.
-
-Core freezes the target's prompt facts once per session. Switching targets does not rebuild that prompt; start a new session for fresh facts. Shell snapshots stay separate per target, but core carries the conversation's recorded working directory across a switch. Supply an explicit `workdir` that exists on the new target when necessary.
-
-## Native Desktop
-
-Install the package locally on the Desktop machine as well if the gateway is remote. Desktop discovers `desktop/plugin.js` in the local unified package. In **Capabilities → Plugins**, enable **Dirtside**, which is off by default. Open its right-hand pane. If discovery needs a refresh, use the command palette's **Reload desktop plugins**.
-
-The pane shows paired devices, online dots, OS, home, last seen and revoke buttons. Its target picker follows the focused saved conversation; the status bar chip shows the same target. Recent requests show command previews, state, exit code and a live output tail. Devices and requests poll every two seconds while the pane is visible. Target reads continue for the chip.
-
-The REST helper uses the active gateway and profile. If the focused chat belongs elsewhere, controls stay disabled until you switch to its gateway/profile. An unsaved conversation has no target picker yet. Failures appear as errors, not successful writes.
-
-No build step or extra Desktop manifest is needed. The existing dashboard manifest supplies backend routes only; this is not a web-dashboard pane. Module parsing and SDK behavior were tested, but the Desktop app was unavailable for visual/runtime validation.
-
-## What runs where
-
-| Work | Location |
-|---|---|
-| Terminal commands, shell scripts, file read/write/patch/search | The selected server or device environment. |
-| Shell exports and environment snapshots | Kept separately for each target within the cached conversation environment. |
-| Approval decisions, conversation state, pairing registry and request metadata | Gateway. |
-| Browser and other non-terminal tools | Their ordinary Hermes backends; Dirtside does not redirect them. |
-| Device policy, process groups and device activity records | Device, under the device user's privileges. |
-
-Online means contact within 45 seconds. An in-flight request becomes lost after 45 seconds plus a five-second grace period without contact. Loss returns exit 124 and can retain partial output. Core's retries can delay an offline error. Normal command timeouts still apply.
-
-Revocation cancels waiting tool calls immediately. The device learns cancellation through its next poll or a rejected upload. An unreachable device may keep executing until its local timeout; gateway cancellation is not proof that a disconnected physical process has stopped.
-
-## Security and disclosure
-
-- **Approvals stay enabled.** Dirtside adds a terminal backend, not a new model tool or an approval bypass. The gateway still decides what to dispatch through Hermes' normal approval path.
-- **The device is not sandboxed.** Scripts run as its user, with that user's filesystem and program access. A deny list is only a check against recognizable command patterns. It is not a filesystem allowlist or protection against a compromised gateway.
-- **Device-side limits apply.** The default policy rejects patterns such as `sudo` and destructive disk commands, caps each command at 900 seconds and 64 MiB of output, and permits four parallel requests. Policy is stored in the device's private `dirtside/device.json` under its selected Hermes home. Review it for your machine.
-- **Messages are signed.** Pairing pins Ed25519 public keys. Device requests need both the bearer credential and a valid device signature; the device verifies signed gateway polls. Both sides check timestamps within 300 seconds and reject repeated sender/nonces while retained in a 4,096-entry, 300-second cache (process-wide at the gateway, per agent at the device). Retries use fresh signatures; request/sequence checks prevent duplicate output. These bounded caches do not provide durable replay protection across restarts or cache eviction. Signatures do not encrypt scripts or output; HTTPS protects transport.
-- **The device only dials out.** It opens no listening port. The plugin adds signed device HTTP routes and authenticated conversation controls to the gateway. It does not set up a public proxy, open firewall ports or provide an external relay.
-- **Credentials remain private state.** The gateway stores token hashes. The device configuration contains its token and private key with mode 0600; the gateway signing key is also private. Treat pairing codes, these files and the gateway host as trusted credentials.
-- **History is limited, not absent.** Gateway request rows keep a 120-character command preview and execution metadata. A live 4,096-byte output tail is held in memory and removed when the request finishes. Device activity records contain request ids and outcomes, not a full-command audit log. Hermes' ordinary conversation/tool history may retain scripts and output.
-- **No telemetry.** Dirtside communicates with the gateway you pair. It does not forward the gateway's environment or read unrelated credential files. Scripts and file contents you ask it to run or transfer can still contain secrets.
-
-These are the capabilities disclosed in `plugin.yaml`: privileged shell execution as the device user, signed gateway routes, authenticated session controls, outbound device polling, pinned pairing keys and device-side deny/timeout/output/parallelism checks, without filesystem confinement. The only added Python dependency is PyNaCl.
-
-Target storage migrates automatically from device-only rows to explicit `server` or device-id rows, preserving choices and timestamps. Clearing a row restores the configured default. Back up plugin data before upgrading; an older version cannot read the new target column.
-
-## Measurements
-
-### Signed in-process loopback
-
-Recorded **2026-11-05** on macOS with Python 3.14.6, core `84a0301415edd6d1385207ec96e4d7f2b6c1fcd9`, and the uncommitted day-4 working tree based on plugin `d713f20db63ee317d0c09f252136cc2005e277b5`.
-
-| Measurement | Result | Loopback target | Status |
-|---|---:|---:|---|
-| pwd added p50 | -7.08 ms | <= 15 ms | PASS |
-| pwd added p95 | 5.54 ms | <= 40 ms | PASS |
-| 10 MB output | 11.92 MB/s | >= 8 MB/s | PASS |
-| kill to tool return | 7.78 ms | <= 50 ms | PASS |
-
-Both paths are warmed. Latency is the nearest-rank percentile of 50 paired device-minus-`LocalEnvironment` durations, with no samples discarded. A negative median is a result of different shell paths and timing variation, not a network speedup claim. Throughput verifies all 10,000,000 bytes with unbounded capture and uses decimal MB/s.
-
-Cancellation measures `kill()` until the running `execute()` returns exit 130, immediately after the command emits a full output chunk. It does not measure physical process termination or late cancellation of a long-running call. Core's adaptive polling can add up to 200 ms in that later case. Signing, verification, execution and relay delivery are included; HTTP, TLS, LAN and internet travel are excluded.
-
-Run from this checkout with the supplied core environment:
+`hermes dirtside serve` stays in the foreground and prints nothing while healthy. `hermes dirtside status` in another shell shows the pairing, the policy and recent activity. For a per-user service:
 
 ```sh
-export HERMES_SRC=/absolute/path/to/hermes-agent
-"$HERMES_SRC/venv/bin/python" tools/bench.py --loopback
+hermes dirtside install-service --dry-run   # print the unit, change nothing
+hermes dirtside install-service             # write and load it
+hermes dirtside install-service --remove    # undo
 ```
 
-Any missed target exits nonzero. CI uses `--report-only` to print noisy shared-runner timings without failing on thresholds. Command failures and incomplete output still fail.
-
-### Reliability matrix, historical signed HTTP loopback
-
-Recorded **2026-11-05** against core `84a0301`. This was the day-3 working tree subsequently captured in plugin commit `d713f20`; recording used base `237eaf1` plus those integration changes. It is separate from the in-process benchmark and was not rerun as a day-4 matrix.
-
-| Case | Result | Elapsed |
-|---|---|---:|
-| Device loses network | PASS | 62.32 s |
-| Gateway restarts | PASS | 8.18 s |
-| Device restarts | PASS | 4.78 s |
-| Concurrent commands | PASS | 6.22 s |
-| Clock skew | PASS | 3.48 s |
-| Output flood | PASS | 13.35 s |
-| Long poll | PASS | 28.76 s |
-| User interrupt | PASS | 4.62 s |
-
-Result: **8/8 passed**. Local transcripts at `evidence/2026-11-05/182622-37207` describe the owned loopback fault setup; `evidence/` is ignored by git. They do not establish physical two-host, production proxy, service-manager or reboot behavior. Reproduce with `bash scripts/two_machine_matrix.sh --loopback`.
-
-Core currently gives shell-backed file reads a different partial-read warning from host-path reads. Foreground output and recovery files also have core's own limits, separate from the device cap. Those differences remain visible and tested.
+macOS gets a launchd agent, Linux a systemd user unit. Both restart the agent after a crash and leave it stopped after a revoke. Read the unit before installing it; service login and reboot recovery were not exercised in the checks below.
 
 ## How it works
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+    <img src="docs/assets/architecture-light.svg" alt="Chat surfaces talk to the Hermes gateway. The Dirtside plugin on the gateway resolves each conversation's target. The device agent long-polls the gateway over signed outbound HTTP; the script rides back in the poll response and the output returns as signed chunks. No inbound connection reaches the device." width="1000">
+  </picture>
+</p>
+
+One command, start to finish:
+
 ```mermaid
-flowchart LR
-  Chat["Chat / Desktop target choice"] --> Registry["Gateway registry"]
-  Tools["Terminal and file tools"] --> Provider["Conversation environment"]
-  Registry --> Provider
-  Provider -->|server| Local["Core local environment"]
-  Provider -->|device| Relay["Gateway relay"]
-  Device["Device agent"] -->|"outbound signed poll"| Relay
-  Relay -->|"signed script in poll response"| Device
-  Device --> Executor["Device policy and process group"]
-  Executor -->|"signed chunks and result"| Relay
-  Relay --> Tools
+sequenceDiagram
+    autonumber
+    participant U as You
+    participant H as Hermes core
+    participant P as Dirtside plugin
+    participant A as Device agent
+    U->>H: "what is filling up my disk?"
+    H->>P: terminal tool runs du (after Hermes' own approval path)
+    P->>P: resolve this conversation's target: macbook
+    A-->>P: long poll, signed, parked up to 25 s
+    P-->>A: the signed script rides back in the poll response
+    A->>A: policy check, process group, run as your user
+    A-->>P: output chunks, signed, 64 KiB or 200 ms apart
+    A-->>P: result: exit code and the output tail
+    P->>H: bytes flow into the tool through a pipe
+    H->>U: the answer
 ```
 
-The cached conversation environment resolves its current target before dispatch. The relay holds live request handles; SQLite keeps pairings, selections and recent request metadata. The device verifies each poll, checks policy, starts a process group and streams signed output. No core files are modified.
+The provider hands core a conversation environment that resolves its target at dispatch time, so a `/dirtside use` takes effect on the next command even though core caches environments. The relay holds every live request in memory behind one lock. SQLite keeps pairings, per-conversation choices and a short request log. The device verifies each poll response, checks its policy, starts a process group and streams signed output. No core file is modified.
+
+### What runs where
+
+| Work | Where |
+|---|---|
+| Terminal commands, shell scripts, file read, write, patch and search | The selected target: the server, or the device. |
+| Shell exports and environment snapshots | Kept per target inside the cached conversation environment. |
+| Approvals, conversation state, the pairing registry, request metadata | The gateway. |
+| Browser and every other non-terminal tool | Their ordinary Hermes backends. Dirtside does not touch them. |
+| Device policy, process groups, the device activity log | The device, as the device user. |
+
+Online means contact within 45 seconds. A request on a device that stops reporting is marked lost after 45 seconds plus a 5 second grace period: the tool returns exit 124 with the partial output kept, and says why. Revocation cancels waiting tool calls at once; the device learns of it on its next poll or its next rejected upload. A device that is unreachable may keep running its current command until its own deadline.
+
+## Chat commands
+
+| Command | What it does |
+|---|---|
+| `/dirtside` | Show this conversation's target and the online devices. |
+| `/dirtside devices` | List paired devices with OS and online state. |
+| `/dirtside use` | Offer a choice of online devices and `server`. Cancelling changes nothing. |
+| `/dirtside use <name>` | Select that device for this conversation, even if it is offline right now. |
+| `/dirtside use server` | Pin this conversation to the server, even when the default is a device. |
+| `/dirtside pair <name>` | Mint a code and print the exact device-side command. |
+| `/dirtside revoke <name>` | Revoke the device and cancel its live requests. |
+
+A change applies from the next command. Work already dispatched keeps its original target. Selecting an offline or revoked device never silently runs that work on the server: the tool fails closed and tells the model why.
+
+Core freezes the system prompt's target facts once per session, so a switch mid-session changes where commands run but not the facts the model was given. Start a new session when that matters.
+
+## Device commands
+
+| Command | What it does |
+|---|---|
+| `hermes dirtside pair <url> --name <name> --code <code>` | Generate a key pair, register with the gateway, write the device file with mode 0600. |
+| `hermes dirtside serve` | Run the device agent in the foreground. |
+| `hermes dirtside status` | Show the pairing, the policy and recent local request activity. |
+| `hermes dirtside install-service [--dry-run] [--remove]` | Install, print or remove the per-user service. |
+
+## Desktop pane
+
+Install the package on the Desktop machine as well when the gateway is remote. Under Capabilities, Plugins, enable Dirtside (off by default) and open its right-hand pane. If discovery needs a refresh, run "Reload desktop plugins" from the command palette.
+
+The pane lists paired devices with an online dot, OS, home, last seen and a revoke button, shows the focused conversation's target with a picker, and tails the output of recent requests live. A status bar chip shows the current target. Devices and requests poll every two seconds while the pane is visible. The module parses and its SDK calls are tested; the pane was not yet checked inside the running Desktop app.
+
+## Security model
+
+| If this happens | What Dirtside does |
+|---|---|
+| The laptop lid closes mid-command | Online means contact within 45 s. The request becomes lost after a further 5 s, returns exit 124 with the partial output, and says the device stopped reporting. |
+| A poll response is lost on the way to the device | The device's next poll lists the ids it is running. Anything the gateway handed out that never started is queued again, once, and only if it had produced no output. |
+| Someone replays a captured message | Every message carries a timestamp and a nonce. Both ends reject timestamps outside 300 s and nonces seen in their 4,096-entry, 300 s cache. |
+| A device token leaks | It is useless without the device's private key; pairing pins the public key. `/dirtside revoke` cancels live requests the same second. |
+| The model asks for something destructive | The device policy refuses by pattern before anything runs: `sudo`, wiping the root, formatting disks, raw disk writes, shutdown and reboot, stopping its own service, fork bombs, piping a download into a shell. Each command is capped at 900 s, 64 MiB of output and 4 in parallel. Hermes' own approvals stay exactly as they were. |
+| The gateway itself is compromised | The deny list is pattern matching, not a sandbox. The device runs what a signed gateway sends, as your user. Treat the gateway host and every pairing code as credentials. |
+| The network in between is hostile | The device dials out over HTTPS (plain HTTP only to loopback) and opens no port. Signatures prove who sent what; TLS keeps it private. |
+
+What is kept, and where:
+
+- The gateway stores token hashes, a 120-character preview of each command and its outcome metadata. A 4,096-byte output tail lives in memory only while a request runs.
+- The device stores its token, private key and policy in `<hermes home>/dirtside/device.json` with mode 0600, and an activity log of request ids and outcomes, also 0600.
+- No telemetry. Dirtside talks to the gateway you paired and to nothing else. Scripts and file contents you ask it to move can still contain secrets, as they would on the server.
+
+The disclosures in `plugin.yaml` say the same in one paragraph: shell execution with the device user's privileges, signed gateway routes, authenticated session controls, outbound polling, pinned keys, device-side deny, timeout, output and parallelism checks, and no filesystem confinement.
+
+## Numbers
+
+Recorded 2026-11-06 at commit `36eda41` on macOS with Python 3.14.6 and core `84a0301`. Both runs are on one machine, so they cover signing, verification, policy, execution and relay delivery, not LAN or internet travel.
+
+### Added cost over core's local backend
+
+| Measurement | Result | Target | Status |
+|---|---:|---:|---|
+| `pwd`, added latency, p50 | -6.08 ms | <= 15 ms | pass |
+| `pwd`, added latency, p95 | 7.79 ms | <= 40 ms | pass |
+| 10 MB of output | 12.36 MB/s | >= 8 MB/s | pass |
+| `kill()` to tool return | 8.19 ms | <= 50 ms | pass |
+
+Fifty paired samples, nearest-rank percentiles, nothing discarded. The negative median means the two paths differ by less than the run-to-run noise of a shell start, not that the relay is faster than running locally. Throughput verifies all 10,000,000 bytes. Cancellation is measured right after a full chunk; core's own polling can add up to 200 ms to a late cancel of a long call.
+
+### Reliability matrix
+
+| Case | Result | Elapsed |
+|---|---|---:|
+| Device loses network | pass | 62.50 s |
+| Gateway restarts | pass | 8.67 s |
+| Device restarts | pass | 4.73 s |
+| Concurrent commands | pass | 6.50 s |
+| Clock skew | pass | 3.55 s |
+| Output flood | pass | 13.52 s |
+| Long poll | pass | 28.88 s |
+| User interrupt | pass | 4.75 s |
+
+8 of 8, over signed HTTP on loopback with a real gateway app and a real device agent process. Reproduce both:
+
+```sh
+export HERMES_SRC=/absolute/path/to/hermes-agent     # a checkout with its venv
+"$HERMES_SRC/venv/bin/python" tools/bench.py --loopback
+bash scripts/two_machine_matrix.sh --loopback
+bash scripts/two_machine_matrix.sh --help            # the two-host form
+```
+
+Any missed target exits non-zero. CI prints the benchmark with `--report-only` because shared runners are too noisy to gate on.
+
+## Configuration
+
+Gateway, in the Hermes config:
+
+| Key | Meaning |
+|---|---|
+| `terminal.backend` | `dirtside` to enable the provider. |
+| `plugins.entries.dirtside.settings.default_target` | `server` (default) or a paired device name, used until a conversation chooses. Cron conversations default to the server. |
+| `terminal.cwd` | Leave unset. Core expands a configured `~` on the gateway, and Dirtside does not translate that path. |
+
+Device, in `<hermes home>/dirtside/device.json` (written by `pair`, mode 0600): the gateway URL, the device identity, its token and signing key, the gateway's public key, and the policy block with `deny_patterns`, `max_timeout_s`, `max_output_bytes` and `max_parallel`. Edit the policy for your machine, then restart `serve`.
+
+## Project layout
+
+```text
+dirtside/                 one package, both halves
+  __init__.py             register(ctx): provider, auth, routes, CLI, /dirtside, prompt section
+  model.py                frozen dataclasses and the constants (45 s online, 25 s poll, 64 KiB chunks)
+  protocol.py             canonical JSON, Ed25519 sign and verify, replay guard, one parser per message
+  registry.py             SQLite: devices, per-conversation targets, request log
+  relay.py                live requests behind one lock: queue, chunks, cancel, lost detection
+  environment.py          core's BaseEnvironment with a pipe as the process handle
+  provider.py             the conversation environment and target resolution
+  auth.py                 the dashboard auth provider for the four device routes
+  commands.py             /dirtside
+  prompt.py               the target facts for the system prompt
+  cli.py                  hermes dirtside pair, serve, status, install-service
+  agent/                  the device half: config, poll loop, executor, policy, activity log
+dashboard/plugin_api.py   the routes, mounted under /api/plugins/dirtside/
+desktop/plugin.js         the Desktop pane and status chip, plain ESM, no build step
+tools/                    benchmark, fake device, size budgets, matrix runner
+scripts/                  two_machine_matrix.sh
+tests/                    314 tests: units, the conformance battery, real-core and network runs
+docs/ARCHITECTURE.md      the design, with the reasons and the alternatives that lost
+openspec/                 the change records each build step was made from
+```
+
+## Engineering notes
+
+- Every module has a line budget that `tools/check_sizes.py` enforces (the relay gets 204 lines, the protocol 147) and no function may exceed a cyclomatic complexity of 8. The whole plugin is 1,872 lines of source and 4,103 lines of tests.
+- The conformance battery runs the same commands through core's local backend and through Dirtside and compares exit codes, output, truncation and timeout rendering. If core would show you a message, Dirtside shows the same one.
+- The integration tests use the real core: the plugin is loaded by Hermes' own loader, driven through its own terminal and file tools, and mounted by its own dashboard with the auth gate on. Two defects that only the real core could reveal were found this way and fixed.
+- The gateway owns every timeout. The device deadline is one second longer and only matters when the gateway is gone, so what you see never depends on which side of the network fired first.
+- CI runs the full suite on Ubuntu and macOS against the pinned core commit on every push.
+- The build went in six steps, each from a written change record in `openspec/` with a proposal, a design and tasks, and each closed by a review in a fresh context. The last review found eleven defects; every one was fixed with a test that failed first.
+
+## Status
+
+Verified: everything in this README on one machine over loopback, the suite on both CI runners, and the catalog validator's checks on a clean clone. Not yet verified: two physical hosts over the internet, the pane inside the running Desktop app, and service behaviour across login and reboot. The two-host matrix is one command away; the script has a remote mode.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+<p align="center">
+  <sub>Built by George Kioko for the Hermes Agent plugin hackathon, November 2026.</sub>
+</p>
