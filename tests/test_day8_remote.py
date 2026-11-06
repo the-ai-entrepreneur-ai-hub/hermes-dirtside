@@ -1,6 +1,7 @@
 """Measured remote matrix budgets and waits that allow core timeout outcomes."""
 from contextlib import contextmanager
 import json
+import math
 import socket
 import sys
 import time
@@ -107,6 +108,34 @@ def test_probe_posts_one_maximum_signed_part_through_configured_url(monkeypatch)
     assert measured == pytest.approx(MEASURED)
 
 
+@pytest.mark.parametrize("settles", [True, False])
+def test_probe_retries_incoherent_samples_without_inventing_a_rate(monkeypatch, settles):
+    key, sent = SigningKey.generate(), []
+    cfg = SimpleNamespace(gateway_url="https://probe.invalid", device_id="1" * 32,
+                          token="private-test-token", key=key)
+    durations = [.1, .8, .2] * (1 if settles else 3)
+    if settles:
+        durations += [.1, .2, .8]
+    clock = iter(t for i, duration in enumerate(durations) for t in (10 * i, 10 * i + duration))
+    monkeypatch.setattr(cases, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+    def post(path, content):
+        assert path == "api/plugins/dirtside/device/chunk"
+        envelope = verify(key.verify_key, json.loads(content), int(time.time()))
+        assert envelope.kind == "chunk" and envelope.sender == cfg.device_id
+        sent.append(len(parse_chunk(envelope.body).data))
+        return SimpleNamespace(status_code=410)
+    @contextmanager
+    def client(**options):
+        assert options["trust_env"] is False
+        assert options["headers"] == {"Authorization": "Bearer " + cfg.token}
+        yield SimpleNamespace(post=post)
+    monkeypatch.setattr(cases.httpx, "Client", client)
+    measured = cases.probe_link(cfg)
+    upload, round_trip = (.8, .2) if settles else (.2, .8)
+    assert measured == pytest.approx(dict(probe_bytes=PROBE_BYTES, probe_s=upload, round_trip_s=round_trip))
+    assert sent == [0, 0, PART_MAX] * (2 if settles else 3)
+
+
 @pytest.mark.parametrize("status", [200, 401, 413, 503])
 def test_probe_requires_unknown_request_response(monkeypatch, status):
     cfg = SimpleNamespace(gateway_url="https://probe.invalid", device_id="1" * 32,
@@ -135,9 +164,34 @@ def test_probe_remote_uses_device_worker_and_round_trip_adjusted_rate(tmp_path, 
     assert {key: link[key] for key in MEASURED} == MEASURED
 
 
+@pytest.mark.parametrize("upload,round_trip,rate,timeout", [
+    (.002, .005, 1_398_102_000, 120),
+    (.005, .005, 559_240_800, 120),
+    (.002, 0, 1_398_102_000, 120),
+    (10.8, .38, PROBE_BYTES / (10.8 - .38), 523),
+    (12.3, .42, PROBE_BYTES / (12.3 - .42), 594),
+])
+def test_probe_remote_accepts_fast_samples_and_preserves_remote_arithmetic(
+        tmp_path, monkeypatch, upload, round_trip, rate, timeout):
+    stats = dict(probe_bytes=PROBE_BYTES, probe_s=upload, round_trip_s=round_trip)
+    rig = SimpleNamespace(device_command=["worker"], device_home=tmp_path, device_env={})
+    monkeypatch.setattr(run_matrix.subprocess, "run",
+                        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(stats), stderr=""))
+    link = run_matrix.probe_remote(rig)
+    assert math.isfinite(link["bytes_per_second"]) and link["bytes_per_second"] > 0
+    assert link["bytes_per_second"] == pytest.approx(rate) and link["timeout_s"] == timeout
+    assert {key: link[key] for key in stats} == stats
+
+
 @pytest.mark.parametrize("stats", [
     {}, MEASURED | {"extra": 1}, MEASURED | {"probe_bytes": 1},
-    MEASURED | {"probe_s": RTT}, MEASURED | {"probe_s": float("nan")},
+    MEASURED | {"probe_bytes": float(PROBE_BYTES)}, MEASURED | {"probe_bytes": True},
+    MEASURED | {"probe_s": 0}, MEASURED | {"probe_s": -1},
+    MEASURED | {"probe_s": float("nan")}, MEASURED | {"probe_s": float("inf")},
+    MEASURED | {"probe_s": -float("inf")}, MEASURED | {"probe_s": True}, MEASURED | {"probe_s": ".002"},
+    MEASURED | {"round_trip_s": -1}, MEASURED | {"round_trip_s": float("nan")},
+    MEASURED | {"round_trip_s": float("inf")}, MEASURED | {"round_trip_s": -float("inf")},
+    MEASURED | {"round_trip_s": True}, MEASURED | {"round_trip_s": ".005"},
 ])
 def test_probe_remote_refuses_invalid_worker_data(tmp_path, monkeypatch, stats):
     rig = SimpleNamespace(device_command=["worker"], device_home=tmp_path, device_env={})

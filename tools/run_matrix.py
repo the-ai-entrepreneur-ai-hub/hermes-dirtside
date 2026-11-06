@@ -40,9 +40,10 @@ def probe_remote(rig):
             or data["probe_bytes"] != 4 * ((PART_MAX + 2) // 3)
             or any(type(data[name]) not in (int, float) for name in ("probe_s", "round_trip_s"))):
         raise ValueError("invalid link measurement")
-    if data["probe_s"] <= data["round_trip_s"]:
-        raise ValueError("invalid link measurement: upload did not exceed round trip")
-    rate = data["probe_bytes"] / (data["probe_s"] - data["round_trip_s"])
+    if data["probe_s"] <= 0:
+        raise ValueError("invalid link measurement")
+    transfer_s = data["probe_s"] - data["round_trip_s"]
+    rate = data["probe_bytes"] / (transfer_s if transfer_s > 0 else data["probe_s"])
     return data | dict(bytes_per_second=rate, timeout_s=flood_budget(rate, data["round_trip_s"]))
 
 

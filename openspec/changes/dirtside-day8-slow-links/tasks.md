@@ -40,6 +40,12 @@
 - [x] 6.4 Preserve revocation after immediate orphan replies by recognizing only core's exact structured 401; test the real middleware boundary and unchanged foreign-401 retries without loosening the existing five-second check.
 - [x] 6.5 Rerun all acceptance, keep 16 commits and append Correction 3 with file:line evidence, test names, budgets and exact check outputs.
 
+## 7. Correction 4
+
+- [x] 7.1 Accept fast-link samples with upload duration at or below the round trip, preserve worker retries and return the last sample; test the finite positive fallback, floor, unchanged remote arithmetic and invalid measurements.
+- [x] 7.2 Run the real benchmark smoke with --report-only and check its summary and all six rows without requiring PASS; retain strict threshold, execution and byte-integrity checks.
+- [x] 7.3 Rerun the brief's acceptance checks, retain 17 commits, state budgets and append Correction 4 with file:line evidence and exact outputs; keep user README edits and leave the change unarchived.
+
 ## Workflow follow-up
 
 - The owner reruns the real two-machine matrix and replaces the pending README flood measurement with the result.

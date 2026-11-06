@@ -13,6 +13,7 @@ The internet matrix's 64 MiB output row cannot finish in 120 seconds when every 
 - Update README and architecture, preserve all existing checks and record before/after evidence. Trigger the kill benchmark at claim rather than first output so batching does not move it into a longer core poll slot. Leave the internet flood measurement pending the owner's rerun.
 - Measure one maximum-part upload and a small round trip from the remote device before matrix rows, derive the remote flood budget from that link, and retain the fixed 120 s loopback row. Rig calls carrying a command timeout wait that timeout plus 15 s for core's outcome.
 - Cancel reported running ids absent from the owner's live handles in the same poll reply, without rewriting terminal history or inferring work from legacy polls. Keep the ticking gateway-restart phase and add a silent 600 s sleeper that must stop within one poll interval plus 10 s of the replacement owner becoming ready. Preserve revocation when a fresh poll is rejected by core before reaching the plugin by recognizing core's exact structured 401, not a generic foreign 401.
+- Accept valid fast-link samples whose upload duration does not exceed the separately sampled round trip, using the upload duration alone for their rate and retaining the remote budget formula. Keep the worker's existing retries but return the final sample rather than reject persistent round-trip jitter. Run the benchmark smoke in report-only mode and check all six output rows and its summary without gating the suite on measured speed.
 
 ## Capabilities
 

@@ -159,18 +159,22 @@ def flood_budget(rate, round_trip, size=MAX_OUTPUT_BYTES):
 
 
 def probe_link(config):
-    samples = []
     with httpx.Client(base_url=config.gateway_url.rstrip("/") + "/", timeout=35, trust_env=False,
                       headers={"Authorization": "Bearer " + config.token}) as client:
-        for size in (0, 0, PART_MAX):  # Warm the connection before measuring the round trip.
-            body = dict(id="r_" + "0" * 24, seq=0, data=base64.b64encode(os.urandom(size)).decode())
-            content = canonical(sign(config.key, "chunk", config.device_id, body))
-            started = time.monotonic()
-            response = client.post("api/plugins/dirtside/device/chunk", content=content)
-            elapsed = time.monotonic() - started
-            if response.status_code != 410:
-                raise RuntimeError(f"link probe returned HTTP {response.status_code}, expected 410")
-            samples.append(elapsed)
+        for _ in range(3):
+            samples = []
+            for size in (0, 0, PART_MAX):  # Warm the connection before measuring the round trip.
+                body = dict(id="r_" + "0" * 24, seq=0, data=base64.b64encode(os.urandom(size)).decode())
+                content = canonical(sign(config.key, "chunk", config.device_id, body))
+                started = time.monotonic()
+                response = client.post("api/plugins/dirtside/device/chunk", content=content)
+                elapsed = time.monotonic() - started
+                if response.status_code != 410:
+                    raise RuntimeError(f"link probe returned HTTP {response.status_code}, expected 410")
+                samples.append(elapsed)
+            # Retry round-trip jitter, but keep the last sample if it persists.
+            if samples[2] > samples[1]:
+                break
     return dict(probe_bytes=len(body["data"]), probe_s=samples[2], round_trip_s=samples[1])
 
 

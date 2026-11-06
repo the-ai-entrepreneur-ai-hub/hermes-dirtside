@@ -1,4 +1,4 @@
-"""The benchmark keeps exact threshold boundaries and rejects every miss."""
+"""Strict threshold checks and report-only benchmark smoke."""
 import os
 import subprocess
 import sys
@@ -59,9 +59,28 @@ def test_cancellation_starts_at_claim_without_waiting_for_output():
 
 
 def test_benchmark_loopback_smoke():
-    result = subprocess.run([sys.executable, str(ROOT / "tools/bench.py"), "--loopback"],
+    result = subprocess.run([sys.executable, str(ROOT / "tools/bench.py"), "--loopback", "--report-only"],
                             env=os.environ | {"HERMES_SRC": str(CORE)}, cwd=ROOT,
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.count("| PASS |") == 4
-    assert "50 paired pwd" in result.stdout and "10,000,000 verified bytes" in result.stdout
+    assert result.stdout.startswith(
+        "Signed in-process loopback; 50 paired pwd samples; 10,000,000 verified bytes; excludes HTTP/LAN.\n")
+    rows = [line.split("|")[1].strip() for line in result.stdout.splitlines() if line.startswith("| ")]
+    assert rows == ["Measurement", "pwd added p50", "pwd added p95", "10 MB output", "kill to tool return",
+                    "pwd client added p50", "pwd client added p95"]
+    assert result.stdout.count("| report only | INFO |") == 2
+
+
+def test_benchmark_smoke_accepts_a_reported_timing_miss(monkeypatch, capsys):
+    from bench_client import report as report_client
+    assert report((15, 40, 7.96, 50), report_only=True) == 0
+    report_client((1, 2))
+    output = ("Signed in-process loopback; 50 paired pwd samples; 10,000,000 verified bytes; excludes HTTP/LAN.\n"
+              + capsys.readouterr().out)
+    assert "| 10 MB output | 7.96 MB/s | >= 8 MB/s | FAIL |" in output
+    def run(command, **options):
+        assert command == [sys.executable, str(ROOT / "tools/bench.py"), "--loopback", "--report-only"]
+        assert options["cwd"] == ROOT and options["capture_output"] and options["text"]
+        return SimpleNamespace(returncode=0, stdout=output, stderr="")
+    monkeypatch.setattr(subprocess, "run", run)
+    test_benchmark_loopback_smoke()

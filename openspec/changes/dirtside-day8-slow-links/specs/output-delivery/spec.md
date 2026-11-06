@@ -90,3 +90,21 @@ When a matrix run has an external gateway URL, the rig SHALL probe one maximum s
 - **THEN** its evidence still records the measured link and chosen budget
 - **WHEN** a probe cannot produce a valid positive rate
 - **THEN** the run fails with probe evidence before rows and releases its owned resources
+
+#### Scenario: Fast upload is no slower than the sampled round trip
+
+- **WHEN** a finite positive probe upload duration is less than or equal to the separately sampled round trip
+- **THEN** the rate uses probe bytes divided by that upload duration alone
+- **AND** the existing remote budget formula and 120 s floor remain unchanged
+- **AND** the worker retains its retry coverage but returns the final valid sample instead of rejecting persistent jitter
+- **AND** invalid schemas, nonfinite or nonpositive upload durations and nonfinite or negative round trips remain rejected
+
+### Requirement: Non-gating hosted benchmark smoke
+
+The benchmark subprocess smoke SHALL use --report-only and verify exit zero, the summary, four measured rows and two report-only client rows, without requiring PASS verdicts. Strict local acceptance SHALL retain the existing benchmark defaults and gates.
+
+#### Scenario: Hosted throughput is below eight MB/s
+
+- **WHEN** a successful benchmark measures 7.96 MB/s on a noisy hosted runner
+- **THEN** the smoke accepts the report with its FAIL verdict visible
+- **AND** strict threshold unit tests and execution or byte-integrity failures remain enforced

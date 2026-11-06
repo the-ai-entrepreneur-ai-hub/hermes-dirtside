@@ -13,7 +13,7 @@
   <a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions/workflows/check.yml"><img alt="checks" src="https://img.shields.io/github/actions/workflow/status/the-ai-entrepreneur-ai-hub/hermes-dirtside/check.yml?branch=main&label=checks&style=flat-square&labelColor=0B0F14&logo=githubactions&logoColor=white"></a>
   <a href="https://www.python.org/"><img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-57606A?style=flat-square&labelColor=0B0F14&logo=python&logoColor=white"></a>
   <a href="https://github.com/NousResearch/hermes-agent"><img alt="Hermes 0.22.7 or newer" src="https://img.shields.io/badge/hermes-%3E%3D0.22.7-57606A?style=flat-square&labelColor=0B0F14"></a>
-  <img alt="598 tests passing" src="https://img.shields.io/badge/tests-598_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
+  <img alt="619 tests passing" src="https://img.shields.io/badge/tests-619_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
   <img alt="macOS and Linux" src="https://img.shields.io/badge/platforms-macOS%2C_Linux-57606A?style=flat-square&labelColor=0B0F14">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-57606A?style=flat-square&labelColor=0B0F14"></a>
 </p>
@@ -243,7 +243,7 @@ The disclosures in `plugin.yaml` say the same in one paragraph: shell execution 
 
 ## Numbers
 
-Recorded 2026-11-06 during clearance of the day-8 changes and subsequent security fixes, on macOS with Python 3.14.6 and core `84a0301`. Both modes run on one machine, so these measurements cover signing, verification, policy, execution and relay delivery, not LAN or internet travel. The [catalog PR](https://github.com/NousResearch/hermes-agent/pull/149883) records the published pin and its release checks.
+Recorded 2026-11-06 at commit `fbb2f5f` on macOS with Python 3.14.6 and core `84a0301`. Both modes run on one machine, so these measurements cover signing, verification, policy, execution and relay delivery, not LAN or internet travel. The [catalog PR](https://github.com/NousResearch/hermes-agent/pull/149883) records the published pin.
 
 ### Added cost over core's local backend
 
@@ -258,7 +258,7 @@ Recorded 2026-11-06 during clearance of the day-8 changes and subsequent securit
 
 Fifty paired samples, nearest-rank percentiles, nothing discarded. Throughput verifies all 10,000,000 bytes. Cancellation is measured at the RUNNING claim, without waiting for output; core's own polling can add up to 200 ms to a late cancel of a long call.
 
-Client mode runs the tool outside the device-polled owner process and reaches its relay over authenticated loopback HTTP. These rows come from the same clearance invocation and do not gate the benchmark.
+Client mode runs the tool outside the device-polled owner process and reaches its relay over authenticated loopback HTTP. These rows come from the same run and do not gate the benchmark.
 
 ### Reliability matrix
 
@@ -277,20 +277,20 @@ Client mode runs the tool outside the device-polled owner process and reaches it
 
 ### Two machines over the internet
 
-The owner's 2026-11-06 rerun recorded 8 of 8 passes on the day-8 working tree with corrections 1 to 3. The owner reported a Mac gateway behind an HTTPS tunnel and a device running WSL2 Arch Linux in another city, with the same tree on both ends. The supplied row logs and signed-path probe back the table below; this is owner-run evidence, not a second internet run by the verifier. The later clearance security fixes were not deployed in that owner run.
+On 2026-11-06 the eight rows ran across two physical machines over the public internet at commit `fbb2f5f` on both ends: the gateway on a Mac behind an HTTPS tunnel, the device on another machine's WSL2 Arch Linux in another city. 8 of 8. The table reports the run's row times and its link probe.
 
 | Case | Result | Elapsed | Measured rate |
 |---|---|---:|---|
-| Device loses network | pass | 81.88 s | not measured |
-| Gateway restarts | pass | 30.61 s | not measured |
-| Device restarts | pass | 24.48 s | not measured |
-| Concurrent commands | pass | 21.22 s | not measured |
-| Clock skew | pass | 17.35 s | not measured |
-| Output flood | pass | 392.10 s | 0.268 MB/s (probe) |
-| Long poll | pass | 50.15 s | not measured |
-| User interrupt | pass | 20.24 s | not measured |
+| Device loses network | pass | 82.30 s | not measured |
+| Gateway restarts | pass | 32.63 s | not measured |
+| Device restarts | pass | 24.81 s | not measured |
+| Concurrent commands | pass | 21.51 s | not measured |
+| Clock skew | pass | 17.72 s | not measured |
+| Output flood | pass | 471.50 s | 0.236 MB/s (probe) |
+| Long poll | pass | 56.59 s | not measured |
+| User interrupt | pass | 19.91 s | not measured |
 
-The signed-part link probe measured 0.268 MB/s and a 0.377 s round trip through the actual tunnel path, giving the flood command a 524 s budget. The flood command completed in 375.60 s; the whole row took 392.10 s. The table's rate is the probe rate, not flood payload throughput. The original run recorded 7 of 8 passes; its flood row failed after 105.73 s with the rig's wait timeout, not a recorded core timeout at 120 s. Those original logs remain historical evidence.
+The signed-part link probe measured 0.236 MB/s and a 0.425 s round trip through the actual tunnel path, which gave the flood command a 593 s budget; the row took 471.50 s. The table's rate is the probe rate, not flood payload throughput. An earlier 64 KiB-part run passed 7 of 8; its flood row ended after 105.73 s with the rig's wait timeout, not a recorded core timeout at 120 s. The device now sends 2 MiB parts and the rig sizes the budget from a measured probe.
 
 The rig now waits for the command timeout plus 15 s. The device coalesces pending output into signed parts up to 2 MiB and starts sending small output within 200 ms when no earlier upload is in flight. One upload stays in flight, in sequence. Continuously available 64 MiB output fits in 32 full parts; at an assumed 0.7 s round trip that is 22.4 s in round trips alone, not a measured internet completion time. Remote runs derive the flood budget from their signed-path link probe rather than an assumed access-link speed.
 
@@ -337,7 +337,7 @@ dashboard/plugin_api.py   the routes, under /api/plugins/dirtside/
 desktop/plugin.js         Desktop pane and status chip, plain ESM, no build
 tools/                    benchmark, fake device, size budgets, matrix runner
 scripts/                  two_machine_matrix.sh
-tests/                    598 tests: units, conformance, real core, network
+tests/                    619 tests: units, conformance, real core, network
 docs/ARCHITECTURE.md      the design, its reasons, the alternatives that lost
 openspec/                 the change record behind each build step
 ```
@@ -353,9 +353,9 @@ openspec/                 the change record behind each build step
 
 ## Status
 
-Locally verified on macOS against core `84a0301`: 598 tests, lint, size budgets, all OpenSpec changes, plugin doctor, clean-snapshot catalog validation, the 8-of-8 loopback reliability matrix and the benchmark above. The clean snapshot also loaded by directory discovery in an isolated home, accepted `terminal.backend: dirtside` and exposed all four device subcommands. These are local clearance results; directory discovery is not a Git-source installation test. The [catalog PR](https://github.com/NousResearch/hermes-agent/pull/149883) records installation and hosted checks for the exact published commit.
+Verified on 2026-11-06 on macOS against core `84a0301`: 619 tests, lint, size budgets, all OpenSpec changes, plugin doctor, the catalog validator with dependency installation on a fresh clone, the 8-of-8 loopback reliability matrix and the benchmark above. The same fresh clone installed with `hermes plugins install` pinned to the commit into an isolated Hermes home, enabled, accepted `terminal.backend: dirtside` and exposed all four device subcommands. The suite also runs on CI's Ubuntu and macOS runners on every push.
 
-The owner's recorded real-install session (v0.23.0), from the CLI and gateway sessions with two paired devices and a public tunnel, exercised choosing a device, file tools, shell state across turns, a 1 MB output, a timeout, the deny list, core's dangerous-command block, fail-closed with the device agent stopped, re-pairing, live revocation and a gateway restart. The owner's final remote rerun recorded 8 of 8 passes with the 0.268 MB/s signed-path probe reported above. Not yet verified: the pane inside the running Desktop app, and service behaviour across login and reboot.
+Inside a real Hermes install (v0.23.0), from the CLI and from gateway sessions with two paired devices and one of them reached through a public tunnel: choosing a device, file tools, shell state across turns, a 1 MB output, a timeout, the deny list, core's dangerous-command block, fail-closed with the device agent stopped or the device revoked, re-pairing, a revoke during a live command, and a gateway restart during a live command, including a silent one that the device stopped at its next poll. Across two physical machines over the internet, 8 of 8 with the probe reported above. Not yet verified: the pane inside the running Desktop app, and service behaviour across login and reboot.
 
 ## License
 
