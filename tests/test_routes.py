@@ -155,6 +155,25 @@ def test_server_target_overrides_device_default_and_clear_restores_it(routes, tm
     assert client.get(path, headers=desktop).json() == {"target": device.name}
 
 
+@pytest.mark.parametrize("state", ["missing", "revoked", "offline"])
+def test_pane_default_rejects_unpaired_but_keeps_offline_and_server_choices(routes, tmp_path, state):
+    client, registry, _, module, _ = routes
+    device, _, _ = paired(registry, tmp_path)
+    module.auth.default_target = "missing" if state == "missing" else device.name
+    if state == "revoked":
+        registry.revoke(device.name, int(time.time()))
+    path, desktop = API + "/sessions/pane-default/target", headers(DESKTOP_TOKEN)
+    response = client.get(path, headers=desktop)
+    if state == "offline":
+        assert response.status_code == 200 and response.json() == {"target": device.name}
+    else:
+        assert response.status_code == 404
+        assert response.json() == {"detail": "target device is no longer paired"}
+    assert registry.target("pane-default") is None
+    assert client.put(path, headers=desktop, json={"target": "server"}).status_code == 200
+    assert client.get(path, headers=desktop).json() == {"target": "server"}
+
+
 def test_poll_uses_stable_signed_key_and_does_not_block(routes, tmp_path):
     client, reg, relay, _, _ = routes
     device, token, key = paired(reg, tmp_path, now=int(time.time()))

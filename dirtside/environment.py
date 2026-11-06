@@ -41,7 +41,7 @@ class RemoteProcessHandle:
 
     def poll(self):
         if self._returncode is None and self._relay.is_lost(self.req.device_id):
-            self._relay.close(self.req.id, Outcome(RequestState.LOST, 124, 0, False, "device stopped reporting"))
+            self._relay.close(self.req.id, Outcome(RequestState.LOST, 255, 0, False, "device stopped reporting"))
         return self._returncode
 
     def wait(self, timeout=None):

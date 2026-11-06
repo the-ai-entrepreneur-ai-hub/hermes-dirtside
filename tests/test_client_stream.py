@@ -34,7 +34,7 @@ def test_unread_client_pipe_propagates_bounded_loss(tmp_path):
         handle = worker.connection().submit(req)
         started = time.monotonic()
         try:
-            assert handle.wait(FEED_BLOCK_S + 5) == 124
+            assert handle.wait(FEED_BLOCK_S + 5) == 255
             assert time.monotonic() - started < FEED_BLOCK_S + 5
             assert handle.outcome.reason == "gateway stopped reading output"
             until(lambda: not fake.running, timeout=5)
@@ -46,7 +46,7 @@ def test_unread_client_pipe_propagates_bounded_loss(tmp_path):
 def test_kill_completes_an_unread_client_pipe_immediately(tmp_path):
     relay, device, fake = device_setup(tmp_path)
     with client_relay(relay) as worker, fake:
-        req = replace(request(device), script="while :; do head -c 65536 /dev/zero; done", timeout_s=60)
+        req = replace(request(device), script="head -c 65536 /dev/zero; sleep 0.3; while :; do head -c 65536 /dev/zero; done", timeout_s=60)
         handle = worker.connection().submit(req)
         try:
             until(lambda: len(relay.tail(req.id)) > 0)
@@ -60,7 +60,7 @@ def test_kill_completes_an_unread_client_pipe_immediately(tmp_path):
 
 @pytest.mark.parametrize("state,code,reason,truncated", [
     (RequestState.REFUSED, 126, "command matches deny pattern", False),
-    (RequestState.LOST, 124, "device stopped reporting", False),
+    (RequestState.LOST, 255, "device stopped reporting", False),
     (RequestState.FINISHED, 124, "", False),
     (RequestState.FINISHED, 124, "command timed out; output capped at 1000 bytes on the device", True),
 ])

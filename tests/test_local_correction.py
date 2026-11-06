@@ -115,7 +115,7 @@ def test_stream_failures_preserve_partial_output_and_exact_reason(tmp_path, fail
     client.http = httpx.Client(transport=httpx.MockTransport(respond))
     try:
         handle = client.submit(request(device))
-        assert handle.wait(3) == 124
+        assert handle.wait(3) == 255
         assert handle.stdout.read() == (b"keep" if failure == "malformed" else b"")
         expected = "Dirtside owner answered 503: temporarily unavailable" if failure == "status" else OWNER_MISSING
         assert handle.outcome.reason == expected and handle.state.value == "lost"
@@ -163,6 +163,6 @@ def test_submit_does_not_switch_from_absent_to_a_new_owner(tmp_path, monkeypatch
         assert calls == []
     finally:
         if handle is not None:
-            assert handle.wait(3) == 124
+            assert handle.wait(3) == 255
             handle.stdout.close()
         client.http.close()

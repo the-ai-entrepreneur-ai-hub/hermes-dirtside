@@ -24,7 +24,8 @@ from dirtside.protocol import sign
 from dirtside.registry import Registry
 from dirtside.relay import Relay
 from test_registry import paired, request
-from test_routes import API, headers
+from test_protocol import result_body
+from test_routes import API, headers, hello
 
 
 def recorded(registry, *, pid=None, origin="http://127.0.0.1:1", started=None):
@@ -194,11 +195,23 @@ def test_live_owner_transport_error_is_text_and_use_does_not_mutate(tmp_path):
 
 
 @pytest.mark.parametrize("kind", ["pair", "poll", "chunk", "result"])
-def test_each_device_route_can_first_earn_ownership(tmp_path, kind):
-    with mounted(tmp_path) as (app, registry, relay, _):
+def test_each_device_route_can_first_earn_ownership(tmp_path, monkeypatch, kind):
+    with mounted(tmp_path) as (app, registry, relay, module):
+        monkeypatch.setattr(module.model, "POLL_HOLD_S", 0)
+        device, token, key = paired(registry, tmp_path, now=int(module.time.time()))
+        sender, message, body = device.id, kind, {}
+        if kind == "pair":
+            sender, message = "pending", "hello"
+            token = registry.mint(sender, int(module.time.time()))
+            body = hello(key, tmp_path, sender)
+        elif kind == "chunk":
+            body = dict(id="r_" + "a" * 24, seq=0, data="")
+        elif kind == "result":
+            body = result_body()
         with TestClient(app, base_url="http://127.0.0.1:1234") as client:
             path = registry.path.with_name("owner.json")
             assert not path.exists() and relay._owner_pid is None
             assert client.post(API + "/device/" + kind,
-                               headers=headers(registry.local_secret)).status_code == 401
+                               headers=headers(token), json=sign(key, message, sender, body)).status_code == (
+                                   200 if kind in {"pair", "poll"} else 410)
             assert path.exists() and relay._owner_pid == os.getpid()

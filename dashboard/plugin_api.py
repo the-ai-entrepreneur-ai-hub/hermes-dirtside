@@ -20,6 +20,8 @@ FEED_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="dirtside-feed
 _PAIR_LOCK, _OWNER_LOCK = threading.Lock(), threading.Lock()
 auth = get_provider("dirtside")
 registry, relay, wire, model = auth.registry, auth.relay, auth.protocol, auth.model
+CHUNK_BODY_BYTES = 4 * ((model.PART_MAX + 2) // 3) + 1024
+RESULT_BODY_BYTES = CHUNK_BODY_BYTES + 1024
 relay_key = SigningKey(registry.relay_seed)
 _ORIGIN = None
 
@@ -53,8 +55,6 @@ class BoundaryRoute(APIRoute):
         handler = super().get_route_handler()
         async def checked(request):
             try:
-                if request.url.path in auth.device_paths:
-                    await asyncio.to_thread(record_owner, request)
                 return await handler(request)
             except PermissionError:
                 raise HTTPException(401, "device revoked") from None
@@ -71,11 +71,16 @@ def bearer(request):
     scheme, _, token = request.headers.get("authorization", "").partition(" ")
     return token if scheme.lower() == "bearer" else ""
 
-async def accepted(request, kind, parser):
-    credential = await asyncio.to_thread(registry.credential_for, bearer(request), int(time.time()))
-    if credential is None or (kind == "hello") != isinstance(credential, model.Pending):
-        raise HTTPException(401, "unknown device credential")
-    data = await request.json()
+async def output_body(request, limit):
+    data = bytearray()
+    async for part in request.stream():
+        if len(data) + len(part) > limit:
+            raise HTTPException(413, "output part too large")
+        data.extend(part)
+    return data
+
+def verified(data, credential, kind, parser):
+    data = json.loads(data)
     key = (base64.b64decode(data["body"]["pubkey"], validate=True)
            if isinstance(credential, model.Pending) else credential.pubkey)
     env = wire.verify(VerifyKey(key), data, int(time.time()), wire.GATEWAY_REPLAYS)
@@ -83,8 +88,18 @@ async def accepted(request, kind, parser):
     if env.kind != kind or env.sender != sender:
         raise ValueError("message identity mismatch")
     if isinstance(credential, model.Device):
-        await asyncio.to_thread(relay.touch, credential.id, credential.pubkey)
+        relay.touch(credential.id, credential.pubkey)
     return credential, parser(env.body), env.body.get("id")
+
+async def accepted(request, kind, parser):
+    credential = await asyncio.to_thread(registry.credential_for, bearer(request), int(time.time()))
+    if credential is None or (kind == "hello") != isinstance(credential, model.Pending):
+        raise HTTPException(401, "unknown device credential")
+    data = (await output_body(request, CHUNK_BODY_BYTES if kind == "chunk" else RESULT_BODY_BYTES)
+            if kind in {"chunk", "result"} else await request.body())
+    accepted = await asyncio.to_thread(verified, data, credential, kind, parser)
+    await asyncio.to_thread(record_owner, request)
+    return accepted
 
 def ack(accepted):
     if not accepted:
@@ -146,8 +161,8 @@ async def devices():
 @router.get("/sessions/{key}/target")
 async def target(key: str):
     chosen = await asyncio.to_thread(registry.target, key)
-    device = await asyncio.to_thread(registry.device_by_id, chosen) if chosen and chosen != "server" else None
-    if chosen and chosen != "server" and device is None:
+    device = await asyncio.to_thread(registry.device_by_id if chosen else registry.active_device, chosen or auth.default_target)
+    if (chosen or auth.default_target) != "server" and device is None:
         raise HTTPException(404, "target device is no longer paired")
     return {"target": device.name if device else chosen or auth.default_target}
 

@@ -156,7 +156,7 @@ def test_mark_stale_lost(tmp_path):
     rows = {r.id: r for r in reg.recent(10)}
     for n in (0, 1):
         row = rows[request(device, n).id]
-        assert (row.state, row.exit_code, row.finished_at) == (RequestState.LOST, 124, 110)
+        assert (row.state, row.exit_code, row.finished_at) == (RequestState.LOST, 255, 110)
     assert rows[request(device, 2).id].state is RequestState.FINISHED
 
 

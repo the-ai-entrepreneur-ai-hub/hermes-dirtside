@@ -2,11 +2,14 @@
 import os
 import subprocess
 import sys
+import threading
+from types import SimpleNamespace
 
 import pytest
 
-from bench import percentile, report, timed
+from bench import cancellation, percentile, report, timed
 from core_rig import CORE, ROOT
+from dirtside.model import RequestState
 
 
 def test_nearest_rank_does_not_drop_slow_samples():
@@ -38,6 +41,21 @@ def test_failed_command_is_not_a_latency_sample():
             return {"returncode": 1, "output": "error"}
     with pytest.raises(RuntimeError, match="command failed"):
         timed(Failed(), "pwd")
+
+
+def test_cancellation_starts_at_claim_without_waiting_for_output():
+    killed = threading.Event()
+    handle = SimpleNamespace(state=RequestState.QUEUED, req=SimpleNamespace(id="bench"), kill=killed.set)
+    def execute(command, **options):
+        assert command == "head -c 65536 /dev/zero; sleep 30" and options == {"timeout": 10}
+        handle.state = RequestState.RUNNING
+        assert killed.wait(2)
+        return {"returncode": 130}
+    def tail(_):
+        pytest.fail("the kill benchmark must not wait for first output")
+    relay = SimpleNamespace(_condition=threading.Condition(), handles={"bench": handle}, tail=tail)
+    assert cancellation(SimpleNamespace(execute=execute), relay) >= 0
+    assert killed.is_set()
 
 
 def test_benchmark_loopback_smoke():

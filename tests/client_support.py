@@ -1,9 +1,13 @@
 """Use the mounted owner's HTTP boundary without changing conformance assertions."""
 from contextlib import contextmanager
+import time
 import httpx
+from nacl.signing import SigningKey
 from network_support import listening, mounted
 from dirtside.client import Client
+from dirtside.protocol import sign
 from dirtside.relay import Relay
+from test_routes import headers, hello
 
 @contextmanager
 def client_relay(owner, url=None):
@@ -14,9 +18,14 @@ def client_relay(owner, url=None):
         return
     worker = Relay(owner.registry)
     worker._client = client = Client(worker)
-    # The domain fake delivers directly; only a device route may earn discovery.
-    response = httpx.post(url + "/api/plugins/dirtside/device/poll", headers=client.headers, trust_env=False)
-    assert response.status_code == 401, response.text
+    # The domain fake delivers directly; earn discovery with a verified device message.
+    name, key = "client-fixture", SigningKey.generate()
+    code = owner.registry.mint(name, int(time.time()))
+    response = httpx.post(url + "/api/plugins/dirtside/device/pair", headers=headers(code),
+                          json=sign(key, "hello", name, hello(key, owner.registry.path.parent, name)), trust_env=False)
+    assert response.status_code == 200, response.text
+    device = owner.registry.revoke(name, int(time.time()))
+    owner.revoke(device.id)
     response = httpx.get(url + "/api/plugins/dirtside/local/devices", headers=client.headers, trust_env=False)
     assert response.status_code == 200, response.text
     try:

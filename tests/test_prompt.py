@@ -55,7 +55,10 @@ def test_bound_conversation_wins_over_prompt_metadata(prompt, tmp_path):
 
 
 def test_server_default_never_uses_facts_from_a_device_named_server(prompt, tmp_path):
-    paired(prompt.registry, tmp_path, "server")
+    device, _, _ = paired(prompt.registry, tmp_path)
+    with prompt.registry._tx() as conn:
+        conn.execute("UPDATE devices SET name='server' WHERE id=?", (device.id,))
+    assert prompt.registry.active_device("server") is not None
     assert prompt.current_target_section({"session_id": "chat"}) == ""
 
 

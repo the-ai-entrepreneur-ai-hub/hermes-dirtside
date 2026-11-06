@@ -110,11 +110,11 @@ def test_lost_request_reason_is_visible_without_timeout_flag(tmp_path):
     with relay._condition:
         relay.last_seen[device.id] = time.monotonic() - 51
     result = env._wait_for_process(handle, timeout=30)
-    assert result == {"returncode": 124, "output": "\n[Dirtside: device stopped reporting]"}
+    assert result == {"returncode": 255, "output": "\n[Dirtside: device stopped reporting]"}
 
 
 @pytest.mark.parametrize("state,code", [(RequestState.FINISHED, 126), (RequestState.CANCELLED, 130),
-                                       (RequestState.REFUSED, 126), (RequestState.LOST, 124)])
+                                       (RequestState.REFUSED, 126), (RequestState.LOST, 255)])
 def test_every_nonempty_terminal_reason_is_rendered_once(tmp_path, state, code):
     relay, device, fake = device_setup(tmp_path)
     with fake:

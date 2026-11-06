@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from contextlib import suppress
-from ..model import CHUNK_BYTES, FLUSH_MS, Outcome, RequestState, device_timeout_s
+from ..model import CHUNK_BYTES, FLUSH_MS, PART_MAX, Outcome, RequestState, device_timeout_s
 from ..protocol import Chunk
 from .policy import evaluate
 def _signal(proc, sig):
@@ -44,9 +44,9 @@ class _Output:
         self.total += take
     def flush(self, exited):
         due = not exited and time.monotonic() - self.first >= FLUSH_MS / 1000
-        if self.pending and (len(self.pending) >= CHUNK_BYTES or due):
-            data = bytes(self.pending[:CHUNK_BYTES])
-            del self.pending[:CHUNK_BYTES]
+        if self.pending and (len(self.pending) >= PART_MAX or due):
+            data = bytes(self.pending[:PART_MAX])
+            del self.pending[:PART_MAX]
             seq, self.seq = self.seq, self.seq + 1
             self.first = time.monotonic()
             return self.send(seq, data)
@@ -60,7 +60,8 @@ def _read(proc, output, idle):
         with suppress(subprocess.TimeoutExpired):
             proc.wait(timeout=0.01)
         return 3
-    if select.select([proc.stdout], [], [], 0.1)[0]:
+    wait = max(0, output.first + FLUSH_MS / 1000 - time.monotonic()) if output.pending and proc.poll() is None else 0.1
+    if select.select([proc.stdout], [], [], min(0.1, wait))[0]:
         data = os.read(proc.stdout.fileno(), CHUNK_BYTES)
         output.eof = not data
         output.add(data)

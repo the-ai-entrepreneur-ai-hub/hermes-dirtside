@@ -18,7 +18,7 @@ def resolve_target(session_key, is_cron, default_target, registry, relay, *, req
         return Server()
     default = None if is_cron or default_target == "server" else registry.active_device(default_target)
     device = registry.device_by_id(chosen) if chosen else default
-    if device is None and chosen:
+    if device is None and (chosen or (not is_cron and default_target != "server")):
         raise EnvironmentConnectionError("Dirtside: this conversation's device is no longer paired.",
                                          retry_hint="Run /dirtside use server, or pair the device again.")
     if device is None:

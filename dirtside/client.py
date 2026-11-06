@@ -123,7 +123,7 @@ class Client:
         try:
             cancelled = self.request("POST", "/kill", origin=origin, params={"id": request_id}, json={})["cancelled"]
         except EnvironmentConnectionError as exc:
-            self.finish(handle, Outcome(RequestState.LOST, 124, 0, False, str(exc)))
+            self.finish(handle, Outcome(RequestState.LOST, 255, 0, False, str(exc)))
             return
         if cancelled:
             self.finish(handle, Outcome(RequestState.CANCELLED, 130, 0, False, ""))
@@ -141,7 +141,7 @@ class Client:
         return handle
 
     def stream(self, handle, origin, fd):
-        outcome = Outcome(RequestState.LOST, 124, 0, False, OWNER_MISSING)
+        outcome = Outcome(RequestState.LOST, 255, 0, False, OWNER_MISSING)
         try:
             if self.origin() != origin:
                 raise EnvironmentConnectionError(OWNER_MISSING)
@@ -152,10 +152,10 @@ class Client:
                     if isinstance(part, Outcome):
                         outcome = part
                     elif not self.relay._write(handle, fd, part, time.monotonic() + FEED_BLOCK_S):
-                        outcome = Outcome(RequestState.LOST, 124, 0, False, "gateway stopped reading output")
+                        outcome = Outcome(RequestState.LOST, 255, 0, False, "gateway stopped reading output")
                         break
         except EnvironmentConnectionError as exc:
-            outcome = Outcome(RequestState.LOST, 124, 0, False, str(exc))
+            outcome = Outcome(RequestState.LOST, 255, 0, False, str(exc))
         except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError, RuntimeError):
             pass  # Partial bytes remain in the pipe; the failure becomes the terminal reason.
         finally:

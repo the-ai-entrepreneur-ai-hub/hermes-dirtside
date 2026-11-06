@@ -9,7 +9,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, fields
 from typing import get_args
 from nacl.exceptions import BadSignatureError
-from .model import CHUNK_BYTES, Outcome, RequestId, RequestState
+from .model import PART_MAX, Outcome, RequestId, RequestState
 
 PROTOCOL_VERSION = 1
 class ProtocolError(ValueError):
@@ -65,7 +65,7 @@ def _bytes(value):
         data = base64.b64decode(value, validate=True)
     except (ValueError, TypeError) as exc:
         raise ProtocolError("invalid base64") from exc
-    _need(len(data) <= CHUNK_BYTES, "output part too large")
+    _need(len(data) <= PART_MAX, "output part too large")
     return data
 
 def _id(value):

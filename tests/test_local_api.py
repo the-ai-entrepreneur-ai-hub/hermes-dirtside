@@ -15,6 +15,7 @@ from dirtside.client import Client, OWNER_MISSING, frames
 from dirtside.environment import EnvironmentConnectionError
 from dirtside.local import BODY_BYTES, PREFIX
 from dirtside.model import CHUNK_BYTES, Outcome, RequestState
+from dirtside.protocol import sign
 from dirtside.registry import Registry
 from dirtside.relay import Relay
 from test_registry import paired, request
@@ -52,6 +53,12 @@ def test_owner_uses_server_not_forwarded_host_and_rewrites_port(local_api, monke
     assert response.status_code == 200
     assert not path.exists() and relay._owner_pid is None
     assert client.post("/api/plugins/dirtside/device/poll", headers=headers(registry.local_secret)).status_code == 401
+    assert not path.exists() and relay._owner_pid is None
+    device, token, key = paired(registry, registry.path.parent)
+    body = dict(id="r_" + "a" * 24, seq=0, data="")
+    assert client.post("/api/plugins/dirtside/device/chunk", headers=headers(token) | {
+        "Host": "external.invalid", "X-Forwarded-Host": "other.invalid"},
+        json=sign(key, "chunk", device.id, body)).status_code == 410
     record = json.loads(path.read_text())
     assert record == dict(origin="http://127.0.0.1:8123", pid=os.getpid(), started=module.auth.process_started(os.getpid()))
     assert record["started"] <= before <= time.time()
@@ -136,7 +143,7 @@ def test_unattached_stream_is_abandoned(local_api, tmp_path):
     assert client.post(PREFIX + "/exec", headers=headers(registry.local_secret), json=asdict(req)).status_code == 200
     handle = relay._streams[req.id][0]
     relay.abandon(req.id)
-    assert handle.stdout.closed and handle.wait(0) == 124
+    assert handle.stdout.closed and handle.wait(0) == 255
     assert registry.recent(1)[0].reason == "gateway stopped reading output"
     assert not relay._streams
 
@@ -166,7 +173,7 @@ def test_disconnect_closes_request_without_device_output(tmp_path):
             handle = relay.handles[req.id]
             with client.stream("GET", PREFIX + "/stream", params={"id": req.id}) as response:
                 assert response.status_code == 200
-            until(lambda: handle.poll() == 124)
+            until(lambda: handle.poll() == 255)
         assert handle.stdout.closed
         assert registry.recent(1)[0].reason == "gateway stopped reading output"
 

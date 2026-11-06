@@ -16,7 +16,7 @@ from tools.file_operations import ShellFileOperations
 from tools.interrupt import set_interrupt
 
 from dirtside.environment import DirtsideEnvironment
-from dirtside.model import MAX_OUTPUT_BYTES, Policy
+from dirtside.model import MAX_OUTPUT_BYTES, PART_MAX, Policy
 from dirtside.provider import DirtsideProvider
 from dirtside.protocol import ProtocolError, sign
 from dirtside.registry import Registry
@@ -69,9 +69,9 @@ def test_multibyte_chunks(tmp_path):
     relay, device, fake = device_setup(tmp_path)
     with fake:
         env = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
-        command = f"{shlex.quote(sys.executable)} -c 'print(\"地\" * 70000, end=\"\")'"
+        command = f"{shlex.quote(sys.executable)} -c 'print(\"地\" * {PART_MAX}, end=\"\")'"
         result = env.execute(command)
-        assert result["returncode"] == 0 and result["output"] == "地" * 70000
+        assert result["returncode"] == 0 and result["output"] == "地" * PART_MAX
         assert sum(kind == "chunk" for kind, _ in fake.posts) >= 3
 
 

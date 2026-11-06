@@ -22,6 +22,7 @@ from dirtside.provider import DirtsideProvider
 from dirtside.registry import Registry
 from dirtside.relay import Relay
 from test_executor import alive
+from test_network import stop_group
 from test_core_terminal import semantic
 
 @pytest.fixture
@@ -151,3 +152,33 @@ def test_owner_death_never_falls_back(owner_client):
     with pytest.raises(EnvironmentConnectionError, match="device 'fake' is offline"):
         env.execute(f"touch '{marker}'")
     assert not marker.exists() and not relay.handles
+
+def test_core_owner_loss_midstream_has_no_timeout_hint(owner_client, monkeypatch):
+    from dirtside.client import OWNER_MISSING
+    owner, _, relay, _, work = owner_client
+    assert terminal("true")["exit_code"] == 0
+    delivered, write = threading.Event(), relay._write
+    def observe(handle, fd, data, deadline):
+        accepted = write(handle, fd, data, deadline)
+        if accepted and data == b"retained":
+            delivered.set()
+        return accepted
+    monkeypatch.setattr(relay, "_write", observe)
+    command = "echo $$ > owner-loss.pid; printf retained; while :; do sleep 1; done"
+    with ThreadPoolExecutor(1) as pool:
+        future = pool.submit(terminal, command)
+        try:
+            assert delivered.wait(8)
+            owner.proc.kill()
+            owner.proc.wait(3)
+            result = future.result(5)
+            assert result["exit_code"] == 255
+            assert result["output"] == f"retained\n[Dirtside: {OWNER_MISSING}]"
+            assert not result.get("hermes_timed_out") and not result.get("hint")
+            assert "Exit 124:" not in str(result)
+        finally:
+            if owner.proc.poll() is None:
+                owner.proc.kill()
+                owner.proc.wait(3)
+            if (work / "owner-loss.pid").exists():
+                stop_group(int((work / "owner-loss.pid").read_text()))

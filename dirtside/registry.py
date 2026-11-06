@@ -83,8 +83,8 @@ class Registry:
             yield seed
 
     def mint(self, name, now):
-        if not re.fullmatch(r"[a-z0-9-]{1,32}", name):
-            raise ValueError("device name must contain 1 to 32 lowercase letters, digits or hyphens")
+        if name == "server" or not re.fullmatch(r"[a-z0-9-]{1,32}", name):
+            raise ValueError("device name must contain 1 to 32 lowercase letters, digits or hyphens; 'server' is reserved")
         code = secrets.token_urlsafe(32)
         with self._tx() as conn:
             conn.execute("UPDATE devices SET revoked_at=? WHERE name=? AND pubkey IS NULL", (now, name))
@@ -165,6 +165,10 @@ class Registry:
                          "VALUES(?,?,?,?,?,?,?)", (req.id, req.device_id, req.session_key, req.task_id,
                          "queued", req.command[:120], int(time.time())))
 
+    def running(self, request_id):
+        with self._tx() as conn:
+            conn.execute("UPDATE requests SET state='running' WHERE id=? AND state='queued'", (request_id,))
+
     def close(self, request_id, outcome, now):
         with self._tx() as conn:
             conn.execute("UPDATE requests SET state=?,finished_at=?,exit_code=?,reason=? WHERE id=?",
@@ -172,7 +176,7 @@ class Registry:
 
     def mark_stale_lost(self, now):
         with self._tx() as conn:
-            conn.execute("UPDATE requests SET state='lost',finished_at=?,exit_code=124,reason='gateway restarted' "
+            conn.execute("UPDATE requests SET state='lost',finished_at=?,exit_code=255,reason='gateway restarted' "
                          "WHERE state IN ('queued','running')", (now,))
 
     def recent(self, limit, session_key=None):

@@ -6,7 +6,7 @@ import time
 import pytest
 from nacl.signing import SigningKey
 
-from dirtside.model import CHUNK_BYTES, RequestState
+from dirtside.model import PART_MAX, RequestState
 from dirtside.protocol import (
     ProtocolError, ReplayGuard, canonical, parse_chunk, parse_exec,
     parse_hello, parse_poll, parse_result, sign, verify,
@@ -153,8 +153,8 @@ def test_parse_result():
     for change in ({"seq": 2}, {"data": "YQ=="}, {"seq": -1, "data": ""}):
         with pytest.raises(ProtocolError):
             parse_result(result_body() | change)
-    too_big = base64.b64encode(b"x" * (CHUNK_BYTES + 1)).decode()
-    with pytest.raises(ProtocolError):
+    too_big = base64.b64encode(b"x" * (PART_MAX + 1)).decode()
+    with pytest.raises(ProtocolError, match="^output part too large$"):
         parse_result(result_body() | {"seq": 0, "data": too_big})
     wire = copy.deepcopy(exec_body())
     wire["stdin"] = "text without newline"

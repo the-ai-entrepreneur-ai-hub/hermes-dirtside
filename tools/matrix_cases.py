@@ -1,5 +1,7 @@
 """The plan's eight reliability rows through an installed, gated core rig."""
 import base64
+import math
+import os
 import re
 import time
 
@@ -7,6 +9,7 @@ import httpx
 from nacl.signing import SigningKey, VerifyKey
 
 from core_rig import until
+from dirtside.model import MAX_OUTPUT_BYTES, PART_MAX, POLL_HOLD_S
 from dirtside.protocol import canonical, sign, verify
 
 
@@ -38,7 +41,7 @@ def reporting_loss(rig):
     try:
         result = future.result(58)
         elapsed = time.monotonic() - started
-        assert result["exit_code"] == 124 and "matrix-loss" in result["output"], result
+        assert result["exit_code"] == 255 and "matrix-loss" in result["output"], result
         assert 44 <= elapsed < 57, elapsed
         ended = next(r for r in rig.core.http("GET", "/requests").json() if r["id"] == row["id"])
         assert ended["state"] == "lost" and ended["reason"] == "device stopped reporting", ended
@@ -46,7 +49,7 @@ def reporting_loss(rig):
         rig.core.call("network", blocked=False)
     until(rig.online, timeout=35)
     until(lambda: gone(rig, pid), timeout=12)
-    return f"lost exit=124, partial retained, {elapsed:.2f}s, reconnect stopped the old group"
+    return f"lost exit=255, partial retained, {elapsed:.2f}s, reconnect stopped the old group"
 
 
 def gateway_restart(rig):
@@ -65,7 +68,35 @@ def gateway_restart(rig):
     until(lambda: gone(rig, pid), timeout=12)
     assert any(d["id"] == identity for d in rig.core.http("GET", "/devices").json())
     assert rig.core.terminal("printf restarted")["output"] == "restarted"
-    return "gateway process replaced, stale work lost, old group stopped, pairing reused"
+    silent = silent_gateway_restart(rig)
+    return "gateway process replaced, stale work lost, old group stopped, pairing reused; " + silent
+
+
+def silent_gateway_restart(rig):
+    marker = ".dirtside-matrix-" + os.urandom(6).hex()
+    command = f"printf '%s' $$ > {marker}; exec sleep 600"
+    future = rig.core.submit("terminal", session="chat", args=dict(command=command, timeout=600))
+    row = until(lambda: next((r for r in rig.core.http("GET", "/requests").json()
+                              if r["preview"] == command and r["state"] == "running"), None), timeout=10)
+    assert row["tail"] == "", row
+    read = f"if test -s {marker}; then cat {marker}; rm -f -- {marker}; fi"
+    pid = int(until(lambda: rig.core.terminal(read)["output"], timeout=10))
+    rig.restart_gateway()
+    started = time.monotonic()
+    try:
+        future.result(1)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("the silent tool call survived gateway process death")
+    limit = POLL_HOLD_S + 10
+    until(lambda: rig.online() and gone(rig, pid), timeout=limit)
+    elapsed = time.monotonic() - started
+    assert elapsed < limit, elapsed
+    old = next(r for r in rig.core.http("GET", "/requests").json() if r["id"] == row["id"])
+    assert (old["state"], old["exit_code"], old["reason"]) == ("lost", 255, "gateway restarted"), old
+    assert rig.core.terminal("printf silent-restarted")["output"] == "silent-restarted"
+    return f"silent sleep 600 timeout=600 stopped in {elapsed:.2f}s (<{limit}s)"
 
 
 def device_restart(rig):
@@ -115,12 +146,48 @@ def clock_skew(rig):
     return "correctly signed hello at -601s and +601s rejected with 400 before pairing"
 
 
+def encoded_bytes(size):
+    full, last = divmod(size, PART_MAX)
+    return full * (4 * ((PART_MAX + 2) // 3)) + 4 * ((last + 2) // 3)
+
+
+def flood_budget(rate, round_trip, size=MAX_OUTPUT_BYTES):
+    if not (math.isfinite(rate) and rate > 0 and math.isfinite(round_trip) and round_trip >= 0):
+        raise ValueError("invalid link measurement")
+    parts = (size + PART_MAX - 1) // PART_MAX
+    return max(120, math.ceil(1.5 * encoded_bytes(size) / rate + parts * round_trip + 10))
+
+
+def probe_link(config):
+    samples = []
+    with httpx.Client(base_url=config.gateway_url.rstrip("/") + "/", timeout=35, trust_env=False,
+                      headers={"Authorization": "Bearer " + config.token}) as client:
+        for size in (0, 0, PART_MAX):  # Warm the connection before measuring the round trip.
+            body = dict(id="r_" + "0" * 24, seq=0, data=base64.b64encode(os.urandom(size)).decode())
+            content = canonical(sign(config.key, "chunk", config.device_id, body))
+            started = time.monotonic()
+            response = client.post("api/plugins/dirtside/device/chunk", content=content)
+            elapsed = time.monotonic() - started
+            if response.status_code != 410:
+                raise RuntimeError(f"link probe returned HTTP {response.status_code}, expected 410")
+            samples.append(elapsed)
+    return dict(probe_bytes=len(body["data"]), probe_s=samples[2], round_trip_s=samples[1])
+
+
 def output_flood(rig):
-    result = rig.core.terminal("head -c 67174400 /dev/zero | tr '\\0' f", timeout=120)
+    link = getattr(rig, "link", None)
+    started = time.monotonic()
+    result = rig.core.terminal("head -c 67174400 /dev/zero | tr '\\0' f",
+                               timeout=link["timeout_s"] if link else 120)
+    elapsed = time.monotonic() - started
     assert result["exit_code"] == 0, result["exit_code"]
     assert "output capped at 67108864 bytes on the device" in result["output"]
     assert len(result["output"]) < 60_000, len(result["output"])
-    return "64 MB device cap reported, foreground view bounded, command finished"
+    detail = "64 MB device cap reported, foreground view bounded, command finished"
+    if link:
+        detail += (f"; rate={link['bytes_per_second'] / 1_000_000:.3f} MB/s, "
+                   f"RTT={link['round_trip_s']:.3f}s, budget={link['timeout_s']}s, elapsed={elapsed:.2f}s")
+    return detail
 
 
 def long_poll(rig):

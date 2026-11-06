@@ -25,8 +25,8 @@ def revoked(response):
         body = response.json()
     except ValueError:
         return False
-    return type(body) is dict and set(body) == {"detail"} and body["detail"] in (
-        "unknown device credential", "device revoked")
+    return type(body) is dict and body in ({"detail": "unknown device credential"}, {"detail": "device revoked"},
+                                         {"error": "unauthenticated", "detail": "Unauthorized"})
 
 def post_until_2xx(client, cfg, kind, body, cancel, stop, shutdown, deadline=float("inf")):
     delay = 1.0

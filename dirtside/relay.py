@@ -40,7 +40,7 @@ class Relay:
     def abandon(self, request_id):
         handle = self.take_stream(request_id)
         if handle is not None:
-            self.close(request_id, Outcome(RequestState.LOST, 124, 0, False, "gateway stopped reading output"))
+            self.close(request_id, Outcome(RequestState.LOST, 255, 0, False, "gateway stopped reading output"))
             handle.stdout.close()
 
     def submit(self, req):
@@ -125,6 +125,8 @@ class Relay:
         with self._condition:
             self._allow_device(device_id, pubkey)
             self._recover(device_id, running, cancelled)
+            if running is not None:
+                self.cancels[device_id].update(rid for rid in running if rid not in self.handles)
             while True:
                 if cancelled is not None and cancelled.is_set():
                     return None, []
@@ -133,6 +135,7 @@ class Relay:
                 cancels = list(self.cancels.pop(device_id, ()))
                 if req is not None:
                     self.handles[req.id].state = RequestState.RUNNING
+                    self.registry.running(req.id)
                 remaining = deadline - time.monotonic()
                 if req is not None or cancels or remaining <= 0:
                     return req, cancels
@@ -173,14 +176,14 @@ class Relay:
             return False
         fd = self._writer(handle, deadline)
         if fd is None:
-            self.close(request_id, Outcome(RequestState.LOST, 124, 0, False, "gateway stopped reading output"))
+            self.close(request_id, Outcome(RequestState.LOST, 255, 0, False, "gateway stopped reading output"))
             return False
         try:
             with self._condition:
                 if seq <= handle._last_seq:
                     return not handle._done.is_set()
             if not self._write(handle, fd, data, deadline):
-                self.close(request_id, Outcome(RequestState.LOST, 124, 0, False, "gateway stopped reading output"))
+                self.close(request_id, Outcome(RequestState.LOST, 255, 0, False, "gateway stopped reading output"))
                 return False
             return self._fed(handle, seq, data)
         finally:
@@ -195,8 +198,8 @@ class Relay:
                 return False
             handle._last_seq = seq
             tail = self.tails[handle.req.id]
-            tail.extend(data)
-            del tail[:-PANE_TAIL_BYTES]
+            del tail[:max(0, len(tail) + len(data) - PANE_TAIL_BYTES)]
+            tail.extend(memoryview(data)[-PANE_TAIL_BYTES:])
             return True
 
     def close(self, request_id, outcome):

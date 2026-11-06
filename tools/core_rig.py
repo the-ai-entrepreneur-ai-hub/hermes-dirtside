@@ -113,6 +113,9 @@ class Core:
         return future
 
     def call(self, method, wait=90, **params):
+        timeout = (params.get("args") or {}).get("timeout")
+        if timeout is not None:
+            wait = timeout + 15
         return self.submit(method, **params).result(wait)
 
     def terminal(self, command, session="chat", **kwargs):

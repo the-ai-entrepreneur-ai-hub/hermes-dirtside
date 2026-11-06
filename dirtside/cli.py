@@ -98,7 +98,7 @@ def install_service(args):
 
 def pair(args):
     url = gateway_url(args.gateway_url)
-    if not re.fullmatch(r"[a-z0-9-]{1,32}", args.name):
+    if args.name == "server" or not re.fullmatch(r"[a-z0-9-]{1,32}", args.name):
         raise ValueError("invalid device name")
     key = SigningKey.generate()
     body = dict(pubkey=base64.b64encode(bytes(key.verify_key)).decode(), name=args.name,

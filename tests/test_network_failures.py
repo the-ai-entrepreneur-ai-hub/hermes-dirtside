@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from network_support import listening, mounted, subprocess_agent, until
 
 from dirtside.environment import DirtsideEnvironment
-from dirtside.model import LOST_GRACE_S, OFFLINE_AFTER_S, RequestState
+from dirtside.model import LOST_GRACE_S, OFFLINE_AFTER_S, PART_MAX, RequestState
 from dirtside.relay import Relay
 from test_executor import alive, await_file
 from test_network import group, revoke, setup_agent, stop_group
@@ -46,7 +46,7 @@ def test_subprocess_sigkill_loses_at_real_deadline_with_partial_output(tmp_path,
                     result = future.result(timeout=OFFLINE_AFTER_S + LOST_GRACE_S + 2)
                     elapsed = time.monotonic() - start
                     assert OFFLINE_AFTER_S + LOST_GRACE_S - 1 < elapsed < OFFLINE_AFTER_S + LOST_GRACE_S + 1
-                    assert result["returncode"] == 124 and "retained" in result["output"]
+                    assert result["returncode"] == 255 and "retained" in result["output"]
                     assert reg.recent(1)[0].state is RequestState.LOST
                 finally:
                     relay.revoke(device.id)
@@ -71,8 +71,9 @@ def test_subprocess_retries_first_accepted_chunk_without_doubled_bytes(tmp_path,
             with subprocess_agent(cfg, tmp_path / "install") as proc:
                 until(lambda: relay.is_online(device.id))
                 remote = DirtsideEnvironment(transport(relay, url), device, "chat", "default", "~", 120)
-                payload = "abcdef" * 40000
-                command = f"{shlex.quote(sys.executable)} -c 'print(\"abcdef\" * 40000, end=\"\")'"
+                repeats = (3 * PART_MAX + 5) // 6
+                payload = "abcdef" * repeats
+                command = f"{shlex.quote(sys.executable)} -c 'print(\"abcdef\" * {repeats}, end=\"\")'"
                 result = remote.execute(command)
                 assert result["returncode"] == 0 and result["output"] == payload
                 assert len(posts) >= 4 and posts[0] == posts[1] and posts[0]["seq"] == 0

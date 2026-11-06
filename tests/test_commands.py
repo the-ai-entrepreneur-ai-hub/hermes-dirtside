@@ -53,7 +53,10 @@ def test_use_is_conversation_scoped_and_server_overrides_default(commands, tmp_p
 
 
 def test_server_default_is_not_a_paired_device_named_server(commands, tmp_path):
-    paired(commands.registry, tmp_path, "server")
+    device, _, _ = paired(commands.registry, tmp_path)
+    with commands.registry._tx() as conn:
+        conn.execute("UPDATE devices SET name='server' WHERE id=?", (device.id,))
+    assert commands.registry.active_device("server") is not None
     assert commands("").startswith("This conversation targets server.")
 
 

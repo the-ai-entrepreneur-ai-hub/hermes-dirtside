@@ -37,7 +37,7 @@ def cancellation(remote, relay):
         deadline, handle = time.monotonic() + 5, None
         while handle is None and time.monotonic() < deadline:
             with relay._condition:
-                handle = next((h for h in relay.handles.values() if relay.tail(h.req.id)), None)
+                handle = next((h for h in relay.handles.values() if h.state.value == "running"), None)
             time.sleep(0.001)
         if handle is None:
             raise RuntimeError("cancellation command never started")

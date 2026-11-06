@@ -108,7 +108,8 @@ def test_revoked_target_fails_closed(tmp_path):
     relay.registry.revoke(device.name, int(time.time()))
     with pytest.raises(EnvironmentConnectionError, match="no longer paired"):
         resolve_target("chat", False, "server", relay.registry, relay)
-    assert isinstance(resolve_target("other", False, device.name, relay.registry, relay), Server)
+    with pytest.raises(EnvironmentConnectionError, match="no longer paired"):
+        resolve_target("other", False, device.name, relay.registry, relay)
 
 
 def test_absent_identity_uses_only_default(tmp_path):

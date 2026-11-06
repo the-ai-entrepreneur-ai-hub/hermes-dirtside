@@ -102,7 +102,7 @@ class LocalAPI:
             handle.stdout.close()
             with CancelScope(shield=True):
                 await asyncio.to_thread(self.relay.close, handle.req.id,
-                                       Outcome(RequestState.LOST, 124, 0, False, "gateway stopped reading output"))
+                                       Outcome(RequestState.LOST, 255, 0, False, "gateway stopped reading output"))
 
     async def kill(self, id: str, request: Request):
         self.authenticate(request)

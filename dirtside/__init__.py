@@ -15,7 +15,7 @@ def register(ctx):
     registry = Registry(plugin_data_dir("dirtside") / "data.db")
     relay = Relay(registry)
     relay._client = Client(relay)
-    default = ctx.get_config("default_target", "server")
+    default = ctx.get_config("default_target", "server") or "server"
     ctx.register_terminal_environment_provider(
         DirtsideProvider(registry, relay, default))
     ctx.register_dashboard_auth_provider(DirtsideDeviceAuth(registry, relay, default))

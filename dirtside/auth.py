@@ -20,7 +20,6 @@ class DirtsideDeviceAuth(DashboardAuthProvider):
     model, protocol = model, protocol
     connection_error = EnvironmentConnectionError
     process_started = staticmethod(process_started)
-    device_paths = DEVICE_PATHS
 
     def __init__(self, registry, relay=None, default_target="server"):
         self.registry, self.relay, self.default_target = registry, relay, default_target

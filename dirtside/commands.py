@@ -1,7 +1,8 @@
 """User-only conversation controls, bound to the registered runtime."""
 import time
 
-from .provider import session_identity
+from .model import OnDevice
+from .provider import get_session_env, resolve_target, session_identity
 from .environment import EnvironmentConnectionError
 
 USAGE = "Use /dirtside, /dirtside use <name|server>, /dirtside devices, /dirtside pair <name>, or /dirtside revoke <name>."
@@ -25,11 +26,13 @@ class Commands:
             return str(exc)
 
     def status(self):
-        key = session_identity()
-        chosen = self.registry.target(key) if key else None
-        default = self.registry.active_device(self.default_target) if self.default_target != "server" else None
-        device = self.registry.device_by_id(chosen) if chosen else default
-        name = self.label(device) if device else ("an unpaired device" if chosen not in (None, "server") else "server")
+        try:
+            target = resolve_target(session_identity(), get_session_env("HERMES_CRON_SESSION") == "1",
+                                    self.default_target, self.registry, self.relay, require_contact=False)
+        except EnvironmentConnectionError:
+            name = "an unpaired device"
+        else:
+            name = self.label(target.device) if isinstance(target, OnDevice) else "server"
         online = ", ".join(d.name for d in self.registry.devices() if self.relay.connection().is_online(d.id)) or "none"
         return f"This conversation targets {name}. Online devices: {online}."
 

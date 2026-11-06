@@ -1,6 +1,6 @@
 # Dirtside architecture
 
-Reference for the engineer building Dirtside. Written 2026-11-05 against the contracts verified in `DIRTSIDE-PLAN.md` section 17, then revised after a fresh-context review against the same source files. The plan says what and when. This document says how, in enough detail that the first commit has no design left to make. Part A is reference (what exists, what it owns, what it promises). Part B is explanation (why it is shaped this way, with the alternatives that lost). Nothing here is built.
+Reference for Dirtside. Written 2026-11-05 against the contracts verified in `DIRTSIDE-PLAN.md` section 17, then revised against the implementation through day 8. The plan says what and when. Part A describes ownership and contracts; its original API sketches are historical where A16's implementation amendments supersede them. A3 records the enforced budgets. Part B explains the choices and alternatives.
 
 Two rules govern every choice below. Build the smallest thing that does the job, on top of what Hermes already provides. Put the domain in data structures, so the code has few branches and no scattered modes.
 
@@ -76,7 +76,7 @@ class Refused:
 Decision = None | Refused                  # None means allowed
 
 OFFLINE_AFTER_S = 45; LOST_GRACE_S = 5; POLL_HOLD_S = 25; PAIR_TTL_S = 600
-CHUNK_BYTES = 65536; FLUSH_MS = 200; FEED_BLOCK_S = 10; PANE_TAIL_BYTES = 4096; MAX_OUTPUT_BYTES = 64 << 20
+CHUNK_BYTES = 65536; PART_MAX = 2 << 20; FLUSH_MS = 200; FEED_BLOCK_S = 10; PANE_TAIL_BYTES = 4096; MAX_OUTPUT_BYTES = 64 << 20
 ```
 
 What the types forbid:
@@ -96,28 +96,29 @@ Dependency direction is top to bottom. No module imports one below it except thr
 |---|---|---|---|
 | `dirtside/model.py` | the types and constants above | stdlib | 110 |
 | `dirtside/protocol.py` | `Envelope`, canonical JSON, `sign`, `verify`, `ReplayGuard`, one `parse_*` per message kind, `PROTOCOL_VERSION = 1` | model, nacl | 147 |
-| `dirtside/registry.py` | the SQLite boundary, relay key and private local secret | model, sqlite3 | 184 |
-| `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), threading | 231 |
+| `dirtside/registry.py` | the SQLite boundary, relay key and private local secret | model, sqlite3 | 188 |
+| `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), threading | 234 |
 | `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 116 |
 | `dirtside/client.py` | process-verified owner discovery, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 173 |
 | `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, FastAPI, anyio | 136 |
 | `dirtside/provider.py` | dispatch-time conversation context, per-conversation target delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, `tools.environments.local`, `gateway.session_context` | 92 |
 | `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 60 |
-| `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`) | 110 |
+| `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`, `resolve_target`, session context) | 110 |
 | `dirtside/prompt.py` | `current_target_section()` | registry, provider (`session_identity`) | 25 |
 | `dirtside/cli.py` | `hermes dirtside serve`, `pair`, `status`, `install-service`, bounded private refusal details and public-host hint | agent/*, argparse, httpx | 159 |
 | `dirtside/agent/config.py` | `DeviceConfig` read and atomic write (`device.json`, 0600) | model, protocol | 90 |
 | `dirtside/agent/policy.py` | `evaluate(command, policy) -> Decision`, pure | model | 40 |
-| `dirtside/agent/executor.py` | `run(request, policy, send) -> Outcome`, process groups, chunking, cancel | model, subprocess | 110 |
+| `dirtside/agent/executor.py` | `run(request, policy, send) -> Outcome`, process groups, chunking, cancel | model, subprocess | 111 |
 | `dirtside/agent/loop.py` | poll, backoff, dispatch, bounded parallelism, retrying posts | config, policy, executor, protocol, httpx | 150 |
-| `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 178 |
+| `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 193 |
 | `desktop/plugin.js` | pane, chip | `@hermes/plugin-sdk` | 280 |
-| `__init__.py` | `register(ctx)` wiring | gateway modules | 50 |
+| `__init__.py` | lazy directory entry point | package registration | 50 |
+| `dirtside/__init__.py` | `register(ctx)` wiring | gateway modules | 50 |
 | `tools/bench.py` | in-process metrics and non-gating client latency rows; existing thresholds remain, with report-only in CI | bench_client, statistics | 91 |
 | `tools/fake_device.py` | a signed fake device, including the independently loaded core owner's result parser | agent/executor, relay | 82 |
 | `tools/check_sizes.py` | the size check | stdlib | 30 |
 
-Core imports, in full, and where each is allowed: `agent.terminal_env_provider.TerminalEnvironmentProvider` (provider), `tools.environments.base.BaseEnvironment` and `EnvironmentConnectionError` (environment, provider), `tools.environments.local.LocalEnvironment` (provider), `gateway.session_context.get_session_env` (provider), `plugins.plugin_storage.plugin_data_dir` (`__init__`), `hermes_cli.dashboard_auth.base.DashboardAuthProvider` and `TokenPrincipal` (auth), `hermes_cli.dashboard_auth.token_auth.register_token_route` (auth). Nothing else from Hermes is imported, and nothing from Hermes is ever monkeypatched.
+Production core imports, in full: `agent.terminal_env_provider.TerminalEnvironmentProvider` (provider), `tools.environments.base.BaseEnvironment` (environment), `tools.environments.base.EnvironmentConnectionError` (environment, provider), `tools.environments.local.LocalEnvironment` (provider), `gateway.session_context.get_session_env` (provider), `plugins.plugin_storage.plugin_data_dir` (package registration), `hermes_cli.dashboard_auth.DashboardAuthProvider` and `hermes_cli.dashboard_auth.TokenPrincipal` (auth), `hermes_cli.dashboard_auth.get_provider` (dashboard routes), `hermes_cli.dashboard_auth.token_auth.register_token_route` (auth), and `hermes_constants.get_hermes_home` (device config). No production code monkeypatches Hermes. The separate test rig imports core's entry points to exercise them.
 
 ## A4. Registry (the SQLite boundary, and only a log for requests)
 
@@ -152,6 +153,7 @@ class Registry:
     def set_target(self, session_key: SessionKey, device_id: DeviceId | None) -> None   # None clears (server)
     def target_device_id(self, session_key: SessionKey) -> DeviceId | None
     def log(self, req: ExecRequest) -> None                           # INSERT, state queued, preview = command[:120]
+    def running(self, request_id: RequestId) -> None                 # at claim: UPDATE queued to running once, no terminal metadata
     def close(self, request_id: RequestId, outcome: Outcome, now: int) -> None   # plain UPDATE; the relay already decided
     def mark_stale_lost(self, now: int) -> None                       # at register(): UPDATE requests SET state='lost' WHERE state IN ('queued','running')
     def recent(self, limit: int, session_key: SessionKey | None = None) -> list[RequestRow]
@@ -182,9 +184,9 @@ class Relay:
 
 `feed()` writes the whole chunk to the pipe outside the lock. The first draft used a non-blocking write and dropped what did not fit. A 64 KB chunk is exactly one pipe buffer on macOS (measured, A15.1), so a second chunk that lands before core's drain thread has been scheduled cannot fit, and a writer that ignores the short count drops the remainder. The write end stays non-blocking (a blocking `os.write` cannot be bounded), and `feed()` loops on `select` for writability in one second slices, re-checking the handle's terminal state each slice and giving up after `FEED_BLOCK_S` in total. The device posts one chunk at a time and waits for the 2xx, so a slow reader slows the device and nothing is dropped; a cancel or close releases the worker within a second, because closing the write fd under a parked writer would not deliver EOF on its own. A feed that cannot finish inside the bound means the gateway stopped reading; the relay then closes the request as `LOST` with reason `gateway stopped reading output`, and the device's next post gets 410 and kills the process group. `feed()` also appends to `tails[request_id]`, trimmed to `PANE_TAIL_BYTES`, under the lock.
 
-Poll handler: `loop.run_in_executor(POLL_POOL, relay.next, device_id, POLL_HOLD_S)` with `POLL_POOL = ThreadPoolExecutor(max_workers=16)` owned by the plugin. The default executor is shared with the rest of the gateway; a 25 second hold per device would starve it. The chunk route runs `relay.feed` on that same pool, because a feed can block for up to `FEED_BLOCK_S` and the default executor (`min(32, cpu_count + 4)` threads shared with the whole gateway) must never hold it. The remaining routes are short and use `asyncio.to_thread`.
+Poll handling uses the plugin's `POLL_POOL = ThreadPoolExecutor(max_workers=64)`. Output feeds use a separate `FEED_POOL = ThreadPoolExecutor(max_workers=16)`: held polls must not occupy the workers needed to deliver their commands' output. Neither pool is the event loop's shared default executor. The remaining route work, including JSON parsing, verification and body parsing, uses `asyncio.to_thread`. Disconnect watchers release abandoned polls.
 
-Lost detection: core's `_wait_for_process` never calls the handle's `wait()`; it calls `poll()` in a loop that starts at 5 ms and backs off to 200 ms, so `poll()` is the detector and must stay a plain read: the returncode, then `now - last_seen[device] > OFFLINE_AFTER_S + LOST_GRACE_S`, and on that condition `relay.close(id, Outcome(LOST, 124, ...))`. `wait()` loops on `_done.wait(1.0)` with the same check for the few callers that use it. QUEUED and RUNNING are covered alike, and the thread doing the detection is the one already waiting.
+Lost detection: core's `_wait_for_process` never calls the handle's `wait()`; it calls `poll()` in a loop that starts at 5 ms and backs off to 200 ms, so `poll()` is the detector and must stay a plain read: the returncode, then `now - last_seen[device] > OFFLINE_AFTER_S + LOST_GRACE_S`, and on that condition `relay.close(id, Outcome(LOST, 255, ...))`. `wait()` loops on `_done.wait(1.0)` with the same check for the few callers that use it. QUEUED and RUNNING are covered alike, and the thread doing the detection is the one already waiting.
 
 ## A6. Environment and process handle
 
@@ -221,16 +223,19 @@ class DirtsideEnvironment(BaseEnvironment):
 def session_identity() -> SessionKey:
     return SessionKey(get_session_env("HERMES_SESSION_KEY") or get_session_env("HERMES_SESSION_ID"))
 
-def resolve_target(session_key, is_cron: bool, default_target: str, registry, relay) -> Target:
-    chosen = registry.target_device_id(session_key)
+def resolve_target(session_key, is_cron, default_target, registry, relay, *, require_contact=True):
+    chosen = registry.target(session_key) if session_key else None
+    if chosen == "server":
+        return Server()
     default = None if is_cron or default_target == "server" else registry.active_device(default_target)
     device = registry.device_by_id(chosen) if chosen else default
-    if device is None and chosen:
-        raise EnvironmentConnectionError("Dirtside: this conversation's device is no longer paired.", retry_hint="Run /dirtside use server, or pair the device again.")
+    if device is None and (chosen or (not is_cron and default_target != "server")):
+        raise EnvironmentConnectionError("Dirtside: this conversation's device is no longer paired.",
+                                         retry_hint="Run /dirtside use server, or pair the device again.")
     if device is None:
         return Server()
-    if not relay.is_online(device.id):
-        raise EnvironmentConnectionError(f"Dirtside: device '{device.name}' is offline.", retry_hint="Start `hermes dirtside serve` on it, or run /dirtside use server. Nothing was run on the server.")
+    if require_contact:
+        require_online(device, relay)
     return OnDevice(device)
 
 class DirtsideProvider(TerminalEnvironmentProvider):
@@ -239,14 +244,12 @@ class DirtsideProvider(TerminalEnvironmentProvider):
     default_cwd = property(lambda self: "~")
     def is_available(self): return True
     def create_environment(self, *, cwd, timeout, task_id="default", image=None, container_config=None, **kwargs):
-        key = session_identity()
-        target = resolve_target(key, get_session_env("HERMES_CRON_SESSION") == "1", self._default_target, self._registry, self._relay)
-        match target:
-            case Server(): return LocalEnvironment(cwd="" if cwd == "~" else cwd, timeout=timeout)
-            case OnDevice(device): return DirtsideEnvironment(self._relay, device, key, task_id, cwd, timeout)
+        return ConversationEnvironment(self, session_identity(), cwd, timeout, task_id)
 ```
 
-`resolve_target` has a six-row truth table in its test (chosen or not, cron or not, default or not, online or not). `create_environment` has no branch of its own.
+Registration reads `ctx.get_config("default_target", "server") or "server"` once, so blank and null defaults mean server for the provider, commands, prompt and pane. Bare status calls `resolve_target(..., require_contact=False)`; execution requires contact. Resolver tests cover choices, defaults, cron, missing or revoked devices and offline devices. `ConversationEnvironment` resolves again at dispatch time; `create_environment` has no branch of its own.
+
+The pane target endpoint reports a stored choice or the non-cron default without a cron turn context; cron execution still defaults to server. Missing or revoked defaults return HTTP 404, while an offline paired target remains selectable.
 
 ## A8. Protocol
 
@@ -260,7 +263,7 @@ class Envelope:
 def canonical(payload: dict) -> bytes      # json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 def sign(key: SigningKey, kind: str, sender: str, body: dict) -> dict
 def verify(pubkey: VerifyKey, wire: dict, now: int, guard: ReplayGuard | None) -> Envelope   # raises ProtocolError
-class ReplayGuard: ...                     # window 300 s, LRU of 4096 nonces; used on the device only
+class ReplayGuard: ...                     # window 300 s, LRU of 4096 nonces; one cache per peer process
 def parse_hello(body) -> DeviceHello; def parse_exec(body) -> WireExec; def parse_chunk(body) -> Chunk; def parse_result(body) -> tuple[Outcome, Chunk | None]   # the optional inline tail (A15.2, R2)
 ```
 
@@ -268,13 +271,13 @@ Wire bodies carry only what the other side uses:
 
 - `hello` (device to relay, at pairing): `pubkey`, `name`, `os`, `arch`, `home`, `temp_dir`, `agent_version`. Signed with the key whose public half it carries, which proves possession.
 - `exec` (relay to device, inside the poll response): `id`, `command`, `script`, `login`, `timeout_s`, `stdin`, `cwd`. No session key, no task id; the device has no use for them.
-- `chunk` (device to relay): `id`, `seq`, `data` as base64 of raw bytes. The relay writes the bytes to the pipe; core decodes once.
-- `result` (device to relay): `id`, `state` (`finished` or `refused`), `exit_code`, `duration_ms`, `truncated`, `reason`, and optionally `seq` plus `data`: the unsent tail of the output, at most `CHUNK_BYTES`, so a short command costs one post after the poll (A15.2, R2). The relay feeds the tail, then closes.
+- `chunk` (device to relay): `id`, `seq`, `data` as base64 of raw bytes, at most `PART_MAX` decoded bytes. The device coalesces its pending 64 KiB reads up to this 2 MiB bound or the first byte's `FLUSH_MS` deadline, whichever comes first. It waits for each post before sending the next sequence number. The relay writes the bytes to the pipe; core decodes once.
+- `result` (device to relay): `id`, `state` (`finished` or `refused`), `exit_code`, `duration_ms`, `truncated`, `reason`, and optionally `seq` plus `data`: the unsent tail of the output, at most `PART_MAX`, so a short command costs one post after the poll (A15.2, R2). The relay feeds the tail, then closes.
 - The poll response body: `exec` (optional) and `cancel` (a list of request ids). A cancel is a field, not a message.
 
-The gateway checks `ts` within 300 seconds and nothing more: a replayed chunk is dropped by `seq`, a replayed result by terminal state, a replayed hello by the single-use code. The device keeps the full `ReplayGuard`, because `exec` has no sequence number.
+Both peers keep a `ReplayGuard` with a 300-second timestamp window and at most 4,096 remembered nonces. The gateway uses `GATEWAY_REPLAYS` only after signature verification, so an invalid signature cannot poison it. A retry uses a fresh signed envelope; chunk sequence deduplication and terminal-state checks still prevent duplicate output or completion. These caches are process-local and bounded, not durable replay history across restart or eviction.
 
-Order of operations in every device route, in this order and nowhere else: `registry.credential_for(bearer)` (401 if `None`) → `verify()` with that credential's key (400 on failure; a `Pending` credential is accepted only by the pair route, which verifies against the key inside the hello) → `relay.touch` for a `Device` credential only, so a stolen bearer without the signing key cannot keep a device online → `parse_<kind>()` → one relay or registry call → `410` when the relay reports terminal or unknown. The relay and everything below it never see a dict. Handlers never rely on `request.state.token_principal`, so the code path is the same with the dashboard gate on or off.
+Order of operations in every device route, in this order and nowhere else: `registry.credential_for(bearer)` (401 if `None`) → streamed body bound for chunk/result (A10) → JSON parsing and `verify()` with that credential's key (400 on failure; a `Pending` credential is accepted only by the pair route, which verifies against the key inside the hello) → `relay.touch` for a `Device` credential only, so a stolen bearer without the signing key cannot keep a device online → `parse_<kind>()` → one relay or registry call → `410` when the relay reports terminal or unknown. JSON parsing, verification and body parsing run in existing worker threads, not on the dashboard event loop. The relay and everything below it never see a dict. Handlers never rely on `request.state.token_principal`, so the code path is the same with the dashboard gate on or off.
 
 ## A9. Device agent
 
@@ -287,7 +290,7 @@ def serve(cfg: DeviceConfig) -> None:
     while True:
         try:
             wire = client.post("/api/plugins/dirtside/device/poll", json=sign(cfg.key, "poll", cfg.device_id, {}))
-            if wire.status_code == 401: kill_all(running); return log("revoked by the gateway; stopping")
+            if revoked(wire): kill_all(running); return log("revoked by the gateway; stopping")
             wire.raise_for_status(); delay = 1.0
             env = verify(cfg.relay_pubkey, wire.json(), now(), guard)
             for rid in env.body.get("cancel", []): kill(running.pop(rid, None))
@@ -302,7 +305,7 @@ def handle_exec(req: WireExec) -> None:
 
 `post_until_2xx` retries with the same backoff and stops on 2xx or 410. A 410 means the gateway already closed the request (cancelled, lost, or finished), so the device has nothing left to say.
 
-`executor.run` evaluates policy first. A `Refused` becomes `Outcome(REFUSED, 126, ...)` without spawning. Otherwise it spawns `bash -l -c` or `bash -c`, `cwd=req.cwd`, `start_new_session=True`, writes the stdin payload from a separate thread and closes it (a child that fills the output pipe before it reads stdin would otherwise deadlock, which is why core has a writer thread too), reads stdout and stderr merged as bytes through `select`, flushes unsent output `FLUSH_MS` after its first byte, at `CHUNK_BYTES`, or at exit, whichever comes first (so a command that ends inside 200 ms makes one post), from the same thread and one post at a time (so `seq` arrives in order by construction), carries the final tail inside the result, stops reading about 300 ms after bash exits with the pipe idle (the same rule as core's drain in `tools/environments/base_output.py`, so a backgrounded grandchild such as `sleep 30 &` cannot hold the request open), enforces the backstop `min(req.timeout_s + 1, policy.max_timeout_s)` with SIGTERM then SIGKILL after 3 seconds, caps output at `policy.max_output_bytes` (default `MAX_OUTPUT_BYTES`) and reports `truncated`. Chunk retries share that capped duration. The gateway owns the requested timeout; the device's extra second lets core cancel first without exceeding device policy (A16.4). A 410 on a chunk or result for a running request kills that request's process group: the gateway no longer wants it. The group is killed only on timeout, cancel, revoke or 410, never after a natural exit: a grandchild such as `uvicorn &` or a `spawn_via_env` job must survive on the device exactly as it survives locally.
+`executor.run` evaluates policy first. A `Refused` becomes `Outcome(REFUSED, 126, ...)` without spawning. Otherwise it spawns `bash -l -c` or `bash -c`, `cwd=req.cwd`, `start_new_session=True`, writes the stdin payload from a separate thread and closes it (a child that fills the output pipe before it reads stdin would otherwise deadlock, which is why core has a writer thread too), reads stdout and stderr merged as bytes through `select`, flushes unsent output `FLUSH_MS` after its first byte, at `PART_MAX`, or at exit, whichever comes first (so a command that ends inside 200 ms makes one post), from the same thread and one post at a time (so `seq` arrives in order by construction), carries the final tail inside the result, stops reading about 300 ms after bash exits with the pipe idle (the same rule as core's drain in `tools/environments/base_output.py`, so a backgrounded grandchild such as `sleep 30 &` cannot hold the request open), enforces the backstop `min(req.timeout_s + 1, policy.max_timeout_s)` with SIGTERM then SIGKILL after 3 seconds, caps output at `policy.max_output_bytes` (default `MAX_OUTPUT_BYTES`) and reports `truncated`. Chunk retries share that capped duration. The gateway owns the requested timeout; the device's extra second lets core cancel first without exceeding device policy (A16.4). A 410 on a chunk or result for a running request kills that request's process group: the gateway no longer wants it. The group is killed only on timeout, cancel, revoke or 410, never after a natural exit: a grandchild such as `uvicorn &` or a `spawn_via_env` job must survive on the device exactly as it survives locally. Only exact credential-rejection bodies from the plugin or core's token middleware stop the agent on HTTP 401; differently shaped foreign 401 responses still retry.
 
 `policy.evaluate(command, policy)` is a pure function with one rule: no deny pattern matches the model's command. It returns `None` or `Refused(reason)`. The wrapped script is never inspected, because it contains the snapshot path, `/dev/null` and whatever the user's login shell references.
 
@@ -312,9 +315,13 @@ What the device enforces, stated plainly: the deny list, the timeout and output 
 
 `DirtsideDeviceAuth(DashboardAuthProvider)`: `supports_token = True`, `interactive_login = False`, `supports_session = False`. `verify_token(token)` is a pure recogniser: it returns `TokenPrincipal(principal=name, provider="dirtside", scopes=("dirtside",))` when `registry.credential_for(token)` is not `None`, else `None`. It has no side effects, so the handlers' own bearer lookup is the single source of identity whether the gate is on or off. The session methods mirror the bundled drain provider line for line: `verify_session` returns `None` so the cookie loop passes over Dirtside, and `revoke_session` returns `None`. The four device routes are registered with `register_token_route()` at `register()` time.
 
+After recognizing the chunk or result credential, the route counts streamed body bytes before JSON parsing, independently of Content-Length. The chunk bound is `4 * ceil(PART_MAX / 3) + 1024`, or 2,797,228 bytes, for base64 plus the signed envelope. Results allow another 1,024 bytes for outcome fields and reason, totaling 2,798,252 bytes. An excess returns 413 with "output part too large"; the shared decoded-data parser refuses more than `PART_MAX` with that existing reason. After the bounded read, existing workers do JSON parsing, signature verification and body parsing without blocking the dashboard loop.
+
+Signature, identity and request-ownership checks still precede the feed. The relay consumes one decoded part through its existing memoryview pipe writer, without a second part-sized output buffer. It trims the old pane tail before copying at most the last 4,096 incoming bytes. No large part is first copied into the pane tail and then trimmed. Concurrent same-sequence chunk retries retain the existing serialized, deduplicated feed rather than a new 409.
+
 Pairing under the gate works because the pairing code is itself a bearer the recogniser knows: `/dirtside pair macbook` creates a pending row whose `token_hash` is the code's hash, the device presents the code as its bearer on `/device/pair`, and `complete_pairing` rotates it to the long-lived token in one transaction. There is one credential type and one lookup path.
 
-If plan open question 2 shows `register_token_route` is not usable by a community plugin, `auth.py` is deleted and the device presents `HERMES_DASHBOARD_SESSION_TOKEN` instead. Nothing else changes.
+The pinned core accepts `hermes_cli.dashboard_auth.token_auth.register_token_route` from this plugin. This is a private import disclosed by the catalog validator, not a `PluginContext` method. Device traffic never falls back to the dashboard's session credential.
 
 ## A11. Routes
 
@@ -356,7 +363,7 @@ Both device lists return exactly `id`, `name`, `online`, `os`, `home`, `last_see
 | Local and Dirtside agree | `test_conformance`: the A15.3 battery gives the same `output`, `returncode` and `cwd` through `LocalEnvironment` and through `DirtsideEnvironment` with the fake device |
 | A backgrounded grandchild does not hold the tool | `test_grandchild_returns`: `sleep 30 &` returns in under one second on the device |
 | Background jobs run through the relay | `test_spawn_via_env`: `process_registry.spawn_via_env` against the fake device; the log delta arrives and the exit code is recorded |
-| The README numbers are reproducible | `tools/bench.py --loopback` in CI; it fails when an A15.1 target is missed |
+| The README numbers are reproducible | `tools/bench.py --loopback` fails a missed A15.1 target locally; CI uses `--report-only` and prints misses without failing |
 | No file grows past its budget | `tools/check_sizes.py` in CI |
 
 ## A14. Build order, each unit ends in its check
@@ -371,7 +378,7 @@ Both device lists return exactly `id`, `name`, `online`, `os`, `home`, `last_see
 8. `commands.py`, `prompt.py`. Check: `/dirtside use` from Telegram changes where `pwd` runs.
 9. `desktop/plugin.js`. Check: pane shows a live request; chip shows the target.
 10. `cli.py install-service`. Check: reboot the device, it comes back online.
-11. Reliability matrix from the plan section 8, run by `scripts/two_machine_matrix.sh`, transcripts saved under `evidence/`. `tools/bench.py` over loopback, LAN and the two-machine rig; its output goes under `evidence/` and into the README with the commit SHA and the date.
+11. Reliability matrix from the plan section 8, run by `scripts/two_machine_matrix.sh`, transcripts saved under `evidence/`. `tools/bench.py` over loopback, LAN and the two-machine rig; its output goes under `evidence/` and into the README with the commit SHA and the date. Remote runs probe a maximum part and warmed small round trip from the device once before the rows, then budget the flood as `max(120, ceil(1.5 * encoded_bytes / measured_bytes_per_second + 32 * round_trip_s + 10))`, record rate, budget and elapsed time in its evidence, and wait command timeout plus 15 s for core's outcome; loopback keeps 120 s and its existing assertions.
 12. README, disclosures, catalog YAML, `validate --install-deps` clean.
 
 ## A15. Execution strategy: fast where it is felt, exact everywhere
@@ -384,13 +391,13 @@ The path of a short command such as `pwd`:
 
 | Step | Who | Cost | Source |
 |---|---|---|---|
-| `execute()` wraps the command: source the snapshot, `cd`, run, emit the cwd marker | gateway, core | string formatting, not measured, well under a millisecond | `base_env.py` `_wrap_command` |
+| `execute()` wraps the command: source the snapshot, `cd`, run, emit the cwd marker | gateway, core | string formatting, not measured, well under a millisecond | core's `_wrap_command` in `tools/environments/base.py`, line 473 at the pinned SHA |
 | `submit()` logs the request and notifies the parked poll | gateway, plugin | 0.02 ms per SQLite insert and commit at `synchronous=NORMAL` (0.2 ms at `FULL`) | measured |
 | The exec rides the poll response | network | no extra round trip; the device's poll was already parked on the Condition | A5 |
 | The device verifies the envelope and spawns the shell | device | verify 0.5 ms; `bash -c true` 6 ms; `bash -lc true` 16 ms on this Mac, and more on a profile that loads nvm or conda (not measured) | measured |
 | Output and exit code travel back | network | one round trip when the tail fits in the result, two when a separate chunk was needed | A8 |
 | The relay checks the signature, feeds the pipe, closes the handle | gateway, plugin | sign 2.2 ms and verify 1.6 ms for a 64 KB body, 0.2 and 0.5 ms for a small one; base64 0.03 ms; the pipe write under 0.1 ms | measured |
-| Core notices the exit | gateway, core | `_wait_for_process` polls every 5 ms at first and backs off by 1.5x to a 200 ms cap after about 0.6 s | `base_env.py` |
+| Core notices the exit | gateway, core | `_wait_for_process` polls every 5 ms at first and backs off by 1.5x to a 200 ms cap after about 0.6 s | core's `_wait_for_process` in `tools/environments/base.py`, lines 508 to 581 at the pinned SHA |
 | Core stops draining | gateway, core | at EOF, as soon as `close()` shuts the write end; the three 100 ms idle ticks apply only while a grandchild still holds the pipe | `base_output.py` `_drain_fd_select` |
 
 The floor for `pwd` is therefore one round trip plus about 10 ms of work. The poll back-off is core's and the local backend pays it too, but it does not cancel out: the exit is noticed up to one poll interval late, 5 to 200 ms depending on how long the command ran, and that shows up in p95. `tools/bench.py` measures the same command through `LocalEnvironment` and through `DirtsideEnvironment` and reports the difference. The fake device signs and verifies exactly like a real one; otherwise the loopback column would measure nothing.
@@ -403,18 +410,18 @@ The floor for `pwd` is therefore one round trip plus about 10 ms of work. The po
 | `/stop` to tool return while a command runs on the device | at most 50 ms | at most 50 ms | at most 50 ms; the gateway closes first and the device learns on its next poll |
 | Partial output present after a timeout or a cancel | everything written more than `FLUSH_MS` before the kill | same | same |
 
-The throughput bound is CPU, not the link: one signature per chunk costs about 4 ms of signing and verification per 64 KiB (measured, R6), so a gigabit LAN at 125 MB/s cannot be reached by this protocol shape. A15.4 names the lever if a measured transfer ever needs it.
+The original loopback measurement was CPU-bound: one signature per 64 KiB cost about 4 ms of signing and verification (R6). The internet flood instead exposed round-trip cost, addressed by the larger bounded parts in A16.6. A15.4 keeps more invasive throughput work deferred until another measured transfer needs it.
 
 Precedent for the transport, since the choice is the main thing a reviewer will question: GitHub's self-hosted runner receives jobs over an outbound HTTPS long poll held for 50 seconds ([GitHub docs](https://docs.github.com/en/enterprise-server@latest/actions/hosting-your-own-runners/about-self-hosted-runners)), the remote-control feature of a major coding assistant registers its local process over an outbound connection and polls a relay, and VS Code Remote Tunnels keep a persistent outbound connection to a tunnel service ([VS Code docs](https://code.visualstudio.com/docs/remote/tunnels)). One measured comparison puts the per-message latency difference between long polling and WebSockets under 0.3 ms at low event rates on a reused connection; the gap only opens when events arrive faster than one round trip, which a shell command cannot do ([comparison](https://daily.dev/posts/websocket-vs-sse-vs-long-polling-the-real-cost-of-1-000-events-wip1lzawd)). Cloudflare's tunnel daemon opens four outbound connections for availability, not for speed ([Cloudflare docs](https://developers.cloudflare.com/tunnel/configuration)); one device, one connection is enough here.
 
 ### A15.2 Rules
 
 - **R1. Dispatch costs no round trip.** The device's poll is parked on the relay Condition; `submit()` notifies and the exec rides the poll response. The device re-polls at once after every response, so a request only ever waits in `QUEUED` for the one round trip of a poll in flight. The agent keeps one `httpx.Client` for its lifetime, so TLS is negotiated once per connection, not per request.
-- **R2. Short results travel in one post.** When the unsent tail of the output is at most `CHUNK_BYTES`, the device puts it inside the `result` instead of a separate chunk. `pwd`, `ls`, `git status` and a test summary cost one upload. The relay feeds the tail and then closes, under the same single terminal transition.
-- **R3. Flush on a clock, finish in the result.** The executor flushes unsent output `FLUSH_MS` after its first byte, at `CHUNK_BYTES`, or at exit, whichever comes first, and the final tail rides in the result. A command that ends inside 200 ms costs one post (R2); a long one shows output on the pane within 200 ms (R8); and a timeout or a cancel loses at most the last 200 ms of output, which is what core's `[Command timed out after Ns]` rendering shows the model.
+- **R2. Short results travel in one post.** When the unsent tail of the output is at most `PART_MAX`, the device puts it inside the `result` instead of a separate chunk. `pwd`, `ls`, `git status` and a test summary cost one upload. The relay feeds the tail and then closes, under the same single terminal transition.
+- **R3. Flush on a clock, finish in the result.** The executor flushes unsent output `FLUSH_MS` after its first byte, at `PART_MAX`, or at exit, whichever comes first, and the final tail rides in the result. Its read wait cannot pass the flush deadline while the shell runs. A command that ends inside 200 ms costs one post (R2). Sending starts within 200 ms when no earlier post is in flight; network and reader backpressure still determine pane arrival. Timeout and cancellation retain core's existing rendering.
 - **R4. The feed is lossless and backpressured.** A 64 KB chunk is exactly one pipe buffer on macOS (measured), so a second chunk that lands before core's drain thread is scheduled cannot fit, and a non-blocking writer that ignores the short count drops the remainder: the first draft had that bug. `feed()` now writes every byte, looping on `select` for writability in one second slices on the relay's own pool, bounded by `FEED_BLOCK_S` in total and re-checking terminal state each slice (A5). Because the device posts one chunk at a time and waits for the 2xx, a slow reader slows the device and nothing is dropped. The bound is the only exit: past it the request closes as `LOST` with reason `gateway stopped reading output`, the device gets 410 on its next post and kills the process group.
 - **R5. The login shell runs once.** Core's `init_session()` runs the login bootstrap once per environment and later commands run `bash -c` sourcing the snapshot (6 ms against 16 ms here, and far more on heavy profiles). `_persistent = True` keeps that environment across turns. The device runs exactly the `login` flag it is given and never upgrades a command to a login shell on its own.
-- **R6. Nothing on the hot path waits on disk or on a lock.** The registry is written at `submit()` and `close()` only, at `synchronous=NORMAL` (0.02 ms; the request log is the only thing at risk on power loss, and it is a log). Chunks never touch SQLite. The Condition is held for microseconds; the pipe write and the signature check happen outside it. Signing costs 2.2 ms and verifying 1.6 ms per 64 KiB chunk (an 87 KB body after base64), so the device signs about 29 MB/s and the relay verifies about 42 MB/s on one core; in series, with one post per chunk, that bounds a transfer near 10 to 16 MB/s, below a gigabit LAN and above most home uplinks. Small messages cost 0.2 to 0.5 ms.
+- **R6. Chunks never write history.** The registry is written at `submit()`, the first claim and `close()`, at `synchronous=NORMAL` (0.02 ms in the original measurement; the request log is the only thing at risk on power loss, and it is a log). The claim writes running beside the handle transition under the Condition. Pipe writes and signature checks happen outside it. The original 64 KiB measurement cost 2.2 ms to sign and 1.6 ms to verify an 87 KB base64 body, about 29 MB/s and 42 MB/s on one core. Day 8 grows parts, not the signature scheme; the benchmark still gates at 8 MB/s. Small messages cost 0.2 to 0.5 ms in the original measurement.
 - **R7. Background jobs are left to core.** `process_registry.spawn_via_env` wraps the command as `nohup bash -lc` with a log, a pid file and an exit file under `get_temp_dir()`, then polls with two `execute()` calls every 2 seconds (a log delta and a `kill -0`) and one more to read the exit file at the end. Each poll is one normal request through the relay. Two consequences to know: every background job pays the login shell once (the wrapper's `bash -lc`, outside R5), and the wrapper's `( ... ) &` subshell holds the output pipe, which is exactly the case R10 exists for; without R10 the spawn call (default `timeout=10`) would time out and a group kill would take the job with it. Dirtside adds nothing here; the conformance test proves the path works.
 - **R8. Progress is visible where the user is looking.** The relay keeps the last `PANE_TAIL_BYTES` of each live request in memory and `GET /requests` returns it, so the Desktop pane shows output as it streams while the phone waits for the tool to return. Core only shows a foreground command's output when it ends; the pane is the surface that makes a 40-second test run feel alive. A ring of bytes, no new route, no event.
 - **R9. Core's limits are the only truncation the model sees.** Core keeps a 40/60 head and tail window at `tool_output.max_bytes` (50,000 by default) and spills up to 5 million characters to disk for recovery, so the foreground path discards everything past about 5 MB anyway. The device still ships everything up to `MAX_OUTPUT_BYTES`, because the internal paths run with full fidelity: `read_file` is a `cat` through `execute()` with `bounded_capture=False`, and truncating it would corrupt a file read. When the device does hit its cap it reports `truncated`, and the environment appends one line, `[Dirtside: output capped at 64 MB on the device]`, so the notice is honest.
@@ -441,9 +448,9 @@ The test that others will not write. Every case runs twice, once with direct rel
 | `sleep 30 &` | the drain rule, returns in under a second |
 | `process_registry.spawn_via_env` then two polls | background spawn, delta, exit code |
 | `/stop` during `sleep 60` | exit 130 at once; the device process is dead within 5 seconds |
-| device agent killed with SIGKILL mid-command | `LOST` within `OFFLINE_AFTER_S + LOST_GRACE_S`, exit 124, partial output kept |
+| device agent killed with SIGKILL mid-command | `LOST` within `OFFLINE_AFTER_S + LOST_GRACE_S`, exit 255, partial output kept |
 | a chunk post that fails once and retries | the same `seq` is accepted once; no doubled bytes |
-| gateway restarted mid-command | the device's next post gets 410 and it kills the process; its next poll succeeds without re-pairing |
+| gateway restarted mid-command | the next poll cancels orphaned work, including silent commands; raced output posts still get 410, and polling resumes without re-pairing |
 
 ### A15.4 Deferred, each with the trigger that reopens it
 
@@ -466,7 +473,7 @@ Deviations the builder found in the source and that are now part of the design:
 - `bash` is resolved through PATH on the device, so missing-command and missing-directory diagnostics match core's local backend byte for byte.
 - The truncation notice names the configured cap, not a constant.
 - Core forwards `stdin_data` directly for `_stdin_mode = "payload"` (`base.py:727`); there is no separate branch to mirror.
-- `requires_hermes` is `>=0.22.7`: that release (2026-11-03) carries the payload mode (`base.py:272`), the `_persistent` check (`terminal_tool_lifecycle.py:270`), `register_token_route` (`token_auth.py:31`) and the provider ABC, at the same lines as main.
+- `requires_hermes` is `>=0.22.7`. The checks establish the payload mode (`base.py:272`), `_persistent` check (`terminal_tool_lifecycle.py:270`), `register_token_route` (`token_auth.py:31`) and provider ABC at pinned core `84a0301`, not at every supported release.
 
 Open for the next steps, with the section each one changes:
 
@@ -487,7 +494,7 @@ Built the same evening from A14 steps 6 and 7 plus every route in A11, through t
 - The device keeps a private rotating log of events (`agent/activity.py`, mode 0600, no commands, output or credentials); `hermes dirtside status` reads it instead of polling, so status can never claim work.
 - `DeviceConfig` accepts HTTPS, or HTTP on loopback only; pairing pins the relay public key; the default deny list covers privilege escalation, recursive deletion of the root, filesystem formatting, raw disk writes, shutdown and reboot, service stops, fork bombs and piping a download into a shell (the exact patterns are in `agent/config.py`).
 - Workers in the loop track cancel Events, not processes; the executor owns the process groups. A 410 during execution cancels that request; a 410 after a natural exit cannot kill a surviving background job, which keeps R10.
-- Python's default executor here is `min(32, cpu_count + 4)` (14 on this Mac), so the router owns its own 16-thread pool for polls and feeds, as A5 requires.
+- The initial router used a dedicated 16-thread pool for polls and feeds. Day-6 starvation tests replaced it with the separate 64-worker poll and 16-worker feed pools now specified in A5.
 - Integration point originally left open: `PUT /sessions/{key}/target` used `set_target(key, None)` for `server`. A16.3 resolves this with the stored sentinel and non-server-default route tests.
 
 ### A16.2 Day-3 inside the real core
@@ -515,20 +522,20 @@ The active `dirtside-day4-surfaces` change implements A14 steps 8 and 9 and the 
 
 The active `dirtside-day5-linux` change fixes deadline ownership and test assumptions against the same pinned core. Linux validation remains the owner's GitHub-hosted run.
 
-- Execution and chunk retries use the same pure `device_timeout_s` calculation: the requested timeout plus one second, still capped by device policy. Cancellation does not wait for the backstop.
-- A wait-only handle view holds an explicit finished device timeout for core's own deadline branch. Core supplies the exact suffix, exit 124, `hermes_timed_out`, bounded capture and spill metadata. Raw handle completion remains unchanged. An earlier device-policy stop can wait the remaining caller budget for rendering, but cannot keep executing.
-- A combined timeout and output cap retains the timeout reason first and the cap notice after `; `. The environment renders the cap notice separately. Ordinary exit 124, loss, refusal and cancellation remain distinct.
+- Execution and chunk retries use the same pure `device_timeout_s` calculation: the requested timeout plus one second, still capped by device policy. Cancellation does not wait for the backstop. After a gateway restart the device learns at its next poll that its running work is orphaned and stops it; the deadline remains the backstop when the device cannot reach the gateway at all.
+- The day-6 correction passes the actual handle to core without holding a finished device timeout. Finalization adds the existing timeout suffix and `hermes_timed_out` flag when device policy expires first, preserving bounded capture and spill metadata. An earlier device-policy stop returns promptly rather than waiting out the caller's longer budget.
+- A combined timeout and output cap retains the timeout reason first and the cap notice after `; `. The environment renders the cap notice separately. Ordinary exit 124, loss 255, refusal 126 and cancellation 130 remain distinct.
 - Signal tests keep bash and a child alive with a compound command. Pool coverage uses acknowledged dispatch and whichever workers actually start, with ten-second readiness deadlines and the existing five-second cessation bounds. Cwd tests use quoted fixture paths; flush-clock boundaries and partial-output readiness do not depend on fixed sleeps.
 
 ### A16.5 Day-7 owner and client
 
 Verified against core 84a0301 and the owner's live transcript from v0.23.0: `gateway/run_api.py` mounts the dashboard in the gateway process through `GatewayDashboardMount`. CLI conversation agents are built client-side, while `tui_gateway/host_supervisor.py` spawns `tui_gateway.compute_host` for TUI, Desktop and web chat. `slash_worker_client.py` spawns a separate slash worker. Each loads its own plugin instance. Messaging-platform turns built by `gateway/session_execution.py` remain in the gateway. `PluginContext` exposes no way for another process to invoke the owner's relay directly.
 
-Any number of processes may import and mount `dashboard/plugin_api.py`. Only handling `/device/pair`, `/device/poll`, `/device/chunk` or `/device/result` records ownership. Pane, pairing-code, session, history, revoke and local routes never do. The devices' gateway can differ from the unmanaged gateway auto-started by `hermes chat`; that second server remains a client until it receives device traffic itself. After a restart, devices are truthfully offline everywhere until the first device poll arrives.
+Any number of processes may import and mount `dashboard/plugin_api.py`. Only authenticated, signature-checked and parsed traffic on `/device/pair`, `/device/poll`, `/device/chunk` or `/device/result` records ownership. Rejected traffic cannot replace discovery or stale request history. Pane, pairing-code, session, history, revoke and local routes never record ownership. The devices' gateway can differ from the unmanaged gateway auto-started by `hermes chat`; that second server remains a client until it receives verified device traffic itself. After a restart, devices are truthfully offline everywhere until the first device poll arrives.
 
-The device-route boundary atomically publishes mode-0600 `owner.json` for the first device request and a changed pid or origin. Fields are `origin`, `pid`, `started`. Uvicorn's ASGI server tuple names the accepted socket's interface, not the wildcard listener, so only its port is used. Discovery always publishes 127.0.0.1, using bracketed ::1 only when an IPv6 connection cannot also reach IPv4 loopback. Real IPv4 wildcard, IPv6 dual-stack and IPv6-only listeners are checked. Host and forwarded headers never affect discovery. A specifically bound non-loopback interface that cannot accept loopback is not an IPC destination.
+The device-route boundary atomically publishes mode-0600 `owner.json` for the first accepted device message and a changed pid or origin. Fields are `origin`, `pid`, `started`. Uvicorn's ASGI server tuple names the accepted socket's interface, not the wildcard listener, so only its port is used. Discovery always publishes 127.0.0.1, using bracketed ::1 only when an IPv6 connection cannot also reach IPv4 loopback. Real IPv4 wildcard, IPv6 dual-stack and IPv6-only listeners are checked. Host and forwarded headers never affect discovery. A specifically bound non-loopback interface that cannot accept loopback is not an IPC destination.
 
-Registry initialization mints `local.secret`, 32 random bytes encoded as 64 lowercase hex characters, once next to `relay.key`. Both use the existing no-follow, private regular-file and flock boundary. The relay-key lock also serializes initial database setup, preventing simultaneous workers from racing the initial WAL transition. Only the first device request in a new owner performs stale-history cleanup; worker or secondary-router startup never does.
+Registry initialization mints `local.secret`, 32 random bytes encoded as 64 lowercase hex characters, once next to `relay.key`. Both use the existing no-follow, private regular-file and flock boundary. The relay-key lock also serializes initial database setup, preventing simultaneous workers from racing the initial WAL transition. Only the first accepted device message in a new owner performs stale-history cleanup; worker or secondary-router startup never does.
 
 The local routes in A11 recognize the secret through the existing token provider, then independently parse the peer IP, unwrap IPv4-mapped addresses, require loopback and compare the bearer in constant time. They do not trust forwarded headers, cookies or a device credential. The client allows only literal loopback HTTP origins, disables environment proxies and redirects, and never retries ambiguous execution. Before each request, including captured stream and kill destinations, it verifies pid liveness and compares the recorded start epoch with system `ps` output. There is no stale pid-only cache or new dependency. A reused pid with a different start epoch is rejected before the stable secret is sent.
 
@@ -543,6 +550,30 @@ Device pairing remains distinct from local IPC: an authenticated non-loopback HT
 The owner retains an exec handle until stream attachment, including a short result that finishes first. A `FEED_BLOCK_S` attachment timer abandons an unclaimed stream and closes its descriptor. Streaming reads at most `CHUNK_BYTES` at a time. Each raw block has a four-byte big-endian length; zero introduces one trailing JSON outcome line. Arbitrary output cannot impersonate that line, and no final output line must be buffered. Disconnect closes the live request as LOST with "gateway stopped reading output". The client uses the same bounded pipe writer and the same `RemoteProcessHandle`, mirroring output and owner outcomes. An owner-confirmed cancellation completes that handle immediately even if its output pipe is full; the bounded writer releases its duplicate descriptor. The owner detects device loss while reading the stream. Core still owns requested timeout rendering and cancellation, and the device's requested-timeout-plus-one policy-capped deadline remains the backstop from A16.4.
 
 Targets, credentials and request history stay in SQLite. Device polling, signing, live queues, output tails, state transitions and deadline/loss decisions stay in the owner. No core patch, daemon, new dependency or device wire-version change is needed. The conformance battery covers both paths without changed assertions. `tools/bench.py` retains its in-process checks and appends non-gating client p50/p95 pwd latency. The remote matrix worker now imports its case list after path setup, so its documented command does not require PYTHONPATH.
+
+### A16.6 Day-8 slow links and truthful outcomes
+
+`PART_MAX` is 2 MiB; `CHUNK_BYTES` stays 65,536 for device reads and local stream frames. Only pending output grows a part. The executor sends at the part bound or first-byte `FLUSH_MS` deadline, preserves the exited shell's idle drain slices, and carries the final unsent tail in the result. One synchronous upload stays in flight and sequence numbers stay ordered. The shared parser accepts at most `PART_MAX`. Both output HTTP boundaries count bytes before parsing: chunks allow 2,797,228 bytes including base64 and a 1,024-byte envelope allowance; results allow 2,798,252 bytes with another 1,024 bytes for outcome fields and reason (A10). Wire protocol version remains 1: fields, envelope and signing are unchanged; only the output-size bound grows. Both ends need this update for large parts.
+
+A paired device can hold at most one part plus its envelope in memory per post, bounded by these HTTP limits. Transient JSON, signature and base64 allocations are bounded by the same input cap; this is a per-post bound, not an aggregate limit across posts. That work runs in existing worker threads so concurrent polls keep answering. Same-sequence retries can overlap and are still deduplicated by the relay's writer.
+
+For the 64 MiB cap, 32 parts at an assumed 0.7 s cost 22.4 s in round trips. The original 20 Mbit/s assumption put base64 transfer at about 35.8 s and the total near 58.2 s, not an internet measurement. The owner's final two-machine rerun supplied a signed-path probe of 0.268 MB/s and 0.377 s round trip, yielding a 524 s flood budget under A14's rule. The flood command completed in 375.60 s and its whole row in 392.10 s; all eight rows passed. The probe rate is not flood payload throughput. Loopback retains 120 s. The device output cap and gateway timeout ownership from A16.4 are unchanged.
+
+The kill benchmark starts its clock at the RUNNING claim, independent of the first output flush. Waiting for a 64 KiB tail after coalescing would delay that clock to 200 ms and put cancellation in a longer core adaptive-poll slot. The command, exit-130 assertion and 50 ms gate are unchanged.
+
+The claim now writes running to the registry in the same place that the handle enters RUNNING. The update is conditional on the row still being queued, so a recovered claim writes it only once and cannot overwrite a terminal row. A never-claimed request remains queued. Chunks never write the registry. Pane and local history show running before the first output.
+
+| Outcome | Exit code | Rendering |
+|---|---:|---|
+| Actual timeout | 124 | Core's existing timeout suffix, flag and hint |
+| Device policy refusal | 126 | Existing refusal reason |
+| Cancellation | 130 | Existing cancellation or core interrupt rendering |
+| LOST, device stopped reporting | 255 | Existing reason and partial output |
+| LOST, gateway restarted | 255 | Existing stale-history reason |
+| LOST, owner unavailable or malformed stream | 255 | Existing owner failure reason and partial output |
+| LOST, output reader unattached, disconnected or blocked | 255 | "gateway stopped reading output" and partial output |
+
+Core's exit-code hint table has entries for 124, 126 and 137, not 255. Loss no longer suggests increasing timeout. Only loss expectations change; actual timeout assertions and their rendering remain intact.
 
 ---
 
@@ -614,3 +645,5 @@ Everything Python does on the request path adds up to under 5 ms per small messa
 ## B15. Why the owner keeps the relay and the clients stay thin
 
 Moving queues and cancellation into SQLite would not share pipes, wakeups or output readers. It would add competing writers, terminal-state arbitration and another process protocol while still needing IPC for bytes. A new daemon would add deployment and service ownership that Hermes already supplies. Any number of servers may mount the plugin; only the one receiving device traffic owns its relay. All others, including the unmanaged gateway auto-started by `hermes chat`, use the client, so importing or viewing another server cannot steal ownership. Loopback HTTP is the missing seam, not a second execution engine. Clients submit once, copy bytes into core's existing pipe and forward kill. They do not decide online state, run a timeout clock or reproduce the relay's state machine. A local hop costs latency; the benchmark reports it rather than hiding it inside the old in-process numbers.
+
+One device upload stays in flight, with 2 MiB parts amortizing per-post round trips. A remote flood uses the measured link-probe budget from A14, not the discarded 20 Mbit/s assumption in A16.6. Pipelining would add gateway ordering, another buffer and more cancellation states; the existing synchronous post gives ordering and backpressure directly. Revisit that tradeoff only with a measured transfer that needs it.

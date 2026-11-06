@@ -13,7 +13,7 @@
   <a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions/workflows/check.yml"><img alt="checks" src="https://img.shields.io/github/actions/workflow/status/the-ai-entrepreneur-ai-hub/hermes-dirtside/check.yml?branch=main&label=checks&style=flat-square&labelColor=0B0F14&logo=githubactions&logoColor=white"></a>
   <a href="https://www.python.org/"><img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-57606A?style=flat-square&labelColor=0B0F14&logo=python&logoColor=white"></a>
   <a href="https://github.com/NousResearch/hermes-agent"><img alt="Hermes 0.22.7 or newer" src="https://img.shields.io/badge/hermes-%3E%3D0.22.7-57606A?style=flat-square&labelColor=0B0F14"></a>
-  <img alt="314 tests passing" src="https://img.shields.io/badge/tests-314_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
+  <img alt="598 tests passing" src="https://img.shields.io/badge/tests-598_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
   <img alt="macOS and Linux" src="https://img.shields.io/badge/platforms-macOS%2C_Linux-57606A?style=flat-square&labelColor=0B0F14">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-57606A?style=flat-square&labelColor=0B0F14"></a>
 </p>
@@ -104,6 +104,8 @@ hermes config set terminal.backend dirtside
 
 Read the install disclosure before enabling it. The manifest requires Hermes 0.22.7 or newer and Python 3.11 or newer. PyNaCl is the only added dependency. The checks in this README ran against core commit `84a0301415edd6d1385207ec96e4d7f2b6c1fcd9`, not against every supported release.
 
+After a plugin update, restart even a CLI auto-started gateway (`gateway run --quiet --idle-exit`); it keeps its previously loaded plugin code until it exits.
+
 ### Pair in four commands
 
 Chat commands run in an authenticated Hermes conversation on the gateway. Shell commands run on the device.
@@ -166,7 +168,7 @@ sequenceDiagram
     A-->>P: long poll, signed, parked up to 25 s
     P-->>A: the signed script rides back in the poll response
     A->>A: policy check, process group, run as your user
-    A-->>P: output chunks, signed, 64 KiB or 200 ms apart
+    A-->>P: output parts, signed, up to 2 MiB or a 200 ms flush
     A-->>P: result: exit code and the output tail
     P->>H: bytes flow into the tool through a pipe
     H->>U: the answer
@@ -174,7 +176,7 @@ sequenceDiagram
 
 The provider hands core a conversation environment that resolves its target at dispatch time, so a `/dirtside use` takes effect on the next command even though core caches environments. The relay holds every live request in memory behind one lock. SQLite keeps pairings, per-conversation choices and a short request log. The device verifies each poll response, checks its policy, starts a process group and streams signed output. No core file is modified.
 
-Any number of gateway or dashboard processes may mount the routes, but only the process receiving device traffic owns the relay; every other process, including the unmanaged gateway that `hermes chat` may auto-start, reaches that owner over authenticated loopback HTTP. The local secret stays on the machine; workers do not start another relay service.
+Any number of gateway or dashboard processes may mount the routes, but only the process receiving verified device traffic owns the relay; every other process, including the unmanaged gateway that `hermes chat` may auto-start, reaches that owner over authenticated loopback HTTP. The local secret stays on the machine; workers do not start another relay service.
 
 ### What runs where
 
@@ -186,7 +188,7 @@ Any number of gateway or dashboard processes may mount the routes, but only the 
 | Browser and every other non-terminal tool | Their ordinary Hermes backends. Dirtside does not touch them. |
 | Device policy, process groups, the device activity log | The device, as the device user. |
 
-Online means contact within 45 seconds. A request on a device that stops reporting is marked lost after 45 seconds plus a 5 second grace period: the tool returns exit 124 with the partial output kept, and says why. Revocation cancels waiting tool calls at once; the device learns of it on its next poll or its next rejected upload. A device that is unreachable may keep running its current command until its own deadline.
+Online means contact within 45 seconds. A request on a device that stops reporting is marked lost after 45 seconds plus a 5 second grace period: the tool returns exit 255 with the partial output kept, and says why. Revocation cancels waiting tool calls at once; the device learns of it on its next poll or its next rejected upload. After a gateway restart, the next poll also stops orphaned work. A device that is unreachable may keep running its current command until its own deadline.
 
 ## Chat commands
 
@@ -200,7 +202,7 @@ Online means contact within 45 seconds. A request on a device that stops reporti
 | `/dirtside pair <name>` | Mint a code and print the exact device-side command. |
 | `/dirtside revoke <name>` | Revoke the device and cancel its live requests. |
 
-A change applies from the next command. Work already dispatched keeps its original target. Selecting an offline or revoked device never silently runs that work on the server: the tool fails closed and tells the model why.
+A change applies from the next command. Work already dispatched keeps its original target. Selecting an offline or revoked device never silently runs that work on the server: the tool fails closed and tells the model why. A missing or revoked configured default device also fails closed; cron still defaults to the server.
 
 Core freezes the system prompt's target facts once per session, so a switch mid-session changes where commands run but not the facts the model was given. Start a new session when that matters.
 
@@ -223,11 +225,11 @@ The pane lists paired devices with an online dot, OS, home, last seen and a revo
 
 | If this happens | What Dirtside does |
 |---|---|
-| The laptop lid closes mid-command | Online means contact within 45 s. The request becomes lost after a further 5 s, returns exit 124 with the partial output, and says the device stopped reporting. |
+| The laptop lid closes mid-command | Online means contact within 45 s. The request becomes lost after a further 5 s, returns exit 255 with the partial output, and says the device stopped reporting. |
 | A poll response is lost on the way to the device | The device's next poll lists the ids it is running. Anything the gateway handed out that never started is queued again, once, and only if it had produced no output. |
 | Someone replays a captured message | Every message carries a timestamp and a nonce. Both ends reject timestamps outside 300 s and nonces seen in their 4,096-entry, 300 s cache. |
 | A device token leaks | It is useless without the device's private key; pairing pins the public key. `/dirtside revoke` cancels live requests the same second. |
-| The model asks for something destructive | The device policy refuses by pattern before anything runs: `sudo`, wiping the root, formatting disks, raw disk writes, shutdown and reboot, stopping its own service, fork bombs, piping a download into a shell. Each command is capped at 900 s, 64 MiB of output and 4 in parallel. Hermes' own approvals stay exactly as they were. |
+| The model asks for something destructive | The device policy refuses by pattern before anything runs: `sudo`, wiping the root, formatting disks, raw disk writes, shutdown and reboot, stopping its own service, fork bombs, piping a download into a shell. Default caps are 900 s, 64 MiB of output and 4 commands in parallel. Hermes' own approvals stay exactly as they were. |
 | The gateway itself is compromised | The deny list is pattern matching, not a sandbox. The device runs what a signed gateway sends, as your user. Treat the gateway host and every pairing code as credentials. |
 | The network in between is hostile | The device dials out over HTTPS (plain HTTP only to loopback) and opens no port. Signatures prove who sent what; TLS keeps it private. |
 
@@ -241,54 +243,56 @@ The disclosures in `plugin.yaml` say the same in one paragraph: shell execution 
 
 ## Numbers
 
-Recorded 2026-11-06 at commit `36eda41` on macOS with Python 3.14.6 and core `84a0301`. Both runs are on one machine, so they cover signing, verification, policy, execution and relay delivery, not LAN or internet travel.
+Recorded 2026-11-06 during clearance of the day-8 changes and subsequent security fixes, on macOS with Python 3.14.6 and core `84a0301`. Both modes run on one machine, so these measurements cover signing, verification, policy, execution and relay delivery, not LAN or internet travel. The [catalog PR](https://github.com/NousResearch/hermes-agent/pull/149883) records the published pin and its release checks.
 
 ### Added cost over core's local backend
 
 | Measurement | Result | Target | Status |
 |---|---:|---:|---|
-| `pwd`, added latency, p50 | -6.08 ms | <= 15 ms | pass |
-| `pwd`, added latency, p95 | 7.79 ms | <= 40 ms | pass |
-| 10 MB of output | 12.36 MB/s | >= 8 MB/s | pass |
-| `kill()` to tool return | 8.19 ms | <= 50 ms | pass |
-| `pwd`, added latency, p50, client mode | 26.69 ms | report only | measured |
-| `pwd`, added latency, p95, client mode | 37.97 ms | report only | measured |
+| `pwd`, added latency, p50 | 5.97 ms | <= 15 ms | pass |
+| `pwd`, added latency, p95 | 8.89 ms | <= 40 ms | pass |
+| 10 MB of output | 16.01 MB/s | >= 8 MB/s | pass |
+| `kill()` to tool return | 5.34 ms | <= 50 ms | pass |
+| `pwd`, added latency, p50, client mode | 29.55 ms | report only | measured |
+| `pwd`, added latency, p95, client mode | 33.12 ms | report only | measured |
 
-Fifty paired samples, nearest-rank percentiles, nothing discarded. The negative median means the two paths differ by less than the run-to-run noise of a shell start, not that the relay is faster than running locally. Throughput verifies all 10,000,000 bytes. Cancellation is measured right after a full chunk; core's own polling can add up to 200 ms to a late cancel of a long call.
+Fifty paired samples, nearest-rank percentiles, nothing discarded. Throughput verifies all 10,000,000 bytes. Cancellation is measured at the RUNNING claim, without waiting for output; core's own polling can add up to 200 ms to a late cancel of a long call.
 
-Client mode runs the tool outside the device-polled owner process and reaches its relay over authenticated loopback HTTP; these rows were measured separately in the 2026-11-06 day-7 working tree at base `dd8044f` and do not gate the benchmark.
+Client mode runs the tool outside the device-polled owner process and reaches its relay over authenticated loopback HTTP. These rows come from the same clearance invocation and do not gate the benchmark.
 
 ### Reliability matrix
 
 | Case | Result | Elapsed |
 |---|---|---:|
-| Device loses network | pass | 62.50 s |
-| Gateway restarts | pass | 8.67 s |
-| Device restarts | pass | 4.73 s |
-| Concurrent commands | pass | 6.50 s |
-| Clock skew | pass | 3.55 s |
-| Output flood | pass | 13.52 s |
-| Long poll | pass | 28.88 s |
-| User interrupt | pass | 4.75 s |
+| Device loses network | pass | 61.93 s |
+| Gateway restarts | pass | 11.85 s |
+| Device restarts | pass | 4.91 s |
+| Concurrent commands | pass | 6.68 s |
+| Clock skew | pass | 3.94 s |
+| Output flood | pass | 12.60 s |
+| Long poll | pass | 29.06 s |
+| User interrupt | pass | 5.03 s |
 
 8 of 8, over signed HTTP on loopback with a real gateway app and a real device agent process.
 
 ### Two machines over the internet
 
-Recorded 2026-11-06 at commit `dcb929b`. Gateway: the same Mac, its loopback port published through a Cloudflare quick tunnel, so the device reaches it over HTTPS across the public internet. Device: a Windows machine's WSL2 Arch Linux, with the same pinned core, paired and driven over SSH. The same eight rows:
+The owner's 2026-11-06 rerun recorded 8 of 8 passes on the day-8 working tree with corrections 1 to 3. The owner reported a Mac gateway behind an HTTPS tunnel and a device running WSL2 Arch Linux in another city, with the same tree on both ends. The supplied row logs and signed-path probe back the table below; this is owner-run evidence, not a second internet run by the verifier. The later clearance security fixes were not deployed in that owner run.
 
-| Case | Result | Elapsed |
-|---|---|---:|
-| Device loses network | pass | 93.25 s |
-| Gateway restarts | pass | 22.25 s |
-| Device restarts | pass | 22.07 s |
-| Concurrent commands | pass | 19.54 s |
-| Clock skew | pass | 15.90 s |
-| Output flood | fail | 105.73 s |
-| Long poll | pass | 42.76 s |
-| User interrupt | pass | 17.88 s |
+| Case | Result | Elapsed | Measured rate |
+|---|---|---:|---|
+| Device loses network | pass | 81.88 s | not measured |
+| Gateway restarts | pass | 30.61 s | not measured |
+| Device restarts | pass | 24.48 s | not measured |
+| Concurrent commands | pass | 21.22 s | not measured |
+| Clock skew | pass | 17.35 s | not measured |
+| Output flood | pass | 392.10 s | 0.268 MB/s (probe) |
+| Long poll | pass | 50.15 s | not measured |
+| User interrupt | pass | 20.24 s | not measured |
 
-7 of 8. Recovery, cancellation, restarts and signing behave exactly as on loopback. The output flood (64 MiB) did not finish inside the row's 120 s: the device posts output chunks one at a time, each chunk is one HTTP round trip, and a round trip through this tunnel measured about 0.7 s from the device, so 64 MiB needs far longer than the row allows. Short and medium outputs are unaffected. Larger or pipelined chunks on slow links are the next change.
+The signed-part link probe measured 0.268 MB/s and a 0.377 s round trip through the actual tunnel path, giving the flood command a 524 s budget. The flood command completed in 375.60 s; the whole row took 392.10 s. The table's rate is the probe rate, not flood payload throughput. The original run recorded 7 of 8 passes; its flood row failed after 105.73 s with the rig's wait timeout, not a recorded core timeout at 120 s. Those original logs remain historical evidence.
+
+The rig now waits for the command timeout plus 15 s. The device coalesces pending output into signed parts up to 2 MiB and starts sending small output within 200 ms when no earlier upload is in flight. One upload stays in flight, in sequence. Continuously available 64 MiB output fits in 32 full parts; at an assumed 0.7 s round trip that is 22.4 s in round trips alone, not a measured internet completion time. Remote runs derive the flood budget from their signed-path link probe rather than an assumed access-link speed.
 
 Reproduce the loopback runs:
 
@@ -308,7 +312,7 @@ Gateway, in the Hermes config:
 | Key | Meaning |
 |---|---|
 | `terminal.backend` | `dirtside` to enable the provider. |
-| `plugins.entries.dirtside.settings.default_target` | `server` (default) or a paired device name, used until a conversation chooses. Cron conversations default to the server. |
+| `plugins.entries.dirtside.settings.default_target` | `server` (default) or a paired device name, used until a conversation chooses. Blank or null values mean server. Cron conversations default to the server. |
 | `terminal.cwd` | Leave unset. Core expands a configured `~` on the gateway, and Dirtside does not translate that path. |
 
 Device, in `<hermes home>/dirtside/device.json` (written by `pair`, mode 0600): the gateway URL, the device identity, its token and signing key, the gateway's public key, and the policy block with `deny_patterns`, `max_timeout_s`, `max_output_bytes` and `max_parallel`. Edit the policy for your machine, then restart `serve`.
@@ -333,23 +337,25 @@ dashboard/plugin_api.py   the routes, under /api/plugins/dirtside/
 desktop/plugin.js         Desktop pane and status chip, plain ESM, no build
 tools/                    benchmark, fake device, size budgets, matrix runner
 scripts/                  two_machine_matrix.sh
-tests/                    314 tests: units, conformance, real core, network
+tests/                    598 tests: units, conformance, real core, network
 docs/ARCHITECTURE.md      the design, its reasons, the alternatives that lost
 openspec/                 the change record behind each build step
 ```
 
 ## Engineering notes
 
-- Every module has a line budget that `tools/check_sizes.py` enforces (the relay gets 204 lines, the protocol 147) and no function may exceed a cyclomatic complexity of 8. The whole plugin is 1,872 lines of source and 4,103 lines of tests.
+- Every module has a line budget that `tools/check_sizes.py` enforces (the relay gets 234 lines, the protocol 147) and no function may exceed a cyclomatic complexity of 8. The hard file cap is 400 lines.
 - The conformance battery runs the same commands through core's local backend and through Dirtside and compares exit codes, output, truncation and timeout rendering. If core would show you a message, Dirtside shows the same one.
 - The integration tests use the real core: the plugin is loaded by Hermes' own loader, driven through its own terminal and file tools, and mounted by its own dashboard with the auth gate on. Two defects that only the real core could reveal were found this way and fixed.
-- The gateway owns every timeout. The device deadline is one second longer and only matters when the gateway is gone, so what you see never depends on which side of the network fired first.
+- Core owns requested timeout rendering. The device backstop is the requested timeout plus one second, capped by device policy; a stricter device policy can stop work sooner. Timeout, refusal, cancellation and loss keep distinct exit codes.
 - CI runs the full suite on Ubuntu and macOS against the pinned core commit on every push.
-- The build went in six steps, each from a written change record in `openspec/` with a proposal, a design and tasks, and each closed by a review in a fresh context. The last review found eleven defects; every one was fixed with a test that failed first.
+- The build is tracked in `openspec/` with proposals, designs and tasks. Review findings and regression logs live in the private development notes.
 
 ## Status
 
-Verified: everything in this README on one machine over loopback, the reliability matrix across two physical machines over the internet (7 of 8, the open row is explained under Numbers), the suite on both CI runners, and the catalog validator's checks on a clean clone. Also verified inside a real Hermes install (v0.23.0) from the CLI and from gateway sessions, with two paired devices and one of them reached through a public tunnel: choosing a device, file tools, shell state across turns, a 1 MB output, a timeout, the deny list, core's dangerous-command block, fail-closed with the device agent stopped, re-pairing under the same name, a revoke during a live command and a gateway restart during a live command. Not yet verified: the pane inside the running Desktop app, and service behaviour across login and reboot.
+Locally verified on macOS against core `84a0301`: 598 tests, lint, size budgets, all OpenSpec changes, plugin doctor, clean-snapshot catalog validation, the 8-of-8 loopback reliability matrix and the benchmark above. The clean snapshot also loaded by directory discovery in an isolated home, accepted `terminal.backend: dirtside` and exposed all four device subcommands. These are local clearance results; directory discovery is not a Git-source installation test. The [catalog PR](https://github.com/NousResearch/hermes-agent/pull/149883) records installation and hosted checks for the exact published commit.
+
+The owner's recorded real-install session (v0.23.0), from the CLI and gateway sessions with two paired devices and a public tunnel, exercised choosing a device, file tools, shell state across turns, a 1 MB output, a timeout, the deny list, core's dangerous-command block, fail-closed with the device agent stopped, re-pairing, live revocation and a gateway restart. The owner's final remote rerun recorded 8 of 8 passes with the 0.268 MB/s signed-path probe reported above. Not yet verified: the pane inside the running Desktop app, and service behaviour across login and reboot.
 
 ## License
 

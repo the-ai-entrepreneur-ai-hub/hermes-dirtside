@@ -69,7 +69,7 @@ def test_lost_covers_queued(tmp_path):
     with relay._condition:
         relay.last_seen[device.id] = time.monotonic() - 51
     assert not relay.is_online(device.id)
-    assert running.poll() == queued.wait(0.1) == 124
+    assert running.poll() == queued.wait(0.1) == 255
     assert running.state is queued.state is RequestState.LOST
     assert running.stdout.read() == queued.stdout.read() == b""
 
@@ -165,7 +165,7 @@ def test_stopped_reader_becomes_lost(tmp_path):
             break
     else:
         raise AssertionError("pipe unexpectedly accepted a megabyte without a reader")
-    assert handle.poll() == 124 and handle.state is RequestState.LOST
+    assert handle.poll() == 255 and handle.state is RequestState.LOST
     assert handle.outcome.reason == "gateway stopped reading output"
     assert time.monotonic() - start < FEED_BLOCK_S + 0.3
     handle.stdout.read()
