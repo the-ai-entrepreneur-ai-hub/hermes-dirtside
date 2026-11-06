@@ -32,21 +32,22 @@ class ConversationEnvironment:
     _persistent = True
     uses_host_filesystem = is_local = False
 
-    def __init__(self, provider, key, cron, cwd, timeout, task_id):
-        self._provider, self._key, self._cron = provider, key, cron
+    def __init__(self, provider, key, cwd, timeout, task_id):
+        self._provider, self._fallback_key = provider, key
         self._cwd, self._timeout, self._task_id = cwd, timeout, task_id
         self._environments, self._lock = {}, threading.RLock()
         self._current(True)
 
     def _current(self, require_contact=False):
         p = self._provider
-        target = resolve_target(self._key, self._cron, p._default_target, p._registry, p._relay,
+        key, cron = session_identity() or self._fallback_key, get_session_env("HERMES_CRON_SESSION") == "1"
+        target = resolve_target(key, cron, p._default_target, p._registry, p._relay,
                                 require_contact=require_contact)
-        identity = target.device if isinstance(target, OnDevice) else "server"
+        identity = key, target.device if isinstance(target, OnDevice) else "server"
         with self._lock:
             if identity not in self._environments:
                 self._environments[identity] = (
-                    DirtsideEnvironment(p._relay, target.device, self._key, self._task_id, self._cwd, self._timeout)
+                    DirtsideEnvironment(p._relay, target.device, key, self._task_id, self._cwd, self._timeout)
                     if isinstance(target, OnDevice)
                     else LocalEnvironment(cwd="" if self._cwd == "~" else self._cwd, timeout=self._timeout))
             self._last = self._environments[identity]
@@ -88,5 +89,4 @@ class DirtsideProvider(TerminalEnvironmentProvider):
 
     def create_environment(self, *, cwd, timeout, task_id="default", image=None,
                            container_config=None, **kwargs):
-        return ConversationEnvironment(self, session_identity(), get_session_env("HERMES_CRON_SESSION") == "1",
-                                       cwd, timeout, task_id)
+        return ConversationEnvironment(self, session_identity(), cwd, timeout, task_id)

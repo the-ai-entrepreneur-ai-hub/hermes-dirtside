@@ -127,6 +127,8 @@ Chat commands run in an authenticated Hermes conversation on the gateway. Shell 
 
 Codes expire after ten minutes. Treat them as secrets; command arguments can land in shell history and process listings. Names are 1 to 32 lowercase letters, digits or hyphens, and `server` is reserved. Any URL that is not loopback must be HTTPS.
 
+A gateway reached through a tunnel or reverse proxy needs its public URL configured: run `hermes config set dashboard.public_url https://<public hostname>` on the gateway and restart it. Otherwise core refuses pairing with "Invalid Host header. Dashboard requests must use the bound hostname or the configured public hostname."
+
 ### Keep it running
 
 `hermes dirtside serve` stays in the foreground and prints nothing while healthy. `hermes dirtside status` in another shell shows the pairing, the policy and recent activity. For a per-user service:
@@ -171,6 +173,8 @@ sequenceDiagram
 ```
 
 The provider hands core a conversation environment that resolves its target at dispatch time, so a `/dirtside use` takes effect on the next command even though core caches environments. The relay holds every live request in memory behind one lock. SQLite keeps pairings, per-conversation choices and a short request log. The device verifies each poll response, checks its policy, starts a process group and streams signed output. No core file is modified.
+
+Any number of gateway or dashboard processes may mount the routes, but only the process receiving device traffic owns the relay; every other process, including the unmanaged gateway that `hermes chat` may auto-start, reaches that owner over authenticated loopback HTTP. The local secret stays on the machine; workers do not start another relay service.
 
 ### What runs where
 
@@ -247,8 +251,12 @@ Recorded 2026-11-06 at commit `36eda41` on macOS with Python 3.14.6 and core `84
 | `pwd`, added latency, p95 | 7.79 ms | <= 40 ms | pass |
 | 10 MB of output | 12.36 MB/s | >= 8 MB/s | pass |
 | `kill()` to tool return | 8.19 ms | <= 50 ms | pass |
+| `pwd`, added latency, p50, client mode | 26.69 ms | report only | measured |
+| `pwd`, added latency, p95, client mode | 37.97 ms | report only | measured |
 
 Fifty paired samples, nearest-rank percentiles, nothing discarded. The negative median means the two paths differ by less than the run-to-run noise of a shell start, not that the relay is faster than running locally. Throughput verifies all 10,000,000 bytes. Cancellation is measured right after a full chunk; core's own polling can add up to 200 ms to a late cancel of a long call.
+
+Client mode runs the tool outside the device-polled owner process and reaches its relay over authenticated loopback HTTP; these rows were measured separately in the 2026-11-06 day-7 working tree at base `dd8044f` and do not gate the benchmark.
 
 ### Reliability matrix
 
@@ -341,7 +349,7 @@ openspec/                 the change record behind each build step
 
 ## Status
 
-Verified: everything in this README on one machine over loopback, the reliability matrix across two physical machines over the internet (7 of 8, the open row is explained under Numbers), the suite on both CI runners, and the catalog validator's checks on a clean clone. Not yet verified: the pane inside the running Desktop app, and service behaviour across login and reboot.
+Verified: everything in this README on one machine over loopback, the reliability matrix across two physical machines over the internet (7 of 8, the open row is explained under Numbers), the suite on both CI runners, and the catalog validator's checks on a clean clone. Also verified inside a real Hermes install (v0.23.0) from the CLI and from gateway sessions, with two paired devices and one of them reached through a public tunnel: choosing a device, file tools, shell state across turns, a 1 MB output, a timeout, the deny list, core's dangerous-command block, fail-closed with the device agent stopped, re-pairing under the same name, a revoke during a live command and a gateway restart during a live command. Not yet verified: the pane inside the running Desktop app, and service behaviour across login and reboot.
 
 ## License
 

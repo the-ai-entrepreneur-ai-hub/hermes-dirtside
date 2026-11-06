@@ -13,7 +13,6 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .model import PAIR_TTL_S, Device, Pending, RequestRow, RequestState
-
 _COLUMNS = "id,name,pubkey,os,arch,home,temp_dir,agent_version"
 _ACTIVE = "revoked_at IS NULL AND pubkey IS NOT NULL AND expires_at IS NULL"
 _TARGETS = "CREATE TABLE IF NOT EXISTS targets (session_key TEXT PRIMARY KEY, target TEXT NOT NULL, set_at INTEGER NOT NULL)"
@@ -33,22 +32,22 @@ CREATE TABLE IF NOT EXISTS requests (
 
 def _device(row):
     return Device(*(row[k] for k in _COLUMNS.split(","))) if row else None
-
 def _hash(token):
     return hashlib.sha256(token.encode()).digest()
-
 class Registry:
     def __init__(self, path):
         self.path, self._local = Path(path), threading.local()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection().executescript(_SCHEMA)
-        with self._tx() as conn:
-            if any(row["name"] == "device_id" for row in conn.execute("PRAGMA table_info(targets)")):
-                conn.execute("ALTER TABLE targets RENAME TO old_targets")
-                conn.execute(_TARGETS)
-                conn.execute("INSERT INTO targets SELECT session_key,device_id,set_at FROM old_targets")
-                conn.execute("DROP TABLE old_targets")
-        self.relay_seed = self._seed()
+        with self._seed() as self.relay_seed:
+            self._connection().executescript(_SCHEMA)
+            with self._tx() as conn:
+                if any(row["name"] == "device_id" for row in conn.execute("PRAGMA table_info(targets)")):
+                    conn.execute("ALTER TABLE targets RENAME TO old_targets")
+                    conn.execute(_TARGETS)
+                    conn.execute("INSERT INTO targets SELECT session_key,device_id,set_at FROM old_targets")
+                    conn.execute("DROP TABLE old_targets")
+        with self._seed("local.secret", 64) as secret:
+            self.local_secret = secret.decode("ascii")
 
     def _connection(self):
         if not hasattr(self._local, "connection"):
@@ -65,8 +64,9 @@ class Registry:
             conn.execute("BEGIN IMMEDIATE")
             yield conn
 
-    def _seed(self):
-        fd = os.open(self.path.with_name("relay.key"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    @contextmanager
+    def _seed(self, name="relay.key", size=32):
+        fd = os.open(self.path.with_name(name), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "r+b", buffering=0) as stream:
             fcntl.flock(stream, fcntl.LOCK_EX)
             info = os.fstat(stream.fileno())
@@ -75,12 +75,12 @@ class Registry:
             os.fchmod(stream.fileno(), 0o600)
             seed = stream.read()
             if not seed:
-                seed = secrets.token_bytes(32)
+                seed = secrets.token_bytes(32) if size == 32 else secrets.token_hex(32).encode("ascii")
                 stream.write(seed)
                 os.fsync(stream.fileno())
-            if len(seed) != 32:
-                raise ValueError("relay key must contain a 32 byte seed")
-            return seed
+            if len(seed) != size or (size == 64 and not re.fullmatch(b"[0-9a-f]{64}", seed)):
+                raise ValueError(f"{name} must contain a {size} byte seed")
+            yield seed
 
     def mint(self, name, now):
         if not re.fullmatch(r"[a-z0-9-]{1,32}", name):

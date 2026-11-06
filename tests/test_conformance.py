@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 
 import pytest
 from network_support import until
@@ -16,6 +17,16 @@ from tools.process_registry import ProcessRegistry
 from dirtside.environment import DirtsideEnvironment
 from test_environment import device_setup
 from test_executor import alive, await_file
+from client_support import client_relay
+
+
+@pytest.fixture(params=["in-process", "client"])
+def remote_environment(request):
+    with ExitStack() as stack:
+        def create(relay, device):
+            transport = stack.enter_context(client_relay(relay)) if request.param == "client" else relay
+            return DirtsideEnvironment(transport, device, "chat", "default", "~", 120)
+        yield create
 
 
 def compare(local, remote, command, **kwargs):
@@ -37,13 +48,13 @@ def compare(local, remote, command, **kwargs):
     ["seq 1 160000"],
     ["cd does-not-exist"],
 ])
-def test_conformance(tmp_path, commands):
+def test_conformance(tmp_path, commands, remote_environment):
     (tmp_path / "cwd with spaces").mkdir()
     relay, device, fake = device_setup(tmp_path)
     local = LocalEnvironment(cwd=str(tmp_path), timeout=120)
     try:
         with fake:
-            remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
+            remote = remote_environment(relay, device)
             for command in commands:
                 compare(local, remote, command)
             remote.cleanup()
@@ -51,26 +62,26 @@ def test_conformance(tmp_path, commands):
         local.cleanup()
 
 
-def test_conformance_random_bytes(tmp_path):
+def test_conformance_random_bytes(tmp_path, remote_environment):
     source = tmp_path / "random.bin"
     source.write_bytes(os.urandom(100000))
     relay, device, fake = device_setup(tmp_path)
     local = LocalEnvironment(cwd=str(tmp_path), timeout=120)
     try:
         with fake:
-            remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
+            remote = remote_environment(relay, device)
             result = compare(local, remote, f"head -c 100000 {shlex.quote(str(source))} | base64")
             assert len(result["output"]) > 133000
     finally:
         local.cleanup()
 
 
-def test_conformance_timeout(tmp_path):
+def test_conformance_timeout(tmp_path, remote_environment):
     relay, device, fake = device_setup(tmp_path)
     local = LocalEnvironment(cwd=str(tmp_path), timeout=120)
     try:
         with fake:
-            remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
+            remote = remote_environment(relay, device)
             result = compare(local, remote, "printf partial; sleep 5", timeout=1)
             assert result["returncode"] == 124 and "partial" in result["output"]
             assert result["hermes_timed_out"] is True
@@ -78,12 +89,12 @@ def test_conformance_timeout(tmp_path):
         local.cleanup()
 
 
-def test_conformance_missing_cwd(tmp_path):
+def test_conformance_missing_cwd(tmp_path, remote_environment):
     relay, device, fake = device_setup(tmp_path)
     local = LocalEnvironment(cwd=str(tmp_path), timeout=120)
     try:
         with fake:
-            remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
+            remote = remote_environment(relay, device)
             result = compare(local, remote, "pwd", cwd=str(tmp_path / "does-not-exist"))
             assert result["returncode"] == 126
             assert "does-not-exist" in result["output"]
@@ -92,12 +103,12 @@ def test_conformance_missing_cwd(tmp_path):
         local.cleanup()
 
 
-def test_conformance_file_operations(tmp_path):
+def test_conformance_file_operations(tmp_path, remote_environment):
     relay, device, fake = device_setup(tmp_path)
     local = LocalEnvironment(cwd=str(tmp_path), timeout=120)
     try:
         with fake:
-            remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
+            remote = remote_environment(relay, device)
             payload = "alpha\n" + "abcdef地\n" * 100000 + "tail"
             path = str(tmp_path / "document.txt")
             results = []
@@ -120,12 +131,12 @@ def test_conformance_file_operations(tmp_path):
         local.cleanup()
 
 
-def test_conformance_grandchild(tmp_path):
+def test_conformance_grandchild(tmp_path, remote_environment):
     relay, device, fake = device_setup(tmp_path)
     local = LocalEnvironment(cwd=str(tmp_path), timeout=120)
     try:
         with fake:
-            remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
+            remote = remote_environment(relay, device)
             for env in (local, remote):
                 start = time.monotonic()
                 result = env.execute("sleep 30 & echo $! > child.pid")
@@ -141,13 +152,13 @@ def test_conformance_grandchild(tmp_path):
         local.cleanup()
 
 
-def test_conformance_stop(tmp_path):
+def test_conformance_stop(tmp_path, remote_environment):
     relay, device, fake = device_setup(tmp_path)
     local = LocalEnvironment(cwd=str(tmp_path), timeout=120)
     results = []
     try:
         with fake:
-            remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
+            remote = remote_environment(relay, device)
             for index, env in enumerate((local, remote)):
                 ids = []
 
@@ -212,12 +223,12 @@ def background(env, root):
         second.unlink(missing_ok=True)
 
 
-def test_spawn_via_env(tmp_path):
+def test_spawn_via_env(tmp_path, remote_environment):
     relay, device, fake = device_setup(tmp_path)
     local = LocalEnvironment(cwd=str(tmp_path), timeout=120)
     try:
         with fake:
-            remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
+            remote = remote_environment(relay, device)
             assert background(local, tmp_path) == background(remote, tmp_path)
     finally:
         local.cleanup()

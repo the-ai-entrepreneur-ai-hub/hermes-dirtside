@@ -13,19 +13,23 @@ from starlette.responses import JSONResponse
 
 
 class Runtime:
-    def __init__(self, port):
+    def __init__(self, port, worker=False):
         from hermes_cli.plugins import get_plugin_manager
         self.manager = get_plugin_manager()
         self.manager.discover_and_load()
         from hermes_cli.dashboard_auth import get_provider
         self.auth = get_provider("dirtside")
         assert self.auth is not None, self.manager.list_plugins()
+        self.worker, self.fake = worker, None
+        self.active, self.lock, self.prompt_agents = {}, threading.Lock(), {}
+        if worker:
+            self.port = 0
+            return
         from hermes_cli import web_server
         self.web = web_server
         web_server._configure_auth_gate("127.0.0.1", False, None, None)
         assert web_server.app.state.auth_required
         self.blocked = threading.Event()
-        self.active, self.lock, self.prompt_agents = {}, threading.Lock(), {}
         self.listener = socket.socket()
         self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listener.bind(("127.0.0.1", port))
@@ -58,7 +62,36 @@ class Runtime:
                     path=str(loaded.manifest.path), module=type(provider).__module__,
                     shared=provider._relay is self.auth.relay and provider._registry is self.auth.registry,
                     auth=type(self.auth).__name__, cli=sorted(self.manager._cli_commands),
-                    backend=_get_env_config()["env_type"], gate=self.web.app.state.auth_required, port=self.port)
+                    backend=_get_env_config()["env_type"], gate=not self.worker and self.web.app.state.auth_required,
+                    port=self.port, registry=str(self.auth.registry.path), owner_pid=self.auth.relay._owner_pid,
+                    router_mounted="hermes_dashboard_plugin_dirtside" in sys.modules)
+
+    def fake_device(self, args):
+        import base64
+        import httpx
+        from fake_device import FakeDevice
+        from nacl.signing import SigningKey
+        import time
+        key = SigningKey.generate()
+        registry, wire = self.auth.registry, self.auth.protocol
+        name, root = args.get("name", "fake"), args["root"]
+        code = registry.mint(name, int(time.time()))
+        hello = dict(pubkey=base64.b64encode(bytes(key.verify_key)).decode(), name=name,
+                     os=sys.platform, arch="", home=root, temp_dir=root, agent_version="0.1.0")
+        url = f"http://127.0.0.1:{self.port}/api/plugins/dirtside/device/"
+        response = httpx.post(url + "pair", headers={"Authorization": "Bearer " + code},
+                              json=wire.sign(key, "hello", name, hello), trust_env=False)
+        response.raise_for_status()
+        device, token = registry.active_device(name), response.json()["token"]
+        try:
+            httpx.post(url + "poll", headers={"Authorization": "Bearer " + token},
+                       json=wire.sign(key, "poll", device.id, {}), timeout=0.2, trust_env=False)
+        except httpx.ReadTimeout:
+            pass  # Exercise a real device poll, then release its parked request.
+        assert self.auth.relay.is_online(device.id)
+        self.fake = FakeDevice(self.auth.relay, device, token, key, result_parser=wire.parse_result)
+        self.fake.__enter__()
+        return {"device_id": device.id, "name": name}
 
     def target(self, args):
         device = self.auth.registry.active_device(args["name"]) if args["name"] != "server" else None
@@ -148,7 +181,7 @@ class Runtime:
         try:
             handlers = {name: getattr(self, name) for name in (
                 "info", "target", "state", "turn_end", "reap", "terminal", "file",
-                "queue", "cancel", "interrupt", "network", "slash", "prompt")}
+                "queue", "cancel", "interrupt", "network", "slash", "prompt", "fake_device")}
             return handlers[message["method"]](args)
         finally:
             set_interrupt(False)
@@ -158,6 +191,12 @@ class Runtime:
 
     def close(self):
         from tools.terminal_tool_lifecycle import cleanup_all_environments
+        if self.worker:
+            cleanup_all_environments()
+            self.manager.unload()
+            return
+        if self.fake:
+            self.fake.__exit__(None, None, None)
         for device in self.auth.registry.devices():
             self.auth.relay.revoke(device.id)
         self.server.should_exit = True
@@ -177,7 +216,7 @@ def main():
         with lock:
             output.write(json.dumps(value) + "\n")
             output.flush()
-    runtime = Runtime(int(sys.argv[1]))
+    runtime = Runtime(int(sys.argv[1]), worker="--worker" in sys.argv)
     emit({"id": "ready", "result": runtime.info({})})
     def run(message):
         try:

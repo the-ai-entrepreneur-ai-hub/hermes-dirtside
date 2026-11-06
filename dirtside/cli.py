@@ -126,6 +126,20 @@ def status(cfg):
         if "id" in event:
             print(f"{event['event']} {event['id']} exit={event.get('exit_code', '-')}")
 
+def failure_detail(exc, code):
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return type(exc).__name__
+    try:
+        detail = exc.response.json().get("detail")
+    except (ValueError, AttributeError):
+        detail = None
+    if not isinstance(detail, str):
+        detail = exc.response.reason_phrase
+    detail = "".join(c for c in detail if c.isprintable())
+    if code:
+        detail = detail.replace(code, "[redacted]")
+    return f"HTTP {exc.response.status_code}: {detail[:512]}"
+
 def handle(args):
     try:
         if args.dirtside_action == "pair":
@@ -137,5 +151,9 @@ def handle(args):
     except (OSError, ValueError, KeyError, TypeError, httpx.HTTPError, subprocess.CalledProcessError) as exc:
         message = ("Pairing failed. Check the URL and mint a fresh pairing code." if args.dirtside_action == "pair" else "Service installation failed."
                    if args.dirtside_action == "install-service" else "Cannot load device configuration. Pair this device first.")
-        print(f"Dirtside: {message} ({type(exc).__name__})")
+        print(f"Dirtside: {message} ({failure_detail(exc, getattr(args, 'code', ''))})")
+        if args.dirtside_action == "pair" and "Invalid Host header" in failure_detail(exc, args.code):
+            url = gateway_url(args.gateway_url)
+            print("The gateway does not trust this hostname. On the gateway run: "
+                  f"hermes config set dashboard.public_url {url} and restart it.")
         return 1

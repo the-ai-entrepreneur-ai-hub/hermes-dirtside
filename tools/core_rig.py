@@ -66,14 +66,15 @@ def stop_process(proc):
 
 
 class Core:
-    def __init__(self, home, backend="dirtside", user_home=None, port=0, env=None, public_url=None):
+    def __init__(self, home, backend="dirtside", user_home=None, port=0, env=None, public_url=None, worker=False):
         self.home = home
         self.env = env or install(home, backend, user_home, public_url=public_url)
         self.token = self.env["HERMES_DASHBOARD_SESSION_TOKEN"]
         self.log = (home / "core.log").open("a")
         ready = Future()
         self.lock, self.pending, self.serial = threading.Lock(), {"ready": ready}, 0
-        self.proc = subprocess.Popen([sys.executable, str(ROOT / "tools" / "core_runtime.py"), str(port)],
+        command = [sys.executable, str(ROOT / "tools" / "core_runtime.py"), str(port)]
+        self.proc = subprocess.Popen(command + (["--worker"] if worker else []),
                                      cwd=home, env=self.env, stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=self.log, text=True)
         self.reader = threading.Thread(target=self._read, daemon=True)

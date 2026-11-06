@@ -1,12 +1,11 @@
 """Provider registration for the in-process plugin."""
-import time
-
 from plugins.plugin_storage import plugin_data_dir
 
 
 def register(ctx):
     from .auth import DirtsideDeviceAuth, register_device_routes
     from .cli import handle, setup_parser
+    from .client import Client
     from .commands import Commands
     from .prompt import TargetPrompt
     from .provider import DirtsideProvider
@@ -14,8 +13,8 @@ def register(ctx):
     from .relay import Relay
 
     registry = Registry(plugin_data_dir("dirtside") / "data.db")
-    registry.mark_stale_lost(int(time.time()))
     relay = Relay(registry)
+    relay._client = Client(relay)
     default = ctx.get_config("default_target", "server")
     ctx.register_terminal_environment_provider(
         DirtsideProvider(registry, relay, default))

@@ -1,4 +1,4 @@
-"""Signed in-process loopback measurements; excludes HTTP and network travel."""
+"""Signed loopback measurements, with separate non-gating local-client latency."""
 import argparse
 import math
 import os
@@ -85,7 +85,7 @@ def main():
         for name in ("HOME", "HERMES_HOME", "HERMES_RUNTIME_DIR", "TMPDIR", "TERMINAL_TEMP_DIR"):
             os.environ[name] = temporary
         print("Signed in-process loopback; 50 paired pwd samples; 10,000,000 verified bytes; excludes HTTP/LAN.")
-        return report(measure(Path(temporary)), report_only=args.report_only)
-
+        from bench_client import finish
+        return finish(Path(temporary), measure(Path(temporary)), args.report_only)
 if __name__ == "__main__":
     raise SystemExit(main())

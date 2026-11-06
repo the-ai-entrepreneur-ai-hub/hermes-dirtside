@@ -25,10 +25,13 @@ import time
 import traceback
 
 from core_rig import ROOT, Rig, stop_process
-from matrix_cases import ROWS
 
 
-def run_rows(root, evidence, rows=ROWS, rig_factory=Rig, **options):
+def run_rows(root, evidence, rows=None, rig_factory=Rig, **options):
+    if rows is None:
+        sys.path[:0] = [str(ROOT)]
+        from matrix_cases import ROWS
+        rows = ROWS
     evidence.mkdir(parents=True, exist_ok=True)
     passed = 0
     for name, check in rows:

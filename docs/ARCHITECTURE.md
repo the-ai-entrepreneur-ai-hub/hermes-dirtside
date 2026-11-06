@@ -95,24 +95,26 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | Module | Owns | Depends on | Budget |
 |---|---|---|---|
 | `dirtside/model.py` | the types and constants above | stdlib | 110 |
-| `dirtside/protocol.py` | `Envelope`, canonical JSON, `sign`, `verify`, `ReplayGuard`, one `parse_*` per message kind, `PROTOCOL_VERSION = 1` | model, nacl | 140 |
-| `dirtside/registry.py` | the SQLite boundary: devices (pending, paired, revoked), targets, request log | model, sqlite3 | 180 |
-| `dirtside/relay.py` | all live state under one `Condition`: handles, `last_seen`, cancels; `submit`, `next`, `feed`, `close`, `kill`, `touch`, `is_online`, `revoke` | model, registry, threading | 200 |
-| `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle` | relay, `tools.environments.base` | 110 |
-| `dirtside/provider.py` | `DirtsideProvider`, `resolve_target()`, `session_identity()` | relay, registry, `agent.terminal_env_provider`, `tools.environments.local`, `gateway.session_context` | 90 |
-| `dirtside/auth.py` | `DirtsideDeviceAuth(DashboardAuthProvider)`, token route registration | registry, `hermes_cli.dashboard_auth` | 60 |
+| `dirtside/protocol.py` | `Envelope`, canonical JSON, `sign`, `verify`, `ReplayGuard`, one `parse_*` per message kind, `PROTOCOL_VERSION = 1` | model, nacl | 147 |
+| `dirtside/registry.py` | the SQLite boundary, relay key and private local secret | model, sqlite3 | 184 |
+| `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), threading | 231 |
+| `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 116 |
+| `dirtside/client.py` | process-verified owner discovery, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 173 |
+| `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, FastAPI, anyio | 136 |
+| `dirtside/provider.py` | dispatch-time conversation context, per-conversation target delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, `tools.environments.local`, `gateway.session_context` | 92 |
+| `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 60 |
 | `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`) | 110 |
 | `dirtside/prompt.py` | `current_target_section()` | registry, provider (`session_identity`) | 25 |
-| `dirtside/cli.py` | `hermes dirtside serve`, `pair`, `status`, `install-service` | agent/*, argparse | 140 |
+| `dirtside/cli.py` | `hermes dirtside serve`, `pair`, `status`, `install-service`, bounded private refusal details and public-host hint | agent/*, argparse, httpx | 159 |
 | `dirtside/agent/config.py` | `DeviceConfig` read and atomic write (`device.json`, 0600) | model, protocol | 90 |
 | `dirtside/agent/policy.py` | `evaluate(command, policy) -> Decision`, pure | model | 40 |
 | `dirtside/agent/executor.py` | `run(request, policy, send) -> Outcome`, process groups, chunking, cancel | model, subprocess | 110 |
 | `dirtside/agent/loop.py` | poll, backoff, dispatch, bounded parallelism, retrying posts | config, policy, executor, protocol, httpx | 150 |
-| `dashboard/plugin_api.py` | routes: resolve bearer, verify, parse, one relay or registry call | protocol, relay, registry | 140 |
+| `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 178 |
 | `desktop/plugin.js` | pane, chip | `@hermes/plugin-sdk` | 280 |
 | `__init__.py` | `register(ctx)` wiring | gateway modules | 50 |
-| `tools/bench.py` | p50/p95 added latency for `pwd`, throughput, cancel time, against the fake device or a real gateway; exits non-zero when an A15.1 target is missed | httpx, statistics | 90 |
-| `tools/fake_device.py` | an in-process device for tests | agent/executor, relay | 80 |
+| `tools/bench.py` | in-process metrics and non-gating client latency rows; existing thresholds remain, with report-only in CI | bench_client, statistics | 91 |
+| `tools/fake_device.py` | a signed fake device, including the independently loaded core owner's result parser | agent/executor, relay | 82 |
 | `tools/check_sizes.py` | the size check | stdlib | 30 |
 
 Core imports, in full, and where each is allowed: `agent.terminal_env_provider.TerminalEnvironmentProvider` (provider), `tools.environments.base.BaseEnvironment` and `EnvironmentConnectionError` (environment, provider), `tools.environments.local.LocalEnvironment` (provider), `gateway.session_context.get_session_env` (provider), `plugins.plugin_storage.plugin_data_dir` (`__init__`), `hermes_cli.dashboard_auth.base.DashboardAuthProvider` and `TokenPrincipal` (auth), `hermes_cli.dashboard_auth.token_auth.register_token_route` (auth). Nothing else from Hermes is imported, and nothing from Hermes is ever monkeypatched.
@@ -157,7 +159,7 @@ class Registry:
 
 ## A5. Relay (all live state, one lock)
 
-The gateway is one process (`plugins.isolation: in_process` is required for any terminal provider), so a lock in that process is the strongest and simplest arbiter of request state. The relay holds `handles: dict[RequestId, RemoteProcessHandle]`, `last_seen: dict[DeviceId, float]` `cancels: dict[DeviceId, set[RequestId]]` and `tails: dict[RequestId, bytearray]` (the last `PANE_TAIL_BYTES` of each live request, for the pane) under one `threading.Condition`. Nothing else in the gateway holds request state.
+The relay has one owner, the process receiving device traffic, not every process mounting the plugin API. `plugins.isolation: in_process` loads a terminal provider inside each Hermes process, not inside one shared process. Workers and secondary servers reach the owner through A16.5's local client. The owner's relay holds `handles: dict[RequestId, RemoteProcessHandle]`, `last_seen: dict[DeviceId, float]` `cancels: dict[DeviceId, set[RequestId]]` and `tails: dict[RequestId, bytearray]` (the last `PANE_TAIL_BYTES` of each live request, for the pane) under one `threading.Condition`. Nothing in a worker decides device liveness or request outcomes.
 
 ```python
 class Relay:
@@ -320,6 +322,10 @@ Device routes, fixed paths, bearer plus signed body: `POST /api/plugins/dirtside
 
 There are no plugin events. The pane polls `GET /devices` and `GET /requests` every 2 seconds while visible and renders the difference. Online state comes from the gateway on every poll, so the pane never needs a previous state.
 
+Local routes use the same `/api/plugins/dirtside` prefix: `POST /local/exec`, `GET /local/stream?id=<id>`, `POST /local/kill?id=<id>`, `GET /local/devices`, `GET /local/requests`. `POST /local/devices` forwards revocation to the owner's live relay. All require a loopback peer and the plugin's local bearer secret, even with the dashboard gate off. Bodies are capped at 8 MiB and parsed exactly. These five paths are token-registered once at startup; stream and kill validate the query id, so execution adds no exemptions. No pane route becomes token-exempt. A secondary server forwards local state reads and revoke; its exec, stream and kill return 409 rather than consult an empty local queue. The local exec parser is the one longer handler, because it is a trust boundary.
+
+Both device lists return exactly `id`, `name`, `online`, `os`, `home`, `last_seen`. Workers and secondary panes use the same connection seam; the pane keeps `/devices` and its dashboard session gate. Its `/requests` uses `/local/requests` for owner state and byte-preserving base64 tails on the private hop, then returns the unchanged pane JSON.
+
 ## A12. Slash commands, CLI, prompt section
 
 `/dirtside`, `/dirtside use <name|server>`, `/dirtside devices`, `/dirtside pair <name>`, `/dirtside revoke <name>`. Handlers are `(raw_args: str) -> str` and resolve the conversation through `session_identity()`. `/dirtside use` with no argument calls `ctx.ask_choice` with the online devices plus `server`. `/dirtside revoke` calls `relay.revoke` so a running command on that device is cancelled immediately. Targets persist (`targets` table); live handles do not.
@@ -416,7 +422,7 @@ Precedent for the transport, since the choice is the main thing a reviewer will 
 
 ### A15.3 Accuracy: the conformance battery
 
-The test that others will not write. Every case runs through `LocalEnvironment` and through `DirtsideEnvironment` with `tools/fake_device.py` in the same process, and the two results must be equal in `output`, `returncode` and the environment's `cwd` afterwards.
+The test that others will not write. Every case runs twice, once with direct relay access and once through the mounted owner's loopback client, and compares against `LocalEnvironment`. Output, return code and the environment's cwd must agree. The signed fake device covers shell and file rows; the real subprocess device covers loss, retry and restart rows in both modes. A separate test runs core's terminal tool in the test process against a subprocess owner with a fake device, so sharing the router's process cannot hide the defect.
 
 | Case | What it pins |
 |---|---|
@@ -514,6 +520,30 @@ The active `dirtside-day5-linux` change fixes deadline ownership and test assump
 - A combined timeout and output cap retains the timeout reason first and the cap notice after `; `. The environment renders the cap notice separately. Ordinary exit 124, loss, refusal and cancellation remain distinct.
 - Signal tests keep bash and a child alive with a compound command. Pool coverage uses acknowledged dispatch and whichever workers actually start, with ten-second readiness deadlines and the existing five-second cessation bounds. Cwd tests use quoted fixture paths; flush-clock boundaries and partial-output readiness do not depend on fixed sleeps.
 
+### A16.5 Day-7 owner and client
+
+Verified against core 84a0301 and the owner's live transcript from v0.23.0: `gateway/run_api.py` mounts the dashboard in the gateway process through `GatewayDashboardMount`. CLI conversation agents are built client-side, while `tui_gateway/host_supervisor.py` spawns `tui_gateway.compute_host` for TUI, Desktop and web chat. `slash_worker_client.py` spawns a separate slash worker. Each loads its own plugin instance. Messaging-platform turns built by `gateway/session_execution.py` remain in the gateway. `PluginContext` exposes no way for another process to invoke the owner's relay directly.
+
+Any number of processes may import and mount `dashboard/plugin_api.py`. Only handling `/device/pair`, `/device/poll`, `/device/chunk` or `/device/result` records ownership. Pane, pairing-code, session, history, revoke and local routes never do. The devices' gateway can differ from the unmanaged gateway auto-started by `hermes chat`; that second server remains a client until it receives device traffic itself. After a restart, devices are truthfully offline everywhere until the first device poll arrives.
+
+The device-route boundary atomically publishes mode-0600 `owner.json` for the first device request and a changed pid or origin. Fields are `origin`, `pid`, `started`. Uvicorn's ASGI server tuple names the accepted socket's interface, not the wildcard listener, so only its port is used. Discovery always publishes 127.0.0.1, using bracketed ::1 only when an IPv6 connection cannot also reach IPv4 loopback. Real IPv4 wildcard, IPv6 dual-stack and IPv6-only listeners are checked. Host and forwarded headers never affect discovery. A specifically bound non-loopback interface that cannot accept loopback is not an IPC destination.
+
+Registry initialization mints `local.secret`, 32 random bytes encoded as 64 lowercase hex characters, once next to `relay.key`. Both use the existing no-follow, private regular-file and flock boundary. The relay-key lock also serializes initial database setup, preventing simultaneous workers from racing the initial WAL transition. Only the first device request in a new owner performs stale-history cleanup; worker or secondary-router startup never does.
+
+The local routes in A11 recognize the secret through the existing token provider, then independently parse the peer IP, unwrap IPv4-mapped addresses, require loopback and compare the bearer in constant time. They do not trust forwarded headers, cookies or a device credential. The client allows only literal loopback HTTP origins, disables environment proxies and redirects, and never retries ambiguous execution. Before each request, including captured stream and kill destinations, it verifies pid liveness and compares the recorded start epoch with system `ps` output. There is no stale pid-only cache or new dependency. A reused pid with a different start epoch is rejected before the stable secret is sent.
+
+No owner file, a dead pid or a mismatched start epoch means offline for devices, commands, prompts and panes; selected-device execution preserves the existing offline reason. A recorded live owner's connection/read failure or malformed stream uses "Dirtside owner is not running; start the Hermes gateway or dashboard". HTTP failures instead use "Dirtside owner answered <status>: <detail>", with at most 200 printable detail characters. Bare status maps connection errors to text; use resolves the state label before writing its target.
+
+`Relay.connection()` selects direct access only after device traffic in a registered owner, and `dirtside/client.py` everywhere else, including a second serving process. Domain-only test relays remain direct unless explicitly given a client. Environment dispatch, commands, prompts, pane devices, live history/tails and revocation share this seam. Workers query owner memory rather than write SQLite heartbeats. A forwarded revoke cancels a silent owner request immediately.
+
+`ConversationEnvironment._current()` reads the session key and cron flag at each dispatch, not from cached creation context. Only a context naming no session uses the creation key as fallback. Delegates and shell snapshots are keyed by conversation and target, so the same cached object can serve another conversation without borrowing its predecessor's target, shell state or audit identity. Core binds turn-local ContextVars through `gateway/run.py:_set_session_env` and `tui_gateway/server.py:_set_session_context`; `tui_gateway/prompt_turn.py` enters that context for each turn. The slash worker supplies its own process key. The existing `get_session_env` import reads those bindings.
+
+Device pairing remains distinct from local IPC: an authenticated non-loopback HTTPS peer can pair with either dashboard gate mode. The device CLI prints HTTP status and at most 512 printable refusal characters, redacts the submitted code and falls back to the status phrase for non-string or non-JSON bodies. The user's public-tunnel refusal was core's "Invalid Host header" check: configure `dashboard.public_url` to the public HTTPS URL on the gateway and restart it; that refusal also prints the same fix in the CLI.
+
+The owner retains an exec handle until stream attachment, including a short result that finishes first. A `FEED_BLOCK_S` attachment timer abandons an unclaimed stream and closes its descriptor. Streaming reads at most `CHUNK_BYTES` at a time. Each raw block has a four-byte big-endian length; zero introduces one trailing JSON outcome line. Arbitrary output cannot impersonate that line, and no final output line must be buffered. Disconnect closes the live request as LOST with "gateway stopped reading output". The client uses the same bounded pipe writer and the same `RemoteProcessHandle`, mirroring output and owner outcomes. An owner-confirmed cancellation completes that handle immediately even if its output pipe is full; the bounded writer releases its duplicate descriptor. The owner detects device loss while reading the stream. Core still owns requested timeout rendering and cancellation, and the device's requested-timeout-plus-one policy-capped deadline remains the backstop from A16.4.
+
+Targets, credentials and request history stay in SQLite. Device polling, signing, live queues, output tails, state transitions and deadline/loss decisions stay in the owner. No core patch, daemon, new dependency or device wire-version change is needed. The conformance battery covers both paths without changed assertions. `tools/bench.py` retains its in-process checks and appends non-gating client p50/p95 pwd latency. The remote matrix worker now imports its case list after path setup, so its documented command does not require PYTHONPATH.
+
 ---
 
 # Part B. Explanation
@@ -532,7 +562,7 @@ Core freezes `TERMINAL_ENV` into each session's policy in `gateway/session_polic
 
 ## B4. Why the relay owns live state and the registry is a log
 
-The first draft kept request state in SQLite behind a compare-and-set and ran a sweeper thread. The review found the hole: cancel moved the state but nobody closed the pipe, so every timed-out command would have hung its tool thread. The gateway is one process, so one lock is a stronger arbiter than a database row, and it can close the pipe inside the same critical section. The registry now records what happened for the pane and for audit; it never decides anything. The sweeper went with it, because the thread already waiting on a handle can notice the device is gone.
+The first draft kept request state in SQLite behind a compare-and-set and ran a sweeper thread. The review found the hole: cancel moved the state but nobody closed the pipe, so every timed-out command would have hung its tool thread. The owner is one process, so one lock is a stronger arbiter than a database row, and it can close the pipe inside the same critical section. The registry now records what happened for the pane and for audit; it never decides anything. The sweeper went with it, because the thread already waiting on a handle can notice the device is gone.
 
 ## B5. Why threads and one Condition, with a dedicated pool for polls
 
@@ -580,3 +610,7 @@ Three facts settle on day 0 before any module above is written: whether `registe
 ## B14. Why the speed work is in the protocol shape, not in the language
 
 Everything Python does on the request path adds up to under 5 ms per small message: the SQLite write, the signature, the JSON, the pipe. A round trip on the internet is 20 to 100 ms, a shell spawn is 6 ms, and core's drain tail is 300 ms whenever a grandchild holds the pipe. Rewriting the plugin in Go or C would remove the few milliseconds and keep the rest, and would cost a second implementation of the protocol and a binary per platform. The rules in A15 remove whole round trips (R1, R2), remove a data loss (R4), keep grandchildren alive (R10), and make the slow parts visible (R8); that is where the time was. The one place CPU does bound the design is bulk output, at about 10 to 16 MB/s per device (R6), and the fix there is a protocol change, not a language change (A15.4). The conformance battery is the other half of the argument: speed that changes an exit code or drops a byte is a bug with a good benchmark.
+
+## B15. Why the owner keeps the relay and the clients stay thin
+
+Moving queues and cancellation into SQLite would not share pipes, wakeups or output readers. It would add competing writers, terminal-state arbitration and another process protocol while still needing IPC for bytes. A new daemon would add deployment and service ownership that Hermes already supplies. Any number of servers may mount the plugin; only the one receiving device traffic owns its relay. All others, including the unmanaged gateway auto-started by `hermes chat`, use the client, so importing or viewing another server cannot steal ownership. Loopback HTTP is the missing seam, not a second execution engine. Clients submit once, copy bytes into core's existing pipe and forward kill. They do not decide online state, run a timeout clock or reproduce the relay's state machine. A local hop costs latency; the benchmark reports it rather than hiding it inside the old in-process numbers.

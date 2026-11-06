@@ -36,15 +36,19 @@ def until(predicate, timeout=10):
 
 
 @contextmanager
-def listening(app):
-    listener = socket.socket()
-    listener.bind(("127.0.0.1", 0))
+def listening(app, host="127.0.0.1", ipv6_only=None, connect_host=None):
+    listener = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET)
+    if ipv6_only is not None:
+        listener.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, int(ipv6_only))
+    listener.bind((host, 0))
     server = uvicorn.Server(uvicorn.Config(app, log_level="error", lifespan="off", timeout_graceful_shutdown=1))
     thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
     thread.start()
     try:
         until(lambda: server.started)
-        yield f"http://127.0.0.1:{listener.getsockname()[1]}"
+        connect_host = connect_host or host
+        connect_host = f"[{connect_host}]" if ":" in connect_host else connect_host
+        yield f"http://{connect_host}:{listener.getsockname()[1]}"
     finally:
         bound = getattr(getattr(app, "state", None), "dirtside_relay", None)
         if bound is not None:

@@ -175,7 +175,7 @@ def test_cleanup_offline_and_submission_failures_are_harmless(tmp_path, monkeypa
 def test_unknown_attribute_probes_do_not_read_registry(tmp_path, monkeypatch):
     relay, _, fake = device_setup(tmp_path)
     with fake:
-        env = ConversationEnvironment(DirtsideProvider(relay.registry, relay), "chat", False,
+        env = ConversationEnvironment(DirtsideProvider(relay.registry, relay), "chat",
                                       str(tmp_path), 120, "default")
         def unexpected(*args):
             raise AssertionError("plain attribute probe read the registry")
@@ -200,7 +200,7 @@ def test_repair_keeps_chosen_identity_and_executes_without_reselecting(tmp_path)
     reg.set_target("chosen-chat", device.id)
     provider = DirtsideProvider(reg, relay)
     with fake:
-        env = ConversationEnvironment(provider, "chosen-chat", False, "~", 120, "default")
+        env = ConversationEnvironment(provider, "chosen-chat", "~", 120, "default")
         assert env.execute("printf before")["output"] == "before"
     new_device, new_token, new_key = paired(reg, tmp_path, now=int(time.time()))
     assert new_device.id == device.id and reg.target("chosen-chat") == device.id

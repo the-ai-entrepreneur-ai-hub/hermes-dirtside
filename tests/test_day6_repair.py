@@ -19,7 +19,7 @@ def test_repair_after_revoke_restores_the_existing_conversation_choice(tmp_path)
         device, old_token, old_key = paired(reg, tmp_path, now=int(time.time()))
         reg.set_target("chosen-chat", device.id)
         with FakeDevice(relay, device, old_token, old_key):
-            env = ConversationEnvironment(DirtsideProvider(reg, relay), "chosen-chat", False,
+            env = ConversationEnvironment(DirtsideProvider(reg, relay), "chosen-chat",
                                           "~", 120, "default")
             assert env.execute("printf before")["output"] == "before"
         reg.revoke(device.name, int(time.time()))

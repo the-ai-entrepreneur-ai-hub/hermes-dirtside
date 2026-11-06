@@ -9,9 +9,9 @@ from dirtside.agent.executor import run
 from dirtside.model import MAX_OUTPUT_BYTES, Policy
 from dirtside.protocol import ProtocolError, ReplayGuard, WireExec, parse_chunk, parse_poll, parse_result, sign, verify
 class FakeDevice:
-    def __init__(self, relay, device, token, key, policy=None):
+    def __init__(self, relay, device, token, key, policy=None, result_parser=parse_result):
         self.relay, self.device, self.token, self.key = relay, device, token, key
-        self.policy = policy or Policy((), 900, MAX_OUTPUT_BYTES, 4)
+        self.policy, self.parse_result = policy or Policy((), 900, MAX_OUTPUT_BYTES, 4), result_parser
         self.relay_key = SigningKey(relay.registry.relay_seed)
         self.guard, self.stop, self.lock = ReplayGuard(), threading.Event(), threading.Lock()
         self.running, self.futures, self.posts, self.errors = {}, [], [], []
@@ -33,7 +33,7 @@ class FakeDevice:
         if kind == "chunk":
             chunk = parse_chunk(env.body)
             return self.relay.feed(chunk.id, chunk.seq, chunk.data)
-        out, tail = parse_result(env.body)
+        out, tail = self.parse_result(env.body)
         if tail and not self.relay.feed(tail.id, tail.seq, tail.data):
             return False
         return self.relay.close(env.body["id"], out)

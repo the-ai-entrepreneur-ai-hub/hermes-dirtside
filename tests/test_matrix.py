@@ -48,9 +48,12 @@ def test_matrix_requires_explicit_execution_mode(tmp_path):
 
 
 @pytest.mark.slow
-def test_owned_device_worker_uses_private_state_and_stops_on_eof(tmp_path):
+@pytest.mark.parametrize("with_pythonpath", [True, False])
+def test_owned_device_worker_uses_private_state_and_stops_on_eof(tmp_path, with_pythonpath):
     state = tmp_path / "worker"
     prefix = [sys.executable, str(ROOT / "tools/run_matrix.py"), "--device-worker", str(state)]
+    if not with_pythonpath:
+        prefix = ["env", "-u", "PYTHONPATH", *prefix]
     with Rig(tmp_path / "rig", device_command=prefix) as rig:
         rig.pair().start_agent().choose()
         assert rig.core.terminal("pwd")["output"] == str(state / "user")

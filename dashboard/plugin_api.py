@@ -1,6 +1,10 @@
 """Signed device transport and dashboard-session controls."""
 import asyncio
 import base64
+import json
+import os
+import socket
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -13,24 +17,55 @@ from nacl.signing import SigningKey, VerifyKey
 # Lazy threads; 64 online devices per gateway, with feeds on an independent pool.
 POLL_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix="dirtside-poll")
 FEED_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="dirtside-feed")
-_PAIR_LOCK = threading.Lock()
+_PAIR_LOCK, _OWNER_LOCK = threading.Lock(), threading.Lock()
 auth = get_provider("dirtside")
 registry, relay, wire, model = auth.registry, auth.relay, auth.protocol, auth.model
 relay_key = SigningKey(registry.relay_seed)
+_ORIGIN = None
+
+def loopback_origin(request):
+    host, port = request.scope.get("server") or ("127.0.0.1", 80)
+    if ":" in host:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                pass
+        except OSError:
+            return f"http://[::1]:{port}"
+    return f"http://127.0.0.1:{port}"
+
+def record_owner(request):
+    global _ORIGIN
+    origin, pid = loopback_origin(request), os.getpid()
+    with _OWNER_LOCK:
+        if (origin, pid) == _ORIGIN:
+            return
+        if relay._owner_pid != pid:
+            registry.mark_stale_lost(int(time.time()))
+        path = registry.path.with_name("owner.json")
+        with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, prefix=".owner-", delete=False) as stream:
+            json.dump(dict(origin=origin, pid=pid, started=auth.process_started(pid)), stream)
+            temporary = stream.name
+        os.replace(temporary, path)
+        relay._owner_pid, _ORIGIN = pid, (origin, pid)
 
 class BoundaryRoute(APIRoute):
     def get_route_handler(self):
         handler = super().get_route_handler()
         async def checked(request):
             try:
+                if request.url.path in auth.device_paths:
+                    await asyncio.to_thread(record_owner, request)
                 return await handler(request)
             except PermissionError:
                 raise HTTPException(401, "device revoked") from None
             except (ValueError, TypeError, KeyError, UnicodeError):
                 raise HTTPException(400, "invalid message") from None
+            except auth.connection_error as exc:
+                raise HTTPException(503, str(exc)) from None
         return checked
 
 router = APIRouter(route_class=BoundaryRoute)
+auth.local.mount(router)
 
 def bearer(request):
     scheme, _, token = request.headers.get("authorization", "").partition(" ")
@@ -104,7 +139,7 @@ async def result(request: Request):
 
 @router.get("/devices")
 async def devices():
-    rows = await asyncio.to_thread(relay.device_status)
+    rows = await asyncio.to_thread(relay.connection().device_status)
     return [dict(id=d.id, name=d.name, online=online, os=d.os, home=d.home, last_seen=seen)
             for d, online, seen in rows]
 
@@ -127,7 +162,7 @@ async def set_target(key: str, request: Request):
 
 @router.get("/requests")
 async def requests(session_key: str | None = None):
-    rows = await asyncio.to_thread(relay.recent, 50, session_key)
+    rows = await asyncio.to_thread(relay.connection().recent, 50, session_key)
     return [asdict(row) | {"tail": tail.decode("utf-8", "replace")} for row, tail in rows]
 
 @router.post("/pairing")
@@ -139,5 +174,5 @@ async def pairing(request: Request):
 async def revoke(name: str):
     device = await asyncio.to_thread(registry.revoke, name, int(time.time()))
     if device:
-        await asyncio.to_thread(relay.revoke, device.id)
+        await asyncio.to_thread(relay.connection().revoke, device.id)
     return {}

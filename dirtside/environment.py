@@ -25,7 +25,7 @@ def _status_suffix(proc, timeout, code):
     return suffix + (f"\n[Dirtside: {reason}]" if reason else ""), timed_out
 
 def require_online(device, relay):
-    if not relay.is_online(device.id):
+    if not relay.connection().is_online(device.id):
         raise EnvironmentConnectionError(f"Dirtside: device '{device.name}' is offline. Nothing was run on the server.",
                                          retry_hint="Start hermes dirtside serve on it, or run /dirtside use server.")
 
@@ -86,7 +86,7 @@ class DirtsideEnvironment(BaseEnvironment):
         req = ExecRequest(RequestId("r_" + secrets.token_hex(12)), self._device.id,
                           self._session_key, self._task_id, _COMMAND.get(), cmd_string,
                           login, timeout, stdin_data, cwd or self.cwd)
-        return self._relay.submit(req)
+        return self._relay.connection().submit(req)
 
     def _wait_for_process(self, proc, timeout=120, **kwargs):
         token = _WAIT.set((proc, timeout))
@@ -108,7 +108,7 @@ class DirtsideEnvironment(BaseEnvironment):
 
     def cleanup(self):
         try:
-            if self._relay.is_online(self._device.id):
+            if self._relay.connection().is_online(self._device.id):
                 path = shlex.quote(self._snapshot_path)
                 proc = self._run_bash(f"rm -f -- {path} {path}.tmp.*", timeout=5, cwd=self._device.home)
                 self._wait_for_process(proc, timeout=5)

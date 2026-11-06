@@ -4,6 +4,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from contextlib import ExitStack
 
 import pytest
 from fastapi.responses import JSONResponse
@@ -15,15 +16,24 @@ from dirtside.relay import Relay
 from test_executor import alive, await_file
 from test_network import group, revoke, setup_agent, stop_group
 from test_registry import request
+from client_support import client_relay
+
+
+@pytest.fixture(params=["in-process", "client"])
+def transport(request):
+    with ExitStack() as stack:
+        def connect(relay, url):
+            return stack.enter_context(client_relay(relay, url)) if request.param == "client" else relay
+        yield connect
 
 
 @pytest.mark.slow
-def test_subprocess_sigkill_loses_at_real_deadline_with_partial_output(tmp_path):
+def test_subprocess_sigkill_loses_at_real_deadline_with_partial_output(tmp_path, transport):
     with mounted(tmp_path) as (app, reg, relay, _), listening(app) as url:
         device, cfg = setup_agent(reg, tmp_path, url)
         with subprocess_agent(cfg, tmp_path / "install") as proc:
             until(lambda: relay.is_online(device.id))
-            remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
+            remote = DirtsideEnvironment(transport(relay, url), device, "chat", "default", "~", 120)
             with ThreadPoolExecutor(1) as pool:
                 future = pool.submit(remote.execute, "echo $$ > lost.pid; printf retained; sleep 120")
                 pid = int(await_file(tmp_path / "lost.pid"))
@@ -44,7 +54,7 @@ def test_subprocess_sigkill_loses_at_real_deadline_with_partial_output(tmp_path)
                     until(lambda: not any(alive(p) for p in pids))
 
 
-def test_subprocess_retries_first_accepted_chunk_without_doubled_bytes(tmp_path):
+def test_subprocess_retries_first_accepted_chunk_without_doubled_bytes(tmp_path, transport):
     with mounted(tmp_path) as (app, reg, relay, _):
         posts = []
 
@@ -60,7 +70,7 @@ def test_subprocess_retries_first_accepted_chunk_without_doubled_bytes(tmp_path)
             device, cfg = setup_agent(reg, tmp_path, url)
             with subprocess_agent(cfg, tmp_path / "install") as proc:
                 until(lambda: relay.is_online(device.id))
-                remote = DirtsideEnvironment(relay, device, "chat", "default", "~", 120)
+                remote = DirtsideEnvironment(transport(relay, url), device, "chat", "default", "~", 120)
                 payload = "abcdef" * 40000
                 command = f"{shlex.quote(sys.executable)} -c 'print(\"abcdef\" * 40000, end=\"\")'"
                 result = remote.execute(command)
@@ -71,7 +81,7 @@ def test_subprocess_retries_first_accepted_chunk_without_doubled_bytes(tmp_path)
                 assert proc.wait(timeout=5) == 0
 
 
-def test_upload_retries_cannot_extend_device_command_timeout(tmp_path):
+def test_upload_retries_cannot_extend_device_command_timeout(tmp_path, transport):
     with mounted(tmp_path) as (app, reg, relay, _):
         @app.middleware("http")
         async def unavailable_chunks(request, call_next):
@@ -83,7 +93,7 @@ def test_upload_retries_cannot_extend_device_command_timeout(tmp_path):
             with subprocess_agent(cfg, tmp_path / "install") as proc:
                 until(lambda: relay.is_online(device.id))
                 req = request(device, command="echo $$ > deadline.pid; printf retained; sleep 60")
-                handle = relay.submit(replace(req, timeout_s=1))
+                handle = transport(relay, url).connection().submit(replace(req, timeout_s=1))
                 pid = int(await_file(tmp_path / "deadline.pid"))
                 pids = group(pid)
                 try:
@@ -103,14 +113,14 @@ class RestartedApp:
         await self.app(scope, receive, send)
 
 
-def test_subprocess_gateway_restart_rejects_old_work_and_reuses_pairing(tmp_path):
+def test_subprocess_gateway_restart_rejects_old_work_and_reuses_pairing(tmp_path, transport):
     with mounted(tmp_path) as (old_app, reg, old_relay, old_module):
         switch = RestartedApp(old_app)
         with listening(switch) as url:
             device, cfg = setup_agent(reg, tmp_path, url)
             with subprocess_agent(cfg, tmp_path / "install") as proc:
                 until(lambda: old_relay.is_online(device.id))
-                handle = old_relay.submit(request(
+                handle = transport(old_relay, url).connection().submit(request(
                     device, command="echo $$ > restart.pid; while :; do printf tick; sleep 0.1; done"))
                 pid = int(await_file(tmp_path / "restart.pid"))
                 try:
@@ -134,7 +144,7 @@ def test_subprocess_gateway_restart_rejects_old_work_and_reuses_pairing(tmp_path
                         until(lambda: not alive(pid), timeout=5)
                         until(lambda: new_relay.is_online(device.id), timeout=30)
                         assert reg.credential_for(cfg.token, int(time.time())) == device and proc.poll() is None
-                        fresh = new_relay.submit(request(device, n=2, command="printf reconnected"))
+                        fresh = transport(new_relay, url).connection().submit(request(device, n=2, command="printf reconnected"))
                         assert fresh.wait(timeout=30) == 0 and fresh.stdout.read() == b"reconnected"
                         assert 200 in polls
                         revoke(url, device.name)

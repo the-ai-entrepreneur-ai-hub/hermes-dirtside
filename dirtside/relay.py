@@ -15,6 +15,33 @@ class Relay:
         self.handles, self.last_seen, self.tails = {}, {}, {}
         self.cancels, self._revoked = defaultdict(set), set()
         self._paired_keys = {}
+        self._client, self._owner_pid, self._streams = None, None, {}
+
+    def connection(self):
+        return self if self._client is None or self._owner_pid == os.getpid() else self._client
+
+    def submit_local(self, req):
+        handle = self.submit(req)
+        timer = threading.Timer(FEED_BLOCK_S, self.abandon, (req.id,))
+        timer.daemon = True
+        with self._condition:
+            self._streams[req.id] = handle, timer
+        timer.start()
+        return handle
+
+    def take_stream(self, request_id):
+        with self._condition:
+            entry = self._streams.pop(request_id, None)
+        if entry is not None:
+            handle, timer = entry
+            timer.cancel()
+            return handle
+
+    def abandon(self, request_id):
+        handle = self.take_stream(request_id)
+        if handle is not None:
+            self.close(request_id, Outcome(RequestState.LOST, 124, 0, False, "gateway stopped reading output"))
+            handle.stdout.close()
 
     def submit(self, req):
         self.registry.log(req)
