@@ -69,23 +69,26 @@ Dirtside is a terminal environment provider, the backend seam Hermes exposes for
 
 ```text
 you      /dirtside pair macbook
-hermes   Pairing code Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk expires in 10 minutes. On the device run:
-         hermes dirtside pair <gateway-url> --name macbook --code=Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
+hermes   Pairing code Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
+         expires in 10 minutes. On the device run:
+         hermes dirtside pair <gateway-url> --name macbook \
+           --code=Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
 
-laptop $ hermes dirtside pair https://hermes.example.com --name macbook --code=Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
+laptop $ hermes dirtside pair https://hermes.example.com --name macbook \
+           --code=Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
 Paired macbook to https://hermes.example.com. Run 'hermes dirtside serve' to connect.
 laptop $ hermes dirtside serve
 
 you      /dirtside use macbook
-hermes   This conversation now targets macbook (Darwin, online). The change applies to
-         this conversation from the next command.
+hermes   This conversation now targets macbook (Darwin, online). The change
+         applies to this conversation from the next command.
 
 you      what is filling up my disk?
-hermes   runs du on macbook through the ordinary terminal tool, reads the output
-         back over the relay, and answers from it.
+hermes   runs du on macbook through the ordinary terminal tool, reads the
+         output back over the relay, and answers from it.
 ```
 
-The replies above are the exact strings the plugin returns. The last line describes what happens; the model's own words depend on your setup.
+The replies are the plugin's own words, wrapped to fit here. The last line describes what happens; the model's phrasing depends on your setup.
 
 ## Quick start
 
