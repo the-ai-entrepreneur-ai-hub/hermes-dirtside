@@ -1,5 +1,6 @@
 """Resolve a conversation's target without falling back from an explicit device."""
 import threading
+import weakref
 
 from agent.terminal_env_provider import TerminalEnvironmentProvider
 from gateway.session_context import get_session_env
@@ -45,23 +46,54 @@ class ConversationEnvironment:
                                 require_contact=require_contact)
         identity = key, target.device if isinstance(target, OnDevice) else "server"
         with self._lock:
-            if identity not in self._environments:
-                self._environments[identity] = (
-                    DirtsideEnvironment(p._relay, target.device, key, self._task_id, self._cwd, self._timeout)
-                    if isinstance(target, OnDevice)
-                    else LocalEnvironment(cwd="" if self._cwd == "~" else self._cwd, timeout=self._timeout))
-            self._last = self._environments[identity]
-            return self._last
+            return self._select(identity, target)
+
+    def _create(self, target, key, cwd):
+        if isinstance(target, OnDevice):
+            require_online(target.device, self._provider._relay)
+            return DirtsideEnvironment(self._provider._relay, target.device, key, self._task_id, cwd, self._timeout)
+        return LocalEnvironment(cwd=cwd, timeout=self._timeout)
+
+    def _select(self, identity, target):
+        from tools.terminal_tool import get_session_cwd, record_session_cwd
+        p = self._provider
+        with p._lock:
+            state = p._state(identity[0], self._cwd)
+            cwd = state["cwds"].get(identity, "~")
+            if state["identity"] == identity:
+                cwd = get_session_cwd(identity[0]) or cwd
+        existing = identity in self._environments
+        if not existing:
+            self._environments[identity] = self._create(target, identity[0], cwd)
+        env = self._environments[identity]
+        with p._lock:
+            state = p._state(identity[0], self._cwd)
+            previous, cwds = state["identity"], state["cwds"]
+            if previous != identity:
+                if previous:
+                    cwds[previous] = get_session_cwd(previous[0]) or cwds[previous]
+                elif existing:
+                    cwds[identity] = env.cwd
+                record_session_cwd(identity[0], cwds.setdefault(identity, env.cwd))
+                state["identity"] = identity
+            p._conversations[identity[0]] = self
+        self._last = env
+        return env
+
+    def get_temp_dir(self):
+        return self._current().get_temp_dir()
 
     def __getattr__(self, name):
-        delegate = (self._current(name == "execute") if name in {
-            "execute", "_run_bash", "init_session", "get_temp_dir", "fetch_file", "fetch_realpath",
-        } else self.__dict__.get("_last"))
-        return getattr(delegate, name)
+        # Unknown probes must stay registry-free.
+        getattr(self.__dict__.get("_last"), name)
+        return getattr(self._current(name == "execute"), name)
 
     @property
     def cwd(self):
-        return self._last.cwd
+        try:
+            return self._current().cwd
+        except EnvironmentConnectionError:
+            return self._last.cwd
 
     @cwd.setter
     def cwd(self, value):
@@ -79,9 +111,23 @@ class DirtsideProvider(TerminalEnvironmentProvider):
 
     def __init__(self, registry, relay, default_target="server"):
         self._registry, self._relay, self._default_target = registry, relay, default_target
+        self._conversations = weakref.WeakValueDictionary()
+        self._states, self._lock = {}, threading.RLock()
+
+    def _state(self, key, cwd):
+        state = self._states.pop(key, None)
+        if state is None:
+            state = {"identity": None, "cwds": {(key, "server"): cwd or "~"}}
+        self._states[key] = state
+        if len(self._states) > 1024:
+            del self._states[next(iter(self._states))]
+        return state
 
     @property
     def default_cwd(self):
+        env = self._conversations.get(session_identity())
+        if env is not None:
+            env._current()
         return "~"
 
     def is_available(self):

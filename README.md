@@ -13,7 +13,7 @@
   <a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions/workflows/check.yml"><img alt="checks" src="https://img.shields.io/github/actions/workflow/status/the-ai-entrepreneur-ai-hub/hermes-dirtside/check.yml?branch=main&label=checks&style=flat-square&labelColor=0B0F14&logo=githubactions&logoColor=white"></a>
   <a href="https://www.python.org/"><img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-57606A?style=flat-square&labelColor=0B0F14&logo=python&logoColor=white"></a>
   <a href="https://github.com/NousResearch/hermes-agent"><img alt="Hermes 0.22.7 or newer" src="https://img.shields.io/badge/hermes-%3E%3D0.22.7-57606A?style=flat-square&labelColor=0B0F14"></a>
-  <img alt="619 tests passing" src="https://img.shields.io/badge/tests-619_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
+  <img alt="654 tests passing" src="https://img.shields.io/badge/tests-654_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
   <img alt="macOS and Linux" src="https://img.shields.io/badge/platforms-macOS%2C_Linux-57606A?style=flat-square&labelColor=0B0F14">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-57606A?style=flat-square&labelColor=0B0F14"></a>
 </p>
@@ -202,6 +202,8 @@ Online means contact within 45 seconds. A request on a device that stops reporti
 | `/dirtside pair <name>` | Mint a code and print the exact device-side command. |
 | `/dirtside revoke <name>` | Revoke the device and cancel its live requests. |
 
+Each device keeps its own working directory and exports within the conversation.
+
 A change applies from the next command. Work already dispatched keeps its original target. Selecting an offline or revoked device never silently runs that work on the server: the tool fails closed and tells the model why. A missing or revoked configured default device also fails closed; cron still defaults to the server.
 
 Core freezes the system prompt's target facts once per session, so a switch mid-session changes where commands run but not the facts the model was given. Start a new session when that matters.
@@ -337,7 +339,7 @@ dashboard/plugin_api.py   the routes, under /api/plugins/dirtside/
 desktop/plugin.js         Desktop pane and status chip, plain ESM, no build
 tools/                    benchmark, fake device, size budgets, matrix runner
 scripts/                  two_machine_matrix.sh
-tests/                    619 tests: units, conformance, real core, network
+tests/                    654 tests: units, conformance, real core, network
 docs/ARCHITECTURE.md      the design, its reasons, the alternatives that lost
 openspec/                 the change record behind each build step
 ```
@@ -353,9 +355,9 @@ openspec/                 the change record behind each build step
 
 ## Status
 
-Verified on 2026-11-06 on macOS against core `84a0301`: 619 tests, lint, size budgets, all OpenSpec changes, plugin doctor, the catalog validator with dependency installation on a fresh clone, the 8-of-8 loopback reliability matrix and the benchmark above. The same fresh clone installed with `hermes plugins install` pinned to the commit into an isolated Hermes home, enabled, accepted `terminal.backend: dirtside` and exposed all four device subcommands. The suite also runs on CI's Ubuntu and macOS runners on every push.
+Verified on 2026-11-07 on macOS against core `84a0301`: 654 tests, lint, size budgets, all OpenSpec changes, plugin doctor, the catalog validator with dependency installation on a fresh clone, the 8-of-8 loopback reliability matrix and the benchmark above. The same fresh clone installed with `hermes plugins install` pinned to the commit into an isolated Hermes home, enabled, accepted `terminal.backend: dirtside` and exposed all four device subcommands. The suite also runs on CI's Ubuntu and macOS runners on every push.
 
-Inside a real Hermes install (v0.23.0), from the CLI and from gateway sessions with two paired devices and one of them reached through a public tunnel: choosing a device, file tools, shell state across turns, a 1 MB output, a timeout, the deny list, core's dangerous-command block, fail-closed with the device agent stopped or the device revoked, re-pairing, a revoke during a live command, and a gateway restart during a live command, including a silent one that the device stopped at its next poll. Across two physical machines over the internet, 8 of 8 with the probe reported above. Not yet verified: the pane inside the running Desktop app, and service behaviour across login and reboot.
+Inside a real Hermes install (v0.23.0), from the CLI and from gateway sessions with two paired devices and one of them reached through a public tunnel: choosing a device, file tools, shell state across turns, switching devices mid-conversation after a `cd` (each device keeps its own working directory), a 1 MB output, a timeout, the deny list, core's dangerous-command block, fail-closed with the device agent stopped or the device revoked, re-pairing, a revoke during a live command, and a gateway restart during a live command, including a silent one that the device stopped at its next poll. In the owner's switch check, the Mac's `Dirtside Demo` folder was restored after the WSL2 Linux device ran `cd ~/work/api && make test` successfully. Across two physical machines over the internet, 8 of 8 with the probe reported above. Not yet verified: the pane inside the running Desktop app, and service behaviour across login and reboot.
 
 ## License
 

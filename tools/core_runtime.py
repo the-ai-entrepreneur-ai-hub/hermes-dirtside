@@ -20,7 +20,7 @@ class Runtime:
         from hermes_cli.dashboard_auth import get_provider
         self.auth = get_provider("dirtside")
         assert self.auth is not None, self.manager.list_plugins()
-        self.worker, self.fake = worker, None
+        self.worker, self.fakes = worker, []
         self.active, self.lock, self.prompt_agents = {}, threading.Lock(), {}
         if worker:
             self.port = 0
@@ -68,10 +68,16 @@ class Runtime:
 
     def fake_device(self, args):
         import base64
+        from dataclasses import replace
         import httpx
         from fake_device import FakeDevice
         from nacl.signing import SigningKey
+        import shlex
         import time
+        class HomeDevice(FakeDevice):
+            def _execute(self, req, cancel):
+                script = "export HOME=" + shlex.quote(self.device.home) + "\n" + req.script
+                return super()._execute(replace(req, script=script), cancel)
         key = SigningKey.generate()
         registry, wire = self.auth.registry, self.auth.protocol
         name, root = args.get("name", "fake"), args["root"]
@@ -89,8 +95,9 @@ class Runtime:
         except httpx.ReadTimeout:
             pass  # Exercise a real device poll, then release its parked request.
         assert self.auth.relay.is_online(device.id)
-        self.fake = FakeDevice(self.auth.relay, device, token, key, result_parser=wire.parse_result)
-        self.fake.__enter__()
+        fake = HomeDevice(self.auth.relay, device, token, key, result_parser=wire.parse_result)
+        fake.__enter__()
+        self.fakes.append(fake)
         return {"device_id": device.id, "name": name}
 
     def target(self, args):
@@ -195,8 +202,8 @@ class Runtime:
             cleanup_all_environments()
             self.manager.unload()
             return
-        if self.fake:
-            self.fake.__exit__(None, None, None)
+        for fake in self.fakes:
+            fake.__exit__(None, None, None)
         for device in self.auth.registry.devices():
             self.auth.relay.revoke(device.id)
         self.server.should_exit = True
