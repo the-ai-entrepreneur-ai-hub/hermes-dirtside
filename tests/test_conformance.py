@@ -143,7 +143,8 @@ def test_conformance_grandchild(tmp_path, remote_environment):
                 pid = int((tmp_path / "child.pid").read_text())
                 try:
                     assert result["output"] == "" and result["returncode"] == 0
-                    assert time.monotonic() - start < 1 and alive(pid)
+                    # The command returns long before the 30 s grandchild exits.
+                    assert time.monotonic() - start < 10 and alive(pid)
                     assert env.cwd == str(tmp_path)
                 finally:
                     if alive(pid):

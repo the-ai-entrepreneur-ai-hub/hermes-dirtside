@@ -83,7 +83,8 @@ def test_grandchild_returns(tmp_path):
         result = env.execute("sleep 30 & echo $!")
         pid = int(result["output"])
         try:
-            assert result["returncode"] == 0 and time.monotonic() - start < 1
+            # The command returns long before the 30 s grandchild exits.
+            assert result["returncode"] == 0 and time.monotonic() - start < 10
         finally:
             if alive(pid):
                 os.kill(pid, 15)

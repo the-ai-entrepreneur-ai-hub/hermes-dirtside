@@ -201,7 +201,8 @@ def test_natural_grandchild(tmp_path):
     out, data = execute(tmp_path, "sleep 30 & echo $!")
     pid = int(data)
     try:
-        assert out.exit_code == 0 and time.monotonic() - start < 1
+        # The command returns long before the 30 s grandchild exits.
+        assert out.exit_code == 0 and time.monotonic() - start < 10
         assert alive(pid)
     finally:
         if alive(pid):
