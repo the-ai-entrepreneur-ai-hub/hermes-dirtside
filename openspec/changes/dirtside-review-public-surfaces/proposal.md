@@ -49,3 +49,7 @@ Record real native local identity red/green evidence, correct owner-loss test te
 ## Correction 4
 
 Correct every core citation across repository documentation, login/Windows authority, safe pairing examples and device file-tool claims. Run the actual unchanged citation checker. Preserve prior report history, add C4 red/green and all gates, five whole-file correction rounds, 20 loaded client reload runs per core, reconstructed C4 checkpoints and inventories since C3 and WP5.
+
+## Correction 6
+
+Remove the runtime select descriptor ceiling from device reads, relay writes and local streaming without changing timing or output bounds. Add real high-descriptor streaming tests and an autouse descriptor guard with a stated margin of two. Give test database connections, subprocess pipes, retained stream handles and the lazily started core LSP service explicit teardown owners. Reproduce the network revocation timeout separately and synchronize its explicit-revocation scenario with an admitted poll, preserving generic-401 retry and the five-second shutdown assertion. Analyze every available supplied Linux count, disclose missing records, compare measured macOS descriptor types, rerun all requested gates and three serial whole-file correction rounds, and save cumulative C6 checkpoints and exact report outputs.

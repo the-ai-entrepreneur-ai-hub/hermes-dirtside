@@ -53,11 +53,11 @@ def test_100_bytes_leave_by_flush_deadline_even_between_read_slices(monkeypatch)
     output.add(b"x" * 100)
     clock[0] = (FLUSH_MS - 1) / 1000
     assert output.flush(False) and not sent
-    def no_more_output(readers, writers, errors, timeout):
+    def no_more_output(reader, timeout):
         waits.append(timeout)
         clock[0] += timeout
-        return [], [], []
-    monkeypatch.setattr(executor.select, "select", no_more_output)
+        return False
+    monkeypatch.setattr(executor, "wait_ready", no_more_output)
     assert _read(SimpleNamespace(stdout=object(), poll=lambda: None), output, 0) == 0
     assert output.flush(False)
     assert waits == pytest.approx([0.001])
@@ -70,10 +70,10 @@ def test_exited_shell_retains_existing_idle_drain_slices(monkeypatch):
     output = _Output(SimpleNamespace(id="grandchild"), POLICY, lambda *_: True)
     output.add(b"tail")
     clock[0] = 1.0
-    def idle(readers, writers, errors, timeout):
+    def idle(reader, timeout):
         waits.append(timeout)
-        return [], [], []
-    monkeypatch.setattr(executor.select, "select", idle)
+        return False
+    monkeypatch.setattr(executor, "wait_ready", idle)
     assert _read(SimpleNamespace(stdout=object(), poll=lambda: 0), output, 0) == 1
     assert waits == [0.1] and output.tail().data == b"tail"
 

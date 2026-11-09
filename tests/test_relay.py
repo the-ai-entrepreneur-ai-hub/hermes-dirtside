@@ -205,12 +205,13 @@ def test_feed_select_slice_bounds_cancellation(tmp_path, monkeypatch):
     handle = relay.submit(request(device))
     slices = []
 
-    def cancel_during_select(readers, writers, errors, timeout):
+    def cancel_during_select(writer, timeout, *, write):
+        assert write
         slices.append(timeout)
         handle.kill()
-        return [], [], []
+        return False
 
-    monkeypatch.setattr("dirtside.relay.select.select", cancel_during_select)
+    monkeypatch.setattr("dirtside.relay.wait_ready", cancel_during_select)
     try:
         assert not relay.feed(handle.req.id, 0, b"data")
         assert slices == [0.25]

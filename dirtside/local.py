@@ -6,7 +6,6 @@ import ipaddress
 import json
 import os
 import re
-import select
 import sqlite3
 import struct
 from dataclasses import asdict
@@ -16,6 +15,7 @@ from starlette.responses import StreamingResponse
 from .environment import EnvironmentConnectionError
 from .model import CHUNK_BYTES, ExecRequest, Outcome, RequestState
 from .protocol import parse_exec
+from .readiness import wait_ready
 
 BODY_BYTES = 8 << 20
 PREFIX = "/api/plugins/dirtside/local"
@@ -104,9 +104,9 @@ class LocalAPI:
     async def output(self, handle):
         try:
             while True:
-                ready = await asyncio.to_thread(select.select, [handle.stdout], [], [], 0.1)
+                ready = await asyncio.to_thread(wait_ready, handle.stdout, 0.1)
                 await asyncio.to_thread(handle.poll)
-                if not ready[0]:
+                if not ready:
                     continue
                 part = os.read(handle.stdout.fileno(), CHUNK_BYTES)
                 if not part:

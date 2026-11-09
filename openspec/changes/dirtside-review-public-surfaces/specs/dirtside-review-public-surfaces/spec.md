@@ -67,3 +67,47 @@ Correction 4 MUST retain red/green evidence, all prior final gates, five whole-f
 #### Scenario: correction_4_final_gates
 - **WHEN** the final intended source is delivered uncommitted
 - **THEN** exact outputs, all failed attempts, budgets, reconstructed C4 checkpoints, inventories since C3 and WP5, cleanup and remaining limits appear in the appended private report
+
+### Requirement: Descriptor-independent bounded pipe waits
+All runtime pipe readiness waits MUST support descriptor numbers above 1024 without changing existing flush, read, feed, cancellation or output bounds.
+
+#### Scenario: test_executor_runs_and_streams_above_select_ceiling
+- **WHEN** the parent holds enough descriptors to push the device stdout pipe above 1024
+- **THEN** an early chunk streams before the command can finish, the exact late tail arrives, and the soft limit and filler descriptors are restored
+
+#### Scenario: test_relay_writes_above_select_ceiling
+- **WHEN** a real relay pipe and duplicated writer are above 1024
+- **THEN** bytes arrive exactly and the terminal result remains successful
+
+#### Scenario: test_local_stream_reads_above_select_ceiling
+- **WHEN** local streaming consumes a real high-numbered stdout pipe
+- **THEN** its binary length framing and successful outcome remain exact and the consumer closes
+
+### Requirement: Explicit test descriptor ownership
+An autouse guard MUST measure descriptors before and after each test on Linux and macOS and fail growth above a stated margin of two, without forced garbage collection or blanket descriptor closure. Test fixtures MUST close their database connections, pipes, subprocess handles and started LSP event loops at the owning lifetime.
+
+#### Scenario: test_descriptor_guard_checks_actual_teardown
+- **WHEN** a subprocess test closes four allocated descriptors or intentionally leaves them open
+- **THEN** the same real guard passes the closed case and rejects the four-descriptor leak
+
+#### Scenario: test_owned_core_closes_stdin_after_external_exit
+- **WHEN** an owned core exits before cleanup and cleanup runs twice
+- **THEN** stdin, stdout and the log are closed even though the process is already dead
+
+#### Scenario: test_owned_agent_closes_stdin_after_external_exit
+- **WHEN** an owned adapter agent exits before repeated stop calls
+- **THEN** its stdin and log close without depending on process liveness
+
+### Requirement: Explicit revocation test precondition
+Automatic revocation shutdown checks MUST observe an admitted authenticated poll before requiring the explicit signal; generic core rejection MUST retain retry behavior.
+
+#### Scenario: test_parallel_limit_keeps_poll_cancellation_live
+- **WHEN** two commands run, a queued command starts after cancellation, and revocation interrupts an admitted poll
+- **THEN** parallelism and cancellation remain live, every process group stops, the agent exits within the unchanged five-second bound, and retained stdout pipes close
+
+### Requirement: Correction 6 verification evidence
+Correction 6 MUST retain red/green evidence, analysis of all available supplied Linux counts with unavailable records disclosed, both full prepared-core macOS suites with zero descriptor-guard failures, all requested static/admission/matrix/benchmark/citation checks and three serial changed-file rounds including helpers.
+
+#### Scenario: correction_6_final_gates
+- **WHEN** the intended source is delivered without commits or core edits
+- **THEN** the appended private report records exact outputs, every failed attempt, unchanged bounds, cumulative reconstructed C6 checkpoints, invariant and process audits, cleanup and the owner's remaining Linux verification

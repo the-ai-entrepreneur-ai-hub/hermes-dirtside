@@ -75,9 +75,14 @@ def started(root):
             if (text := path.read_text().strip())}
 
 
-def test_parallel_limit_keeps_poll_cancellation_live(tmp_path):
+def test_parallel_limit_keeps_poll_cancellation_live(tmp_path, monkeypatch):
     with mounted(tmp_path) as (app, reg, relay, _):
-        acknowledged, handles = threading.Event(), {}
+        acknowledged, polling, handles = threading.Event(), threading.Event(), {}
+        wait = relay._condition.wait
+        def admitted_poll(timeout):
+            polling.set()
+            return wait(timeout)
+        monkeypatch.setattr(relay._condition, "wait", admitted_poll)
 
         @app.middleware("http")
         async def observed_poll(request, call_next):
@@ -108,11 +113,16 @@ def test_parallel_limit_keeps_poll_cancellation_live(tmp_path):
                     until(lambda: not any(alive(p) for p in first_group))
                     assert time.monotonic() - start < 5 and alive(running[second]) and alive(third)
                     third_group = until(lambda: members(third))
+                    # Only an already authenticated poll can deliver explicit revocation.
+                    polling.clear()
+                    assert polling.wait(10)
                     revoke(url, device.name)
                     assert all(h.wait(0) == 130 for h in handles.values())
                     assert proc.wait(timeout=5) == 0
                     assert not any(alive(p) for p in second_group + third_group)
                 finally:
                     relay.revoke(device.id)
+                    for handle in handles.values():
+                        handle.stdout.close()
                     for path in tmp_path.glob("parallel-*.pid"):
                         stop_group(int(path.read_text()))

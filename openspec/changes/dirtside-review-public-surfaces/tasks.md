@@ -45,3 +45,11 @@
 - [x] C4.1 Correct core citations across all docs, actual login/Windows authority, equals-form pairing and terminal/file-path claims; run the unchanged owner citation checker.
 - [x] C4.2 Record focused red/green, pinned fast, both full suites, static/OpenSpec, both doctor/native validators with exactly three private sites, matrix 8/8 and strict benchmark.
 - [x] C4.3 Record five whole-file C1-C4 correction rounds and 20 serial loaded client reload cases per core; reconstruct C4 checkpoints, inventory since C3 and WP5, audit invariants/processes, remove owned helpers and append the full report.
+
+## Correction 6
+
+- [x] C6.1 Record real high-descriptor and guard red/green tests; replace every runtime select.select while preserving bounds.
+- [x] C6.2 Measure SQLite, pipe and event-loop ownership leaks and fix their allocating fixtures and subprocess helpers without forced garbage collection.
+- [x] C6.3 Reproduce the low-descriptor revocation race twice, synchronize the existing explicit-revocation test with an admitted poll, and preserve generic-401 retry and five-second shutdown.
+- [x] C6.4 Analyze all available supplied Linux counts and disclose gaps, run both full macOS suites with zero guard failures, all requested static/admission/matrix/benchmark/citation checks and three serial whole-file correction rounds.
+- [x] C6.5 Append exact attempts and scope/invariant/process evidence, reconstruct C6.diff and C6-untracked.tgz and remove owned iteration helpers.

@@ -4,7 +4,7 @@ import os
 import re
 import sqlite3
 import time
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -180,26 +180,28 @@ def test_pending_names_cannot_be_stolen(tmp_path):
     assert reg.credential_for(code, int(time.time())) is not None
 
 
-def test_old_registry_migration(tmp_path):
-    from test_registry import request
+def test_old_registry_migration(tmp_path, request):
+    from test_registry import request as exec_request
     source = Path(__file__).with_name("fixtures") / "registry_0ae9359.txt"
     spec = importlib.util.spec_from_loader("dirtside._baseline_registry", loader=None)
     module = importlib.util.module_from_spec(spec)
     exec(compile(source.read_text(), str(source), "exec"), module.__dict__)
     old = module.Registry(tmp_path / "data.db")
+    request.addfinalizer(old._connection().close)
     old.mint("old-device", 100)
     hello = DeviceHello(bytes(SigningKey.generate().verify_key), "old-device", "old-os", "",
                         str(tmp_path), str(tmp_path), "0.1.0")
     device, token = old.complete_pairing("old-device", hello, 101)
     pending = old.mint("pending", int(time.time()))
     old.set_target("old-chat", device.id)
-    old.log(request(device, n=1))
-    finished = request(device, n=2)
+    old.log(exec_request(device, n=1))
+    finished = exec_request(device, n=2)
     old.log(finished)
     old.running(finished.id)
     old.close(finished.id, Outcome(RequestState.FINISHED, 0, 12, False, "complete"), int(time.time()))
-    before_requests = sqlite3.connect(old.path).execute("SELECT * FROM requests ORDER BY id").fetchall()
-    before = sqlite3.connect(old.path).execute("SELECT * FROM devices ORDER BY name").fetchall()
+    with closing(sqlite3.connect(old.path)) as conn:
+        before_requests = conn.execute("SELECT * FROM requests ORDER BY id").fetchall()
+        before = conn.execute("SELECT * FROM devices ORDER BY name").fetchall()
     for _ in range(3):
         upgraded = Registry(old.path)
         assert upgraded.device_by_id(device.id).owner == "local"
@@ -207,7 +209,7 @@ def test_old_registry_migration(tmp_path):
         assert upgraded.target("old-chat") == device.id
         assert upgraded.credential_for(pending, int(time.time())).name == "pending"
         assert upgraded.relay_seed == old.relay_seed and upgraded.local_secret == old.local_secret
-        with sqlite3.connect(old.path) as conn:
+        with closing(sqlite3.connect(old.path)) as conn, conn:
             after = conn.execute("SELECT * FROM devices ORDER BY name").fetchall()
             assert [row[:-1] for row in after] == before
             assert all(row[-1] == "local" for row in after)

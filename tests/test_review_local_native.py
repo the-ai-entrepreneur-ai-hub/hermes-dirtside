@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+from contextlib import closing
 
 import httpx
 import pytest
@@ -192,7 +193,7 @@ def test_native_local_demo(native_gateway, surface):
                     assert reply["result"]["status"] == "queued", reply
 
                     def terminal():
-                        with sqlite3.connect(home / "state.db") as db:
+                        with closing(sqlite3.connect(home / "state.db")) as db:
                             row = db.execute("SELECT status FROM session_admissions WHERE request_id=?", (input_id,)).fetchone()
                         return row is not None and row[0] == "terminal"
 

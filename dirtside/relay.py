@@ -1,6 +1,5 @@
 """Single-owner live request state and lossless pipe delivery."""
 import os
-import select
 import threading
 import time
 from collections import defaultdict
@@ -9,6 +8,7 @@ from dataclasses import replace
 from .access import Access
 from .environment import RemoteProcessHandle
 from .model import FEED_BLOCK_S, LOST_GRACE_S, OFFLINE_AFTER_S, PANE_TAIL_BYTES, TERMINAL, Outcome, RequestState
+from .readiness import wait_ready
 
 class Relay:
     def __init__(self, registry):
@@ -164,7 +164,7 @@ class Relay:
             if remaining <= 0:
                 return False
             try:
-                if select.select([], [fd], [], min(0.25, remaining))[1]:
+                if wait_ready(fd, min(0.25, remaining), write=True):
                     view = view[os.write(fd, view):]
             except BlockingIOError:
                 continue

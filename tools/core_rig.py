@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 from concurrent.futures import Future
+from contextlib import suppress
 from pathlib import Path
 
 import httpx
@@ -129,8 +130,9 @@ class Core:
             return client.request(method, "/api/plugins/dirtside" + path, headers=headers, **kwargs)
 
     def close(self):
-        if self.proc.poll() is None:
+        with suppress(BrokenPipeError):
             self.proc.stdin.close()
+        if self.proc.poll() is None:
             try:
                 self.proc.wait(18)
             except subprocess.TimeoutExpired:
@@ -193,12 +195,14 @@ class Rig:
         return self
 
     def stop_agent(self):
-        if self.device_command and self.agent is not None and self.agent.poll() is None:
-            self.agent.stdin.close()
-            try:
-                self.agent.wait(10)
-            except subprocess.TimeoutExpired:
-                stop_process(self.agent)
+        if self.device_command and self.agent is not None:
+            with suppress(BrokenPipeError):
+                self.agent.stdin.close()
+            if self.agent.poll() is None:
+                try:
+                    self.agent.wait(10)
+                except subprocess.TimeoutExpired:
+                    stop_process(self.agent)
         stop_process(self.agent)
         if self.agent_log is not None:
             self.agent_log.close()

@@ -1,6 +1,7 @@
 """Claim history is durable before output, and never rewritten per chunk."""
 import sqlite3
 import time
+from contextlib import closing
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,7 +18,7 @@ from test_routes import API, headers
 def test_claim_records_running_once_and_chunks_never_write_history(tmp_path):
     relay, device = setup_relay(tmp_path)
     first, queued = (relay.submit(request(device, n=n)) for n in (1, 2))
-    with sqlite3.connect(relay.registry.path) as conn:
+    with closing(sqlite3.connect(relay.registry.path)) as conn, conn:
         conn.executescript("""
             CREATE TABLE claims (id TEXT);
             CREATE TRIGGER record_claim AFTER UPDATE OF state ON requests
@@ -33,7 +34,7 @@ def test_claim_records_running_once_and_chunks_never_write_history(tmp_path):
         # A recovered, unstarted claim must not produce a second running write.
         assert relay.next(device.id, 0, running=[])[0] == first.req
         assert relay.feed(first.req.id, 0, b"one") and relay.feed(first.req.id, 1, b"two")
-        with sqlite3.connect(relay.registry.path) as conn:
+        with closing(sqlite3.connect(relay.registry.path)) as conn, conn:
             assert conn.execute("SELECT id FROM claims").fetchall() == [(first.req.id,)]
             assert dict(conn.execute("SELECT id,state FROM requests")) == {
                 first.req.id: "running", queued.req.id: "queued"}

@@ -1,6 +1,5 @@
 """Execute a device script with bounded byte streaming and process-group cancellation."""
 import os
-import select
 import shutil
 import signal
 import subprocess
@@ -9,6 +8,7 @@ import time
 from contextlib import suppress
 from ..model import CHUNK_BYTES, FLUSH_MS, PART_MAX, Outcome, RequestState, device_timeout_s
 from ..protocol import Chunk
+from ..readiness import wait_ready
 from .policy import evaluate
 def child_environment(policy):
     names = {"PATH", "HOME", "USER", "LANG", "TERM", "TMPDIR", *policy.env_passthrough}
@@ -64,7 +64,7 @@ def _read(proc, output, idle):
             proc.wait(timeout=0.01)
         return 3
     wait = max(0, output.first + FLUSH_MS / 1000 - time.monotonic()) if output.pending and proc.poll() is None else 0.1
-    if select.select([proc.stdout], [], [], min(0.1, wait))[0]:
+    if wait_ready(proc.stdout, min(0.1, wait)):
         data = os.read(proc.stdout.fileno(), CHUNK_BYTES)
         output.eof = not data
         output.add(data)

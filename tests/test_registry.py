@@ -3,6 +3,7 @@ import hashlib
 import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 
 import pytest
 from nacl.signing import SigningKey
@@ -37,7 +38,7 @@ def test_pairing_code_lifecycle(tmp_path):
     assert reg.credential_for(code, 101) is None
     with pytest.raises(ValueError):
         reg.complete_pairing("macbook", hello, 102)
-    with sqlite3.connect(reg.path) as conn:
+    with closing(sqlite3.connect(reg.path)) as conn, conn:
         stored = conn.execute("SELECT token_hash FROM devices WHERE id=?", (device.id,)).fetchone()[0]
     assert stored == hashlib.sha256(token.encode()).digest()
     assert stored not in (code.encode(), token.encode())
@@ -113,7 +114,7 @@ def test_targets(tmp_path):
 def test_legacy_targets_migrate_without_losing_revoked_selections(tmp_path):
     reg = Registry(tmp_path / "data.db")
     device, _, _ = paired(reg, tmp_path)
-    with sqlite3.connect(reg.path) as conn:
+    with closing(sqlite3.connect(reg.path)) as conn, conn:
         conn.execute("DROP TABLE targets")
         conn.execute("CREATE TABLE targets (session_key TEXT PRIMARY KEY, "
                      "device_id TEXT NOT NULL REFERENCES devices(id), set_at INTEGER NOT NULL)")
@@ -121,7 +122,7 @@ def test_legacy_targets_migrate_without_losing_revoked_selections(tmp_path):
     reg.revoke(device.name, 124)
     migrated = Registry(reg.path)
     assert migrated.target("chat") == device.id
-    with sqlite3.connect(reg.path) as conn:
+    with closing(sqlite3.connect(reg.path)) as conn, conn:
         assert conn.execute("SELECT * FROM targets").fetchall() == [("chat", device.id, 123)]
         assert conn.execute("PRAGMA foreign_key_list(targets)").fetchall() == []
     migrated.set_target("other", "server")
@@ -150,7 +151,7 @@ def test_mark_stale_lost(tmp_path):
     for n in range(3):
         reg.log(request(device, n))
     reg.close(request(device, 2).id, Outcome(RequestState.FINISHED, 0, 2, False, ""), 105)
-    with sqlite3.connect(reg.path) as conn:
+    with closing(sqlite3.connect(reg.path)) as conn, conn:
         conn.execute("UPDATE requests SET state='running' WHERE id=?", (request(device, 1).id,))
     reg.mark_stale_lost(110)
     rows = {r.id: r for r in reg.recent(10)}
