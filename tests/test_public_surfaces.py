@@ -11,6 +11,7 @@ import pytest
 from hermes_cli.plugin_validate_private_imports import (
     private_attribute_findings, private_import_findings,
 )
+from tools.plugin_guard import scan_plugin, should_allow_plugin_install
 
 ROOT = Path(__file__).resolve().parents[1]
 TRANSITIONAL = [
@@ -43,6 +44,14 @@ def test_private_imports_are_exact_transitional_set(clean_export):
              for location, target in (site.split(" ", 1) for site in findings)]
     assert sorted(sites) == TRANSITIONAL, "\n".join(findings)
     assert private_attribute_findings(clean_export) == []
+
+
+def test_community_install_allows_clean_export(clean_export):
+    scan = scan_plugin(clean_export, source="community/dirtside")
+    assert scan.trust_level == "community"
+    allowed, reason = should_allow_plugin_install(scan)
+    findings = "\n".join(f"{f.severity} {f.file}:{f.line} {f.pattern_id}" for f in scan.findings)
+    assert allowed is True, f"{reason}\n{findings}"
 
 
 def test_development_entrypoints(clean_export, tmp_path):

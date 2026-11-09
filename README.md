@@ -13,7 +13,7 @@
   <a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions/workflows/check.yml"><img alt="checks" src="https://img.shields.io/github/actions/workflow/status/the-ai-entrepreneur-ai-hub/hermes-dirtside/check.yml?branch=main&label=checks&style=flat-square&labelColor=0B0F14&logo=githubactions&logoColor=white"></a>
   <a href="https://www.python.org/"><img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-57606A?style=flat-square&labelColor=0B0F14&logo=python&logoColor=white"></a>
   <a href="https://github.com/NousResearch/hermes-agent"><img alt="Hermes 0.22.7 or newer" src="https://img.shields.io/badge/hermes-%3E%3D0.22.7-57606A?style=flat-square&labelColor=0B0F14"></a>
-  <img alt="934 tests passing" src="https://img.shields.io/badge/tests-934_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
+  <img alt="935 tests passing" src="https://img.shields.io/badge/tests-935_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
   <img alt="macOS and Linux" src="https://img.shields.io/badge/platforms-macOS%2C_Linux-57606A?style=flat-square&labelColor=0B0F14">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-57606A?style=flat-square&labelColor=0B0F14"></a>
 </p>
@@ -382,7 +382,7 @@ dashboard/plugin_api.py   the routes, under /api/plugins/dirtside/
 desktop/plugin.js         Desktop pane and status chip, plain ESM, no build
 tools/                    fake device, owned rig, size budgets, matrix runner
 scripts/                  two_machine_matrix.sh
-tests/                    934 tests: units, conformance, real core, network; benchmark helpers
+tests/                    935 tests: units, conformance, real core, network; benchmark helpers
 docs/ARCHITECTURE.md      the design, its reasons, the alternatives that lost
 openspec/                 the change record behind each build step
 ```
@@ -400,7 +400,7 @@ openspec/                 the change record behind each build step
 
 ## Status
 
-The suite collects 934 tests. Catalog-review checks use core `84a0301` and `8d7061f` on macOS; CI runs Ubuntu and macOS against the pinned core. Native authenticated CLI slash dispatch and one-shot turns, plus TUI slash/turn RPCs, run the device demo with temporary homes and a loopback model on both prepared cores. This is not a check of the owner's live install or rendered TUI. The dated measurements above and the live checks below describe the earlier published tree, not new internet or Desktop checks on this worktree.
+The suite collects 935 tests. Catalog-review checks use core `84a0301` and `8d7061f` on macOS; CI runs Ubuntu and macOS against the pinned core. Native authenticated CLI slash dispatch and one-shot turns, plus TUI slash/turn RPCs, run the device demo with temporary homes and a loopback model on both prepared cores. This is not a check of the owner's live install or rendered TUI. The dated measurements above and the live checks below describe the earlier published tree, not new internet or Desktop checks on this worktree.
 
 Three private uses remain transitional: the lazy `token_auth.register_token_route` fallback keeps released cores working until provider-bound, scoped route registration exists; lazy `LocalEnvironment` preserves core's local behavior and credential stripping until a public backend handoff exists; `EnvironmentConnectionError` preserves core's fail-closed rendering and needs documenting in the provider contract. The catalog validator still reports exactly those three sites; this is not a claim of catalog approval.
 
