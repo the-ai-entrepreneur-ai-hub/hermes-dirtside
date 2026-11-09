@@ -1,5 +1,6 @@
 """Pure recognition against the real core dashboard provider contract."""
 import time
+from types import SimpleNamespace
 
 import pytest
 from hermes_cli.dashboard_auth.base import TokenPrincipal, assert_protocol_compliance
@@ -45,6 +46,6 @@ def test_core_auth_protocol_and_routes(tmp_path):
         provider.complete_login(code="", state="", code_verifier="", redirect_uri="")
     with pytest.raises(NotImplementedError):
         provider.refresh_session(refresh_token="")
-    register_device_routes()
+    provider.routes = register_device_routes(SimpleNamespace(on_unload=lambda callback: None))
     assert all(is_token_route(path) for path in DEVICE_PATHS)
     assert not is_token_route("/api/plugins/dirtside/devices")

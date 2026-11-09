@@ -8,6 +8,8 @@ Core 84a0301 hermes_cli/plugins.py:736-776 exposes auth-provider registration bu
 
 The supplied core-pr-87462.diff defines register_dashboard_token_route(path, *, provider, required_scopes=()) -> PluginRegistration. Its withdrawal evidence in the brief names two upstream fixes still needed: resolve route/provider policy through the serving manager's scope, not ambient hermes_home_key, and reject any non-TokenPrincipal result. Dirtside cannot fix core's middleware without core edits; prepare an owner-voice seam request, do not claim the catalog is unblocked.
 
+The instance starts disabled. Register the auth provider first and stop route acquisition if core refuses it. The dashboard BoundaryRoute checks the instance before FastAPI argument/body processing, and LocalAPI checks it independently before credentials. Dispose the gate before dropping handles; continue attempting other disposables if one fails. The released private API cannot remove its exact-path flags, so unload closes the instance gate even when an outer flag outlives it. A noncallable but present method is refusal, not absence.
+
 Rejected: silently falling back after a present seam refuses registration widens auth; storing partial successes leaves half the routes live; trusting outer middleware alone fails cross-credential isolation and gate-off use.
 
 ## Validation and migration

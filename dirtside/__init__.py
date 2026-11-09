@@ -22,8 +22,9 @@ def register(ctx):
     ctx.register_terminal_environment_provider(
         DirtsideProvider(registry, relay, default, access))
     ctx.register_middleware("tool_execution", tool_execution)
-    ctx.register_dashboard_auth_provider(DirtsideDeviceAuth(registry, relay, default))
-    register_device_routes()
+    auth = DirtsideDeviceAuth(registry, relay, default)
+    if ctx.register_dashboard_auth_provider(auth) is not None:
+        auth.routes = register_device_routes(ctx)
     ctx.register_cli_command("dirtside", "Pair and run a personal device", setup_parser, handle)
     ctx.register_command("dirtside", Commands(ctx, registry, relay, default, access),
                          description="Choose a personal device", args_hint="<use|devices|pair|revoke>",

@@ -8,6 +8,7 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import uvicorn
 from fastapi import FastAPI
@@ -62,14 +63,15 @@ def listening(app, host="127.0.0.1", ipv6_only=None, connect_host=None):
 
 
 @contextmanager
-def mounted(root, gate=True, relay=None):
+def mounted(root, gate=True, relay=None, provider=None):
     registry = relay.registry if relay is not None else Registry(root / "data.db")
     relay = relay or Relay(registry)
-    providers = [DirtsideDeviceAuth(registry, relay), SessionTokenProvider(token=DESKTOP_TOKEN)]
+    providers = [provider or DirtsideDeviceAuth(registry, relay), SessionTokenProvider(token=DESKTOP_TOKEN)]
     previous = [(p, snapshot_registration(p.name)) for p in providers]
-    for provider in providers:
-        register_global_provider(provider)
-    register_device_routes()
+    for registered in providers:
+        register_global_provider(registered)
+    if provider is None:
+        providers[0].routes = register_device_routes(SimpleNamespace(on_unload=lambda callback: None))
     app = FastAPI()
     app.state.auth_required = gate
     app.state.dirtside_relay = relay
@@ -92,6 +94,9 @@ def mounted(root, gate=True, relay=None):
             relay.revoke(device.id)
         module.POLL_POOL.shutdown(wait=True)
         module.FEED_POOL.shutdown(wait=True)
+        routes = getattr(providers[0], "routes", None)
+        if routes is not None:
+            routes.dispose()
         for provider, old in previous:
             restore_registration(provider.name, provider, old)
 

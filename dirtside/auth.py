@@ -1,8 +1,9 @@
 """Token-only device recognition and exact-path token route registration."""
 import hmac
+import logging
 import time
+from contextlib import suppress
 from hermes_cli.dashboard_auth import DashboardAuthProvider, TokenPrincipal
-from hermes_cli.dashboard_auth.token_auth import register_token_route
 from . import model, protocol
 from .local import LocalAPI
 from .environment import EnvironmentConnectionError
@@ -10,6 +11,16 @@ from .client import process_started
 
 DEVICE_PATHS = tuple(f"/api/plugins/dirtside/device/{kind}" for kind in ("pair", "poll", "chunk", "result"))
 LOCAL_PATHS = tuple(f"/api/plugins/dirtside/local/{kind}" for kind in ("exec", "stream", "kill", "devices", "requests"))
+
+class TokenRoutes:
+    def __init__(self):
+        self.enabled, self.registrations = False, []
+
+    def dispose(self):
+        self.enabled = False
+        while self.registrations:
+            with suppress(Exception):
+                self.registrations.pop().dispose()
 
 class DirtsideDeviceAuth(DashboardAuthProvider):
     name = "dirtside"
@@ -23,7 +34,8 @@ class DirtsideDeviceAuth(DashboardAuthProvider):
 
     def __init__(self, registry, relay=None, default_target="server"):
         self.registry, self.relay, self.default_target = registry, relay, default_target
-        self.local = LocalAPI(registry, relay)
+        self.routes = TokenRoutes()
+        self.local = LocalAPI(registry, relay, lambda: self.routes.enabled)
 
     def verify_token(self, *, token):
         if hmac.compare_digest(token.encode(), self.registry.local_secret.encode()):
@@ -46,6 +58,28 @@ class DirtsideDeviceAuth(DashboardAuthProvider):
     def revoke_session(self, *, refresh_token):
         return None
 
-def register_device_routes():
+def _legacy_routes():
+    # Pending public token-route seam; retain released-core exact-path registration.
+    from hermes_cli.dashboard_auth.token_auth import register_token_route
     for path in DEVICE_PATHS + LOCAL_PATHS:
         register_token_route(path)
+
+def register_device_routes(ctx):
+    routes = TokenRoutes()
+    try:
+        if hasattr(ctx, "register_dashboard_token_route"):
+            for path in DEVICE_PATHS + LOCAL_PATHS:
+                scope = "dirtside-local" if path in LOCAL_PATHS else "dirtside"
+                handle = ctx.register_dashboard_token_route(path, provider="dirtside", required_scopes=(scope,))
+                if handle is None:
+                    raise RuntimeError("token route refused")
+                routes.registrations.append(handle)
+        else:
+            _legacy_routes()
+        ctx.on_unload(routes.dispose)
+        routes.enabled = True
+    except Exception:
+        routes.dispose()
+        logging.getLogger(__name__).warning(
+            "Dirtside token-route registration refused; device and local routes are disabled.")
+    return routes

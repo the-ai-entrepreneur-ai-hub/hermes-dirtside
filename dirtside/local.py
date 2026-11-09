@@ -29,8 +29,9 @@ async def body(request):
     return json.loads(data)
 
 class LocalAPI:
-    def __init__(self, registry, relay):
+    def __init__(self, registry, relay, routes_enabled):
         self.registry, self.relay = registry, relay
+        self._routes_enabled = routes_enabled
 
     def mount(self, router):
         for path, handler, methods in (
@@ -40,7 +41,12 @@ class LocalAPI:
         ):
             router.add_api_route("/local" + path, handler, methods=methods)
 
+    def require_routes(self):
+        if not self._routes_enabled():
+            raise HTTPException(401, "Dirtside token routes are disabled")
+
     def authenticate(self, request):
+        self.require_routes()
         try:
             peer = ipaddress.ip_address(request.client.host if request.client else "")
         except ValueError:

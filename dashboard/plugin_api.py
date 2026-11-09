@@ -54,6 +54,7 @@ class BoundaryRoute(APIRoute):
     def get_route_handler(self):
         handler = super().get_route_handler()
         async def checked(request):
+            auth.local.require_routes()
             try:
                 return await handler(request)
             except PermissionError:

@@ -121,6 +121,7 @@ def test_empty_default_is_shared_as_server_at_registration(tmp_path, monkeypatch
         register_system_prompt_section=lambda name, value, **kwargs: captured.update(prompt=value.__self__),
         register_cli_command=lambda *args: None,
         register_middleware=lambda *args: None,
+        on_unload=lambda callback: None,
     )
     monkeypatch.setattr(dirtside, "plugin_data_dir", lambda name: tmp_path)
     dirtside.register(ctx)

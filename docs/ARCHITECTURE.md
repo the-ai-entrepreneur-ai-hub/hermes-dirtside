@@ -103,9 +103,9 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), threading | 237 |
 | `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 120 |
 | `dirtside/client.py` | process-verified owner discovery, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 173 |
-| `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, FastAPI, anyio | 141 |
+| `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, FastAPI, anyio | 147 |
 | `dirtside/provider.py` | dispatch-time conversation context, bounded cwd history and per-target snapshot delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, backend, environment, `gateway.session_context` | 161 |
-| `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 60 |
+| `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 85 |
 | `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`, `resolve_target`, session context) | 110 |
 | `dirtside/prompt.py` | `current_target_section()` | registry, provider (`session_identity`) | 36 |
 | `dirtside/cli.py` | `hermes dirtside serve`, `pair`, `status`, `install-service`, bounded private refusal details and public-host hint | agent/*, argparse, httpx | 180 |
@@ -113,7 +113,7 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | `dirtside/agent/policy.py` | `evaluate(command, policy) -> Decision`, pure | model | 40 |
 | `dirtside/agent/executor.py` | `run(request, policy, send) -> Outcome`, process groups, chunking, cancel | model, subprocess | 114 |
 | `dirtside/agent/loop.py` | poll, backoff, dispatch, bounded parallelism, retrying posts | config, policy, executor, protocol, httpx | 150 |
-| `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 193 |
+| `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 194 |
 | `desktop/plugin.js` | pane, chip | `@hermes/plugin-sdk` | 280 |
 | `__init__.py` | lazy directory entry point | package registration | 50 |
 | `dirtside/__init__.py` | `register(ctx)` wiring | gateway modules | 50 |
