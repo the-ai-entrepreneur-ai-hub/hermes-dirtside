@@ -4,8 +4,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUDGETS = {
     "model": 110, "protocol": 147, "registry": 188, "relay": 234, "client": 173, "local": 136,
-    "environment": 116, "provider": 138, "auth": 60, "commands": 110, "prompt": 25, "cli": 159,
-    "agent/config": 90, "agent/policy": 40, "agent/executor": 111, "agent/loop": 150,
+    "environment": 116, "provider": 138, "auth": 60, "commands": 110, "prompt": 25, "cli": 180,
+    "agent/config": 100, "agent/policy": 40, "agent/executor": 114, "agent/loop": 150,
 }
 BUDGETS = {f"dirtside/{name}.py": n for name, n in BUDGETS.items()} | {
     "__init__.py": 50, "dirtside/__init__.py": 50, "dashboard/plugin_api.py": 193,

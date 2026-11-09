@@ -73,6 +73,7 @@ class Policy:
     max_timeout_s: int
     max_output_bytes: int
     max_parallel: int
+    env_passthrough: tuple[str, ...] = ()
 
 @dataclass(frozen=True)
 class Refused:

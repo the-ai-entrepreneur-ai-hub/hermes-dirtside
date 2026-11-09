@@ -27,10 +27,21 @@ def gateway_url(value):
     return value.rstrip("/")
 def policy_data(policy):
     return dict(deny_patterns=[p.pattern for p in policy.deny_patterns], max_timeout_s=policy.max_timeout_s,
-                max_output_bytes=policy.max_output_bytes, max_parallel=policy.max_parallel)
+                max_output_bytes=policy.max_output_bytes, max_parallel=policy.max_parallel,
+                env_passthrough=list(policy.env_passthrough))
+def passthrough_names(names):
+    if type(names) is not list or len(names) > 64:
+        raise ValueError("env_passthrough must be a list of at most 64 variable names")
+    if not all(type(n) is str and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", n) for n in names):
+        raise ValueError("env_passthrough names must match [A-Za-z_][A-Za-z0-9_]{0,127}")
+    if len(set(names)) != len(names):
+        raise ValueError("env_passthrough must not contain duplicate names")
+    return tuple(names)
 def parse_policy(data):
-    if type(data) is not dict or set(data) != {"deny_patterns", "max_timeout_s", "max_output_bytes", "max_parallel"}:
+    required = {"deny_patterns", "max_timeout_s", "max_output_bytes", "max_parallel"}
+    if type(data) is not dict or not required <= set(data) or set(data) - required - {"env_passthrough"}:
         raise ValueError("invalid device policy")
+    names = passthrough_names(data.get("env_passthrough", []))
     patterns = data["deny_patterns"]
     if type(patterns) is not list or not all(type(p) is str for p in patterns):
         raise ValueError("deny patterns must be strings")
@@ -38,7 +49,7 @@ def parse_policy(data):
     if not all(type(n) is int and n > 0 for n in caps):
         raise ValueError("policy caps must be positive integers")
     try:
-        return Policy(tuple(re.compile(p) for p in patterns), *caps)
+        return Policy(tuple(re.compile(p) for p in patterns), *caps, names)
     except re.error as exc:
         raise ValueError("invalid deny pattern") from exc
 def default_policy():

@@ -9,7 +9,8 @@ ROOT = Path(__file__).resolve().parent
 CORE = os.environ.get("HERMES_SRC", str(ROOT.parent / "hermes-agent-main"))
 sys.path.insert(0, CORE)
 sys.path.append(str(ROOT / "tools"))
-TEST_HOME = ROOT / ".notes" / "test-home"
+_test_home = tempfile.TemporaryDirectory(prefix="dirtside-tests-")
+TEST_HOME = Path(_test_home.name).resolve()
 for name in ("home", "tmp", "runtime"):
     (TEST_HOME / name).mkdir(parents=True, exist_ok=True)
 os.environ.update(

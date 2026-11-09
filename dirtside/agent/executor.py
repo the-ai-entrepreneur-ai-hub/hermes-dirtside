@@ -10,6 +10,9 @@ from contextlib import suppress
 from ..model import CHUNK_BYTES, FLUSH_MS, PART_MAX, Outcome, RequestState, device_timeout_s
 from ..protocol import Chunk
 from .policy import evaluate
+def child_environment(policy):
+    names = {"PATH", "HOME", "USER", "LANG", "TERM", "TMPDIR", *policy.env_passthrough}
+    return {k: v for k, v in os.environ.items() if k in names or k.startswith("LC_")}
 def _signal(proc, sig):
     with suppress(ProcessLookupError):
         try:
@@ -92,7 +95,7 @@ def run(req, policy, send, *, cancel=None):
     try:
         proc = subprocess.Popen([shutil.which("bash") or "bash", *(["-l"] if req.login else []), "-c", req.script],
                                 cwd=req.cwd, start_new_session=True, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT,
+                                stderr=subprocess.STDOUT, env=child_environment(policy),
                                 stdin=subprocess.PIPE if req.stdin is not None else subprocess.DEVNULL)
     except OSError as exc:
         return Outcome(RequestState.FINISHED, 126, 0, False, str(exc)), None

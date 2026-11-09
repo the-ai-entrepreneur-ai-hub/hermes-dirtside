@@ -10,10 +10,11 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from dataclasses import replace
 import httpx
 from nacl.signing import SigningKey, VerifyKey
 from .agent.activity import recent_activity
-from .agent.config import DeviceConfig, default_policy, device_path, gateway_url, policy_data
+from .agent.config import DeviceConfig, default_policy, device_path, gateway_url, passthrough_names, policy_data
 from .agent.loop import DEVICE_API, serve
 from .model import OFFLINE_AFTER_S
 from .protocol import sign
@@ -26,6 +27,10 @@ def setup_parser(parser):
     pairing.add_argument("--code", required=True)
     actions.add_parser("serve", help="Run the paired device agent in the foreground")
     actions.add_parser("status", help="Show pairing, policy and recent local activity")
+    policy = actions.add_parser("policy", help="Show or replace device environment passthrough names")
+    options = policy.add_mutually_exclusive_group()
+    options.add_argument("--env-passthrough", nargs="+", metavar="NAME")
+    options.add_argument("--clear-env-passthrough", action="store_true")
     service = actions.add_parser("install-service", help="Install a persistent per-user device service")
     service.add_argument("--dry-run", action="store_true", help="Print the unit without changing anything")
     service.add_argument("--remove", action="store_true", help="Remove the installed user service")
@@ -140,18 +145,34 @@ def failure_detail(exc, code):
         detail = detail.replace(code, "[redacted]")
     return f"HTTP {exc.response.status_code}: {detail[:512]}"
 
+def policy_command(args):
+    cfg = DeviceConfig.load()
+    names = args.env_passthrough
+    if names is not None or args.clear_env_passthrough:
+        cfg = replace(cfg, policy=replace(cfg.policy, env_passthrough=passthrough_names(names or [])))
+        cfg.save()
+    print("env_passthrough: " + (", ".join(cfg.policy.env_passthrough) or "none") + ". Applies at the next serve start.")
+
+def start(cfg):
+    print("Dirtside env_passthrough: " + (", ".join(cfg.policy.env_passthrough) or "none"), flush=True)
+    return serve(cfg)
+
 def handle(args):
     try:
         if args.dirtside_action == "pair":
             return pair(args)
         if args.dirtside_action == "install-service":
             return install_service(args)
+        if args.dirtside_action == "policy":
+            return policy_command(args)
         cfg = DeviceConfig.load()
-        return {"serve": serve, "status": status}[args.dirtside_action](cfg)
+        return {"serve": start, "status": status}[args.dirtside_action](cfg)
     except (OSError, ValueError, KeyError, TypeError, httpx.HTTPError, subprocess.CalledProcessError) as exc:
         message = ("Pairing failed. Check the URL and mint a fresh pairing code." if args.dirtside_action == "pair" else "Service installation failed."
                    if args.dirtside_action == "install-service" else "Cannot load device configuration. Pair this device first.")
         print(f"Dirtside: {message} ({failure_detail(exc, getattr(args, 'code', ''))})")
+        if isinstance(exc, ValueError) and str(exc).startswith("env_passthrough"):
+            print(str(exc))
         if args.dirtside_action == "pair" and "Invalid Host header" in failure_detail(exc, args.code):
             url = gateway_url(args.gateway_url)
             print("The gateway does not trust this hostname. On the gateway run: "

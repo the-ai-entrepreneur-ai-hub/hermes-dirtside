@@ -69,6 +69,7 @@ class Outcome:                             # a terminal report, from the device 
 @dataclass(frozen=True)
 class Policy:                              # parsed once on the device at its config boundary
     deny_patterns: tuple[re.Pattern, ...]; max_timeout_s: int; max_output_bytes: int; max_parallel: int
+    env_passthrough: tuple[str, ...] = ()
 
 @dataclass(frozen=True)
 class Refused:
@@ -105,10 +106,10 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 60 |
 | `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`, `resolve_target`, session context) | 110 |
 | `dirtside/prompt.py` | `current_target_section()` | registry, provider (`session_identity`) | 25 |
-| `dirtside/cli.py` | `hermes dirtside serve`, `pair`, `status`, `install-service`, bounded private refusal details and public-host hint | agent/*, argparse, httpx | 159 |
-| `dirtside/agent/config.py` | `DeviceConfig` read and atomic write (`device.json`, 0600) | model, protocol | 90 |
+| `dirtside/cli.py` | `hermes dirtside serve`, `pair`, `status`, `install-service`, bounded private refusal details and public-host hint | agent/*, argparse, httpx | 180 |
+| `dirtside/agent/config.py` | `DeviceConfig` read and atomic write (`device.json`, 0600) | model, protocol | 100 |
 | `dirtside/agent/policy.py` | `evaluate(command, policy) -> Decision`, pure | model | 40 |
-| `dirtside/agent/executor.py` | `run(request, policy, send) -> Outcome`, process groups, chunking, cancel | model, subprocess | 111 |
+| `dirtside/agent/executor.py` | `run(request, policy, send) -> Outcome`, process groups, chunking, cancel | model, subprocess | 114 |
 | `dirtside/agent/loop.py` | poll, backoff, dispatch, bounded parallelism, retrying posts | config, policy, executor, protocol, httpx | 150 |
 | `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 193 |
 | `desktop/plugin.js` | pane, chip | `@hermes/plugin-sdk` | 280 |

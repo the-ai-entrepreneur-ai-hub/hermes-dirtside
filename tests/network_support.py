@@ -3,6 +3,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from contextlib import contextmanager
@@ -74,7 +75,12 @@ def mounted(root, gate=True, relay=None):
     app.state.dirtside_relay = relay
     app.middleware("http")(gated_auth_middleware)
     app.middleware("http")(token_auth_middleware)
-    plugins = _discover_dashboard_plugins([(ROOT.parent, "user")])
+    # The review checkout can sit beside another plugin with the same name.
+    with tempfile.TemporaryDirectory(prefix="dirtside-discovery-") as isolated:
+        (Path(isolated) / "dirtside").symlink_to(ROOT, target_is_directory=True)
+        plugins = _discover_dashboard_plugins([(Path(isolated), "user")])
+        for plugin in plugins:
+            plugin["_dir"] = str(Path(plugin["_dir"]).resolve())
     entry = next(p for p in plugins if p["name"] == "dirtside")
     assert Path(entry["_dir"]) == ROOT / "dashboard"
     assert _mount_one_plugin_api(app, entry, {"dirtside"}, set())

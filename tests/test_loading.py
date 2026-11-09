@@ -1,5 +1,6 @@
 """Directory and dashboard loaders must share domain types and one live relay."""
 import os
+import shutil
 import subprocess
 import sys
 
@@ -71,10 +72,12 @@ finally:
 
 
 def test_real_directory_registration_and_independent_dashboard_import(tmp_path):
+    installed = tmp_path / "plugins" / "dirtside"
+    shutil.copytree(ROOT, installed, ignore=shutil.ignore_patterns(".git", ".notes", "__pycache__", ".pytest_cache"))
     core = os.environ.get("HERMES_SRC", str(ROOT.parent / "hermes-agent-main"))
     env = os.environ | dict(HERMES_HOME=str(tmp_path), HERMES_RUNTIME_DIR=str(tmp_path / "runtime"),
                             PYTHONPATH=os.pathsep.join((str(ROOT), core)))
-    result = subprocess.run([sys.executable, "-c", RUNTIME_CHECK, str(ROOT), str(tmp_path)],
+    result = subprocess.run([sys.executable, "-c", RUNTIME_CHECK, str(installed), str(tmp_path)],
                             cwd=ROOT, env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "shared runtime" in result.stdout
