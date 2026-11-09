@@ -37,3 +37,8 @@ def test_readme_promises_terminal_not_device_file_path_resolution():
     assert "The terminal commands run on the machine you choose" in text
     assert "choice of where terminal commands run" in text
     assert "choosing a device, file tools," not in text
+    manifest = (ROOT / "plugin.yaml").read_text()
+    assert "Terminal commands use a chosen device; file paths resolve on the gateway." in manifest
+    architecture = (ROOT / "docs/ARCHITECTURE.md").read_text()
+    assert not [line for line in architecture.splitlines()
+                if "so cached file operations also follow the target" in line]

@@ -4,7 +4,7 @@ kind: backend
 version: 0.1.0
 author: George Kioko
 description: >
-  Run terminal and file tools on a personal device chosen per conversation.
+  Terminal commands use a chosen device; file paths resolve on the gateway.
   Disclosure: adds a terminal backend and can execute shell scripts with the
   device user's privileges. Approvals stay enabled. Adds signed HTTP device
   routes and dashboard-session controls to the gateway. The foreground device
