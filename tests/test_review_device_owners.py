@@ -1,5 +1,6 @@
 """Sender authority, private discovery and migrations from the shipped registry."""
 import importlib.util
+import os
 import re
 import sqlite3
 import time
@@ -13,6 +14,7 @@ from gateway.session_context import clear_session_vars, set_session_vars
 from nacl.signing import SigningKey
 
 from dirtside.commands import Commands
+from dirtside.model import Outcome, RequestState
 from dirtside.protocol import DeviceHello
 from dirtside.registry import Registry
 from dirtside.relay import Relay
@@ -112,7 +114,7 @@ def test_sender_provenance(surface, platform, user, source, expected):
 
 @pytest.mark.parametrize("owners", [None, "telegram:A", ["A"], [1], ["local", "local"],
                                     ["telegram:"], ["telegram:A\n"], [""], ["email:bad\rvalue"],
-                                    ["irc:bad user"], ["irc:\0"], ["irc:\u202e"]])
+                                    ["irc:bad\tuser"], ["irc:\0"], ["irc:\u202e"]])
 def test_bad_owners_refused(owners):
     from dirtside.access import Access
     with pytest.raises(ValueError, match="owners"):
@@ -120,9 +122,13 @@ def test_bad_owners_refused(owners):
 
 
 @pytest.mark.parametrize("platform,user", [
-    ("email", "build+release@example.test"), ("signal", "+15550102000"), ("irc", "[native-nick]"),
+    ("email", "build+release@example.test"), ("email", '"build releases"@example.test'),
+    ("signal", "+15550102000"), ("irc", "[native-nick]"),
 ])
 def test_native_sender_spelling_can_own_device(tmp_path, platform, user):
+    if platform == "email":
+        from plugins.platforms.email.adapter import _extract_email_address
+        assert _extract_email_address(user) == user
     reg = Registry(tmp_path / "data.db")
     relay = Relay(reg)
     with sender(user, platform) as ctx:
@@ -154,7 +160,8 @@ def test_repair_transfers_pending_owner(tmp_path):
     first = pair_for(reg, relay, tmp_path)
     reg.revoke(first.name, int(time.time()))
     second = pair_for(reg, relay, tmp_path, user="B")
-    assert second.id == first.id and second.owner == "telegram:B"
+    assert second.id != first.id and second.owner == "telegram:B"
+    assert reg.device_by_id(first.id) is None
     with sender("A") as ctx:
         assert first.name not in Commands(ctx, reg, relay)("devices")
     with sender("B") as ctx:
@@ -174,6 +181,7 @@ def test_pending_names_cannot_be_stolen(tmp_path):
 
 
 def test_old_registry_migration(tmp_path):
+    from test_registry import request
     source = Path(__file__).with_name("fixtures") / "registry_0ae9359.txt"
     spec = importlib.util.spec_from_loader("dirtside._baseline_registry", loader=None)
     module = importlib.util.module_from_spec(spec)
@@ -185,6 +193,12 @@ def test_old_registry_migration(tmp_path):
     device, token = old.complete_pairing("old-device", hello, 101)
     pending = old.mint("pending", int(time.time()))
     old.set_target("old-chat", device.id)
+    old.log(request(device, n=1))
+    finished = request(device, n=2)
+    old.log(finished)
+    old.running(finished.id)
+    old.close(finished.id, Outcome(RequestState.FINISHED, 0, 12, False, "complete"), int(time.time()))
+    before_requests = sqlite3.connect(old.path).execute("SELECT * FROM requests ORDER BY id").fetchall()
     before = sqlite3.connect(old.path).execute("SELECT * FROM devices ORDER BY name").fetchall()
     for _ in range(3):
         upgraded = Registry(old.path)
@@ -197,6 +211,7 @@ def test_old_registry_migration(tmp_path):
             after = conn.execute("SELECT * FROM devices ORDER BY name").fetchall()
             assert [row[:-1] for row in after] == before
             assert all(row[-1] == "local" for row in after)
+            assert conn.execute("SELECT * FROM requests ORDER BY id").fetchall() == before_requests
 
 def test_owner_list_bounds():
     from dirtside.access import Access
@@ -254,7 +269,8 @@ def test_local_sender_is_bounded_and_rechecked(tmp_path, identity):
         assert not relay.handles and reg.recent(10) == []
 
 @pytest.mark.parametrize("source,surface", [("cli", "cli"), ("tui", "tui"), ("gui", "desktop"), ("acp", "acp")])
-def test_canonical_local_actor_uses_real_core_policy(tmp_path, source, surface):
+@pytest.mark.parametrize("user", ["", f"uid:{os.getuid()}", f"uid:{os.getuid() + 1}", "host-label"])
+def test_canonical_local_actor_uses_real_core_policy(tmp_path, source, surface, user):
     from dirtside.access import Access
     from gateway.session_policy import LocalSessionPolicy, policy_scope
     from hermes_cli.plugin_session import session_surface
@@ -262,5 +278,24 @@ def test_canonical_local_actor_uses_real_core_policy(tmp_path, source, surface):
                                 ignore_user_config=True)
     ctx = context()
     ctx.session_surface = session_surface
-    with sender("authenticated-host-actor", "local"), policy_scope(policy):
-        assert Access(ctx).identity() == "local"
+    with sender(user, "local"), policy_scope(policy):
+        expected = "local" if user in ("", f"uid:{os.getuid()}") else "local:" + user
+        assert Access(ctx).identity() == expected
+
+
+@pytest.mark.parametrize("surface", ["local", "cli", "tui", "desktop", "acp"])
+@pytest.mark.parametrize("user", ["", f"uid:{os.getuid()}", f"uid:{os.getuid() + 1}", "local"])
+def test_local_platform_requires_same_uid(surface, user):
+    from dirtside.access import Access
+    with sender(user, "local", surface=surface):
+        expected = "local" if surface != "local" and user in ("", f"uid:{os.getuid()}") else (
+            "local:" + user if user else "")
+        assert Access(context(surface)).identity() == expected
+
+
+@pytest.mark.parametrize("platform", ["telegram", "discord", "cli", "tui"])
+@pytest.mark.parametrize("user", ["local", f"uid:{os.getuid()}"])
+def test_messaging_uid_cannot_become_local(platform, user):
+    from dirtside.access import Access
+    with sender(user, platform, surface="local", source="cli"):
+        assert Access(context("local")).identity() == f"{platform}:{user}"

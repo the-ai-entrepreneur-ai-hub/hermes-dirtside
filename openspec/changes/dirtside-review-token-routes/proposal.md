@@ -27,3 +27,15 @@ None.
 ## Impact
 
 Only this plugin work tree, tests, documentation and private review notes. Keep signed device protocol version 1, requires_hermes >=0.22.7, and existing dependencies. No core edits, archive, commit or network writes.
+
+## Correction 1
+
+Make existing mounted routers follow successful provider replacement, preserve live relay state through forced rediscovery, and keep real disable/refusal closed without requiring a restart.
+
+## Correction 2
+
+Carry live runtime state only from an explicitly compatible versioned provider. Make cached owner environments use the Client while their route gate is retired; accept terminal outcomes from retained module generations by state value. Agents retry generic authentication errors instead of stopping permanently on disable.
+
+## Correction 4
+
+Preserve client execution and stream attachment through the short disposed/new-disabled registration window. Retry only its exact pre-handler 401 within three seconds, retaining request id and owner; observe real stream attachment before reloading.

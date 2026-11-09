@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE UNIQUE INDEX IF NOT EXISTS devices_active_name ON devices(name)
  WHERE revoked_at IS NULL AND pubkey IS NOT NULL;
 {_TARGETS};
+CREATE TABLE IF NOT EXISTS session_defaults (session_key TEXT PRIMARY KEY, target TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS requests (
  id TEXT PRIMARY KEY, device_id TEXT NOT NULL, session_key TEXT NOT NULL, task_id TEXT NOT NULL,
  state TEXT NOT NULL, preview TEXT NOT NULL, created_at INTEGER NOT NULL,
@@ -119,10 +120,13 @@ class Registry:
                                (name, now, code, _hash(code) if code is not None else None)).fetchone()
             if row is None:
                 raise ValueError("pairing code is expired or already used")
-            previous = conn.execute("SELECT id FROM devices WHERE name=? AND pubkey IS NOT NULL "
+            previous = conn.execute("SELECT id,owner FROM devices WHERE name=? AND pubkey IS NOT NULL "
                                     "ORDER BY revoked_at IS NULL DESC,created_at DESC,rowid DESC LIMIT 1", (name,)).fetchone()
-            identity = previous["id"] if previous else row["id"]
-            if previous:
+            reuse = previous is not None and previous["owner"] == row["owner"]
+            identity = previous["id"] if reuse else row["id"]
+            if previous and not reuse:
+                conn.execute("UPDATE devices SET revoked_at=? WHERE id=? AND revoked_at IS NULL", (now, previous["id"]))
+            if reuse:
                 conn.execute("DELETE FROM devices WHERE id=?", (row["id"],))
             facts = (hello.pubkey, hello.os, hello.arch, hello.home, hello.temp_dir, hello.agent_version)
             conn.execute("UPDATE devices SET pubkey=?,os=?,arch=?,home=?,temp_dir=?,agent_version=?,"
@@ -177,6 +181,11 @@ class Registry:
         with self._tx() as conn:
             row = conn.execute("SELECT target FROM targets WHERE session_key=?", (session_key,)).fetchone()
             return row[0] if row else None
+
+    def default_for(self, session_key, target):
+        with self._tx() as conn:
+            conn.execute("INSERT OR IGNORE INTO session_defaults VALUES(?,?)", (session_key, target))
+            return conn.execute("SELECT target FROM session_defaults WHERE session_key=?", (session_key,)).fetchone()[0]
 
     def log(self, req):
         with self._tx() as conn:

@@ -14,6 +14,7 @@ def session_identity():
     return SessionKey(get_session_env("HERMES_SESSION_KEY") or get_session_env("HERMES_SESSION_ID"))
 
 def resolve_target(session_key, is_cron, default_target, registry, relay, *, require_contact=True, access=None):
+    default_target = registry.default_for(session_key, default_target) if session_key and not is_cron else default_target
     chosen = registry.target(session_key) if session_key else None
     if chosen == "server":
         return Server()
@@ -25,6 +26,8 @@ def resolve_target(session_key, is_cron, default_target, registry, relay, *, req
     if device is None:
         return Server()
     access = access or Access()
+    if not chosen and device.owner != access.identity() and not access.privileged(device.owner):
+        return Server()
     if not access.can(device):
         if chosen:
             access.require(device)

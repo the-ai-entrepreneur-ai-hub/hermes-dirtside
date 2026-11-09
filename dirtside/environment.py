@@ -85,11 +85,14 @@ class DirtsideEnvironment(BaseEnvironment):
     def _run_bash(self, cmd_string, *, login=False, timeout=120, stdin_data=None, cwd=None):
         if self._access is not None:
             self._access.require(self._relay.registry.device_by_id(self._device.id))
+        sender = self._access.identity() if self._access is not None else "local"
+        return self._submit(cmd_string, _COMMAND.get(), sender, login=login, timeout=timeout, stdin_data=stdin_data, cwd=cwd)
+
+    def _submit(self, cmd_string, preview, sender, *, login=False, timeout=120, stdin_data=None, cwd=None):
         require_online(self._device, self._relay)
         req = ExecRequest(RequestId("r_" + secrets.token_hex(12)), self._device.id,
-                          self._session_key, self._task_id, _COMMAND.get(), cmd_string,
-                          login, timeout, stdin_data, cwd or self.cwd,
-                          self._access.identity() if self._access is not None else "local")
+                          self._session_key, self._task_id, preview, cmd_string,
+                          login, timeout, stdin_data, cwd or self.cwd, sender)
         return self._relay.connection().submit(req)
 
     def _wait_for_process(self, proc, timeout=120, **kwargs):
@@ -114,7 +117,8 @@ class DirtsideEnvironment(BaseEnvironment):
         try:
             if self._relay.connection().is_online(self._device.id):
                 path = shlex.quote(self._snapshot_path)
-                proc = self._run_bash(f"rm -f -- {path} {path}.tmp.*", timeout=5, cwd=self._device.home)
+                proc = self._submit(f"rm -f -- {path} {path}.tmp.*", "", self._device.owner,
+                                    timeout=5, cwd=self._device.home)
                 self._wait_for_process(proc, timeout=5)
         except Exception:
             pass  # Cleanup cannot prevent core from releasing an environment.

@@ -14,7 +14,7 @@ from hermes_constants import reset_hermes_home_override, set_hermes_home_overrid
 from nacl.signing import SigningKey
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from network_support import listening, mounted, until
+from network_support import generic_poll_rejections, listening, mounted, until
 from tools.interrupt import set_interrupt
 
 from dirtside.agent.config import DeviceConfig, default_policy, device_path, gateway_url
@@ -163,7 +163,8 @@ def test_agent_pinned_key_replay_and_duplicate_dispatch(tmp_path):
 def test_full_pair_execute_cancel_revoke_path_with_thread_agent(tmp_path):
     from dirtside.cli import handle
 
-    with mounted(tmp_path) as (app, reg, relay, _), listening(app) as url:
+    retried, stop = threading.Event(), threading.Event()
+    with mounted(tmp_path) as (app, reg, relay, _), listening(generic_poll_rejections(app, retried)) as url:
         code = reg.mint("thread-device", int(time.time()))
         scope = set_hermes_home_override(tmp_path / "install")
         try:
@@ -173,7 +174,7 @@ def test_full_pair_execute_cancel_revoke_path_with_thread_agent(tmp_path):
         finally:
             reset_hermes_home_override(scope)
         device = reg.active_device(cfg.name)
-        thread = threading.Thread(target=serve, args=(cfg,), daemon=True)
+        thread = threading.Thread(target=serve, args=(cfg,), kwargs={"stop": stop}, daemon=True)
         thread.start()
         try:
             until(lambda: relay.is_online(device.id))
@@ -204,9 +205,12 @@ def test_full_pair_execute_cancel_revoke_path_with_thread_agent(tmp_path):
                 finally:
                     stop_group(pid)
             revoke(url, device.name)
+            assert retried.wait(5) and thread.is_alive()
+            stop.set()
             thread.join(5)
             assert not thread.is_alive() and reg.credential_for(cfg.token, int(time.time())) is None
         finally:
+            stop.set()
             reg.revoke(device.name, int(time.time()))
             relay.revoke(device.id)
             thread.join(5)

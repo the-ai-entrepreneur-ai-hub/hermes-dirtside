@@ -27,3 +27,11 @@ None.
 ## Impact
 
 Only this plugin work tree, tests, documentation and private review notes. Keep signed device protocol version 1, requires_hermes >=0.22.7, and existing dependencies. No core edits, archive, commit or network writes.
+
+## Correction 1
+
+Preserve device-owned passthrough names when pairing again instead of silently clearing them; keep disclosure names-only and document the unchanged reset of other policy fields.
+
+## Correction 4
+
+Recover re-pairing from unreadable, unsafe or invalid existing device configuration with a short constant warning and empty passthrough names. Preserve valid names and keep all non-pair configuration reads strict.

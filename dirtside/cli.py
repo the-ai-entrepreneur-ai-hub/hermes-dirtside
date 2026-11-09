@@ -105,6 +105,13 @@ def pair(args):
     url = gateway_url(args.gateway_url)
     if args.name == "server" or not re.fullmatch(r"[a-z0-9-]{1,32}", args.name):
         raise ValueError("invalid device name")
+    names = ()
+    try:
+        names = DeviceConfig.load().policy.env_passthrough
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError, KeyError, TypeError):
+        print("Existing device configuration could not be read safely; env_passthrough reset to none.")
     key = SigningKey.generate()
     body = dict(pubkey=base64.b64encode(bytes(key.verify_key)).decode(), name=args.name,
                 os=platform.system(), arch=platform.machine(), home=str(Path.home()),
@@ -114,7 +121,8 @@ def pair(args):
         response.raise_for_status()
         data = response.json()
     cfg = DeviceConfig(url, data["device_id"], data["token"], key,
-                       VerifyKey(base64.b64decode(data["relay_pubkey"], validate=True)), args.name, default_policy())
+                       VerifyKey(base64.b64decode(data["relay_pubkey"], validate=True)), args.name,
+                       replace(default_policy(), env_passthrough=names))
     cfg.save()
     print(f"Paired {cfg.name} to {url}. Run 'hermes dirtside serve' to connect.")
 

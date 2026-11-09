@@ -19,3 +19,21 @@
 ## 5. Validation and checkpoint
 
 - [x] 5.1 Run package and fast suites, record green logs, update exact budgets, then save WP2 checkpoints.
+
+## Correction 1
+
+- [x] C1.1 Prove default squatting, cross-owner id reuse and missing owner confirmation red on WP5 and applicable baseline paths, then verify the root rules and controls.
+- [x] C1.2 Correct the re-pair scenario and missing-name disclosure without weakening pending-name safety.
+
+## Correction 2
+
+- [x] C2.1 Prove active cross-owner re-pair leaves queued and running handles live, then cancel both immediately after successful signed pairing without affecting same-owner reuse.
+
+## Correction 3
+
+- [x] C3.1 Reproduce the canonical local actor mismatch on both cores through real CLI and TUI slash/turn paths; add exact uid and messaging controls, then fix only Access.identity and verify both demos green.
+
+## Correction 4
+
+- [x] C4.1 Prove real relay wire becomes host under C3, bind policy-free slash proof to the actual non-relay command source, and retain native slash/turn success on both cores with scoped and overlapping-call controls.
+- [x] C4.2 Correct login and Windows host disclosures using actual core principal mapping; write the relay ingress suggestion in private notes only.

@@ -20,3 +20,16 @@
 ## 5. Validation and checkpoint
 
 - [x] 5.1 Run all day-9 tests unchanged, package tests and the fast suite; record exact budgets and save WP3 checkpoints.
+
+## Correction 1
+
+- [x] C1.1 Prove context-free cleanup red for local and messaging owners, then delete only plugin-owned snapshot paths through the normal serving-owner check.
+
+## Correction 2
+
+- [x] C2.1 Prove default drift after prompt-first and dispatch-first resolution, implement registry-backed conversation snapshots, and verify reload, idle recreation, new conversations, explicit overrides and cron.
+- [x] C2.2 Prove Desktop displays an untrusted implicit device despite server dispatch, then use the shared resolver under local identity while preserving missing/revoked 404.
+
+## Correction 4
+
+- [x] C4.1 Correct chosen-machine claims and disclose the gateway-side file-path limit without modifying file routing or original day-9 tests.

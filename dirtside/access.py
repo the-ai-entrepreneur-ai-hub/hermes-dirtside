@@ -1,5 +1,7 @@
 """Current-turn sender authority, independent of conversation target selection."""
+import os
 import re
+from contextvars import ContextVar
 
 from gateway.session_context import get_session_env
 
@@ -11,13 +13,14 @@ _UNSET = object()
 
 def valid_sender(value):
     return type(value) is str and (value == "local" or bool(re.fullmatch(
-        r"[a-z][a-z0-9_-]{0,31}:[^\s\x00-\x1f\x7f-\x9f]{1,256}", value))
+        r"[a-z][a-z0-9_-]{0,31}:[^\x00-\x1f\x7f-\x9f]{1,256}", value))
         and value.isprintable())
 
 
 class Access:
     def __init__(self, ctx=None, *, owners=_UNSET):
         self.ctx = ctx
+        self.command_source = ContextVar("dirtside.command_source", default=None)
         if owners is _UNSET:
             owners = ctx.get_config("owners", []) if ctx is not None else []
         if type(owners) is not list or len(owners) > 64 or not all(valid_sender(o) for o in owners):
@@ -32,7 +35,8 @@ class Access:
         platform = get_session_env("HERMES_SESSION_PLATFORM")
         user = get_session_env("HERMES_SESSION_USER_ID")
         surface, source = self.ctx.session_surface(), get_session_env("HERMES_SESSION_SOURCE")
-        if platform == "local" and surface in _LOCAL:
+        if (platform == "local" and self._canonical_local(surface)
+                and (not user or (os.name != "nt" and user == f"uid:{os.getuid()}"))):
             return "local"
         if not user and platform in ("", "cron") and get_session_env("HERMES_CRON_SESSION") == "1":
             return "local"
@@ -40,6 +44,13 @@ class Access:
             return "local"
         identity = f"{platform}:{user}" if platform and user else ""
         return identity if valid_sender(identity) else ""
+
+    def _canonical_local(self, surface):
+        source = self.command_source.get()
+        return surface in _LOCAL or (
+            surface == "local" and getattr(getattr(source, "platform", None), "value", None) == "local"
+            and getattr(source, "delivered_via_upstream_relay", None) is False
+            and not getattr(source, "detached_route", None))
 
     def _local(self, surface, platform, source):
         if surface in _LOCAL:

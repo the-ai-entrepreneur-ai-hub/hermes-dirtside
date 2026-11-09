@@ -79,7 +79,8 @@ def main():
     parser.add_argument("--report-only", action="store_true", help="Print threshold misses without failing")
     args = parser.parse_args()
     sys.dont_write_bytecode = True
-    sys.path[:0] = [os.environ["HERMES_SRC"], str(Path(__file__).resolve().parents[1])]
+    root = Path(__file__).resolve().parents[1]
+    sys.path[:0] = [os.environ["HERMES_SRC"], str(root), str(root / "tools")]
     with tempfile.TemporaryDirectory(prefix="dirtside-bench-") as temporary:
         tempfile.tempdir = temporary
         for name in ("HOME", "HERMES_HOME", "HERMES_RUNTIME_DIR", "TMPDIR", "TERMINAL_TEMP_DIR"):

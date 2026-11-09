@@ -28,6 +28,14 @@ The policy MUST load old four-key files, save env_passthrough, and refuse duplic
 - **WHEN** old and new policy files are loaded and saved
 - **THEN** old files mean an empty list and invalid lists fail with a clear error
 
+#### Scenario: test_bad_passthrough_refused
+- **WHEN** passthrough contains a malformed name, duplicate or wrong type
+- **THEN** policy parsing refuses it with an env_passthrough error
+
+#### Scenario: test_passthrough_limit_and_unknown_keys
+- **WHEN** 64 names, 65 names or an unknown policy key are supplied
+- **THEN** the exact bound is accepted and the excess or unknown key is refused
+
 ### Requirement: Device policy CLI
 The policy command and serve startup MUST disclose names only and changes MUST apply at the next start.
 
@@ -41,3 +49,21 @@ The real serve CLI MUST keep Hermes .env keys out of device commands in both tra
 #### Scenario: test_serve_dotenv_isolation
 - **WHEN** core terminal executes env on a real CLI-served device
 - **THEN** none of the fake provider names or values appears and ordinary shell commands still work
+
+### Requirement: Device shell basics
+Minimal child environments MUST retain ordinary shell command lookup, cwd, HOME and USER.
+
+#### Scenario: test_commands_keep_device_basics
+- **WHEN** a command looks up sh and prints its location and identity basics
+- **THEN** lookup and pwd succeed with the device's HOME and USER
+
+### Requirement: Re-pair policy continuity
+Re-pairing MUST preserve the existing validated env_passthrough names without copying values; a fresh device MUST start with an empty list.
+
+#### Scenario: test_repair_preserves_passthrough_names
+- **WHEN** the device pairs, declares passthrough names and pairs again
+- **THEN** the names survive with rotated credentials and no values printed or saved
+
+#### Scenario: test_repair_recovers_bad_existing_config_with_empty_names
+- **WHEN** re-pairing encounters unreadable, widened-permission, malformed or incomplete old device configuration
+- **THEN** it warns without values or exception details, pairs with empty passthrough names and saves private rotated credentials

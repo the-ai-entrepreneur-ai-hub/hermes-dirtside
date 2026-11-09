@@ -27,3 +27,15 @@ None.
 ## Impact
 
 Only this plugin work tree, tests, documentation and private review notes. Keep signed device protocol version 1, requires_hermes >=0.22.7, and existing dependencies. No core edits, archive, commit or network writes.
+
+## Correction 1
+
+Remove cleanup's dependency on current-turn identity while keeping all model execution authorized and preserving fixed, bounded snapshot deletion.
+
+## Correction 2
+
+Snapshot the configured default per conversation at first prompt/status/display/dispatch resolution. Existing conversations retain that name across reload and idle recreation; new conversations get the new default. Keep explicit target changes live.
+
+## Correction 4
+
+Narrow device-routing claims to terminal commands and disclose gateway-side file-path resolution. This is documentation of the owner's supplied Mac/WSL2 observation, not a file-path implementation change.

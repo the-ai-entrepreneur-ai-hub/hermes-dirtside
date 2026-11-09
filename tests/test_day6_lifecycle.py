@@ -26,6 +26,8 @@ from test_registry import paired, request
 
 
 @pytest.mark.parametrize("foreign", [{}, {"detail": "Unauthorized"}, {"detail": "device revoked", "error": "proxy"},
+                                     {"error": "unauthenticated", "detail": "Unauthorized"},
+                                     {"detail": "unknown device credential"},
                                      {"detail": ["device revoked"]}, "proxy requires login"])
 def test_foreign_poll_401_keeps_execution_alive_and_polls_again(tmp_path, foreign):
     relay_key, cfg, seen = SigningKey.generate(), config(), []
@@ -56,11 +58,14 @@ def test_foreign_poll_401_keeps_execution_alive_and_polls_again(tmp_path, foreig
 
 
 @pytest.mark.parametrize("kind", ["chunk", "result"])
-def test_foreign_upload_401_retries_without_shutdown(kind):
+@pytest.mark.parametrize("body", [{"detail": "Unauthorized"},
+                                {"error": "unauthenticated", "detail": "Unauthorized"},
+                                {"detail": "unknown device credential"}])
+def test_foreign_upload_401_retries_without_shutdown(kind, body):
     attempts, stopped, cancel = [], threading.Event(), threading.Event()
     def respond(req):
         attempts.append(json.loads(req.content))
-        return httpx.Response(401, json={"detail": "Unauthorized"}) if len(attempts) == 1 else httpx.Response(200)
+        return httpx.Response(401, json=body) if len(attempts) == 1 else httpx.Response(200)
     with httpx.Client(base_url="http://127.0.0.1", transport=httpx.MockTransport(respond)) as client:
         def shutdown():
             stopped.set()
@@ -75,11 +80,17 @@ def test_plugin_revocation_exits_subprocess_successfully(tmp_path, detail):
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
     app = FastAPI()
+    retried, attempts = threading.Event(), []
     @app.post("/api/plugins/dirtside/device/poll")
     async def revoked():
+        attempts.append(detail)
+        if len(attempts) == 2:
+            retried.set()
+            return JSONResponse({"detail": "device revoked"}, status_code=401)
         return JSONResponse({"detail": detail}, status_code=401)
     with listening(app) as url, subprocess_agent(config(url), tmp_path / "install") as proc:
         assert proc.wait(timeout=5) == 0
+        assert retried.is_set() is (detail == "unknown device credential")
 
 
 def test_rendered_services_do_not_restart_successful_revoke(tmp_path):

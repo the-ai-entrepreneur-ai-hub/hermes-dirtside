@@ -32,6 +32,19 @@ def check_status(response):
     detail = "".join(c for c in detail if c.isprintable())[:200]
     raise EnvironmentConnectionError(f"Dirtside owner answered {response.status_code}: {detail}")
 
+def retry_disabled(response, deadline):
+    if response.status_code != 401 or time.monotonic() >= deadline:
+        return False
+    response.read()
+    try:
+        if response.json().get("detail") != "Dirtside token routes are disabled":
+            return False
+    except (ValueError, AttributeError):
+        return False
+    response.close()  # This exact pre-handler refusal has no execution or stream side effect.
+    time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+    return True
+
 def frames(response):
     pending, chunks = bytearray(), iter(response.iter_bytes())
     def take(size):
@@ -77,13 +90,17 @@ class Client:
             raise EnvironmentConnectionError(OWNER_MISSING) from None
 
     def request(self, method, path, *, origin=None, **kwargs):
+        deadline = time.monotonic() + 3
         try:
-            current = self.origin()
-            if current is None or (origin is not None and origin != current):
-                raise EnvironmentConnectionError(OWNER_MISSING)
-            response = self.http.request(method, current + path, headers=self.headers, **kwargs)
-            check_status(response)
-            return response.json()
+            while True:
+                current = self.origin()
+                if current is None or (origin is not None and origin != current):
+                    raise EnvironmentConnectionError(OWNER_MISSING)
+                response = self.http.request(method, current + path, headers=self.headers, **kwargs)
+                if path == "/exec" and retry_disabled(response, deadline):
+                    continue
+                check_status(response)
+                return response.json()
         except (httpx.HTTPError, ValueError):
             raise EnvironmentConnectionError(OWNER_MISSING) from None
 
@@ -142,18 +159,18 @@ class Client:
 
     def stream(self, handle, origin, fd):
         outcome = Outcome(RequestState.LOST, 255, 0, False, OWNER_MISSING)
+        deadline = time.monotonic() + 3
         try:
-            if self.origin() != origin:
-                raise EnvironmentConnectionError(OWNER_MISSING)
-            with self.http.stream("GET", f"{origin}/stream", params={"id": handle.req.id},
-                                  headers=self.headers, timeout=httpx.Timeout(2, read=None)) as response:
-                check_status(response)
-                for part in frames(response):
-                    if isinstance(part, Outcome):
-                        outcome = part
-                    elif not self.relay._write(handle, fd, part, time.monotonic() + FEED_BLOCK_S):
-                        outcome = Outcome(RequestState.LOST, 255, 0, False, "gateway stopped reading output")
-                        break
+            while True:
+                if self.origin() != origin:
+                    raise EnvironmentConnectionError(OWNER_MISSING)
+                with self.http.stream("GET", f"{origin}/stream", params={"id": handle.req.id},
+                                      headers=self.headers, timeout=httpx.Timeout(2, read=None)) as response:
+                    if retry_disabled(response, deadline):
+                        continue
+                    check_status(response)
+                    outcome = self.copy_stream(handle, response, fd)
+                break
         except EnvironmentConnectionError as exc:
             outcome = Outcome(RequestState.LOST, 255, 0, False, str(exc))
         except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError, RuntimeError):
@@ -161,6 +178,14 @@ class Client:
         finally:
             os.close(fd)
             self.finish(handle, outcome)
+
+    def copy_stream(self, handle, response, fd):
+        for part in frames(response):
+            if isinstance(part, Outcome):
+                return part
+            if not self.relay._write(handle, fd, part, time.monotonic() + FEED_BLOCK_S):
+                return Outcome(RequestState.LOST, 255, 0, False, "gateway stopped reading output")
+        raise ValueError("missing local outcome")
 
     def finish(self, handle, outcome):
         with self._lock:

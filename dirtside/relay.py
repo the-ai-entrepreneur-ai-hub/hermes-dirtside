@@ -18,9 +18,10 @@ class Relay:
         self._paired_keys = {}
         self._client, self._owner_pid, self._streams = None, None, {}
         self.access = Access()
+        self._routes_enabled = lambda: True
 
     def connection(self):
-        return self if self._client is None or self._owner_pid == os.getpid() else self._client
+        return self if self._routes_enabled() and (self._client is None or self._owner_pid == os.getpid()) else self._client
 
     def submit_local(self, req):
         handle = self.submit(req)
@@ -119,8 +120,8 @@ class Relay:
             return  # Legacy and abandoned polls cannot prove a missing dispatch.
         running = set(running)
         for handle in self.handles.values():
-            if (handle.req.device_id, handle.state, handle._last_seq, handle._feeding) == (
-                    device_id, RequestState.RUNNING, -1, False) and handle.req.id not in running:
+            if (handle.req.device_id, handle.state.value, handle._last_seq, handle._feeding) == (
+                    device_id, RequestState.RUNNING.value, -1, False) and handle.req.id not in running:
                 handle.state = RequestState.QUEUED
 
     def next(self, device_id, wait_s, cancelled=None, running=None, pubkey=None):
@@ -131,10 +132,10 @@ class Relay:
             if running is not None:
                 self.cancels[device_id].update(rid for rid in running if rid not in self.handles)
             while True:
-                if cancelled is not None and cancelled.is_set():
+                if not self._routes_enabled() or (cancelled is not None and cancelled.is_set()):
                     return None, []
                 req = next((h.req for h in self.handles.values()
-                            if h.req.device_id == device_id and h.state is RequestState.QUEUED), None)
+                            if h.req.device_id == device_id and h.state.value == RequestState.QUEUED.value), None)
                 cancels = list(self.cancels.pop(device_id, ()))
                 if req is not None:
                     self.handles[req.id].state = RequestState.RUNNING
@@ -206,6 +207,7 @@ class Relay:
             return True
 
     def close(self, request_id, outcome):
+        outcome = replace(outcome, state=RequestState(outcome.state.value))
         if outcome.state not in TERMINAL:
             raise ValueError("outcome is not terminal")
         with self._condition:

@@ -59,7 +59,7 @@ def test_cancellation_starts_at_claim_without_waiting_for_output():
 
 
 def test_benchmark_loopback_smoke():
-    result = subprocess.run([sys.executable, str(ROOT / "tools/bench.py"), "--loopback", "--report-only"],
+    result = subprocess.run([sys.executable, str(ROOT / "tests/bench.py"), "--loopback", "--report-only"],
                             env=os.environ | {"HERMES_SRC": str(CORE)}, cwd=ROOT,
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -79,7 +79,7 @@ def test_benchmark_smoke_accepts_a_reported_timing_miss(monkeypatch, capsys):
               + capsys.readouterr().out)
     assert "| 10 MB output | 7.96 MB/s | >= 8 MB/s | FAIL |" in output
     def run(command, **options):
-        assert command == [sys.executable, str(ROOT / "tools/bench.py"), "--loopback", "--report-only"]
+        assert command == [sys.executable, str(ROOT / "tests/bench.py"), "--loopback", "--report-only"]
         assert options["cwd"] == ROOT and options["capture_output"] and options["text"]
         return SimpleNamespace(returncode=0, stdout=output, stderr="")
     monkeypatch.setattr(subprocess, "run", run)

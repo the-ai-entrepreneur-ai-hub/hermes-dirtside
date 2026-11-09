@@ -2,9 +2,9 @@
 
 ## Context
 
-See proposal.md for motivation. In core 84a0301, `tools/environments/base.py:312-327` stores cwd and a unique snapshot path on each environment. `base_session_env.py:183-202` sources and updates that file. The existing per-conversation, per-target delegates already separate snapshots.
+See proposal.md for motivation. In core 84a0301, core's `tools/environments/base.py`, lines 312 to 327 at `84a0301` stores cwd and a unique snapshot path on each environment. Core's `base_session_env.py`, lines 183 to 202 at `84a0301` sources and updates that file. The existing per-conversation, per-target delegates already separate snapshots.
 
-There is a second cwd store: `tools/terminal_tool.py:249-283` records one directory per conversation. Its resolver at 1014-1061 reads that record before the call at 1373-1376 passes cwd explicitly to the delegate. Merely choosing a different delegate or changing the outer cwd getter does not remove this override.
+There is a second cwd store: core's `tools/terminal_tool.py`, lines 249 to 283 at `84a0301` records one directory per conversation. Its resolver at 1014-1061 reads that record before the call at 1373-1376 passes cwd explicitly to the delegate. Merely choosing a different delegate or changing the outer cwd getter does not remove this override.
 
 ## Goals / Non-Goals
 
@@ -14,7 +14,7 @@ There is a second cwd store: `tools/terminal_tool.py:249-283` records one direct
 
 ## Decisions
 
-1. On the terminal path, activate the conversation's facade when core reads the provider's `default_cwd` during configuration (`tools/terminal_tool.py:755-776`), before its planner reads the conversation cwd record at 1220. File tools with a live facade select through its `cwd` getter instead. A weak per-conversation index finds live facades without extending their lifetime. Unknown attribute probes, including absent `host_cwd`, remain registry-free and raise AttributeError normally, including on an uninitialized facade.
+1. On the terminal path, activate the conversation's facade when core reads the provider's `default_cwd` during configuration (core's `tools/terminal_tool.py`, lines 755 to 776 at `84a0301`), before its planner reads the conversation cwd record at 1220. File tools with a live facade select through its `cwd` getter instead. A weak per-conversation index finds live facades without extending their lifetime. Unknown attribute probes, including absent `host_cwd`, remain registry-free and raise AttributeError normally, including on an uninitialized facade.
 2. Keep the selected identity and per-target durable cwds on the provider, not on an evictable facade. Save the outgoing core record only on a real transition; a recreated facade on the same target leaves the surviving core record untouched and uses it for its new delegate. Retain server's initial cwd separately from a later device-derived command plan. Keep at most 1,024 conversation entries, touching their insertion order at selection and removing the least recently used entry when over the cap. This history contains no facades or snapshots. Do not copy, concatenate or clear snapshot contents.
 3. Keep server on `LocalEnvironment` and preserve its configured initial cwd. New device delegates start at their own home. Explicit per-command workdirs remain core-owned rather than being turned into persistent target state.
 4. Never probe for directory existence or heal a deleted cwd. The original wrapper and failure rendering remain authoritative.

@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 from hermes_cli.main import _attach_plugin_cli_command
 from hermes_constants import reset_hermes_home_override, set_hermes_home_override
-from network_support import DESKTOP_TOKEN, listening, mounted, subprocess_agent, until
+from network_support import DESKTOP_TOKEN, generic_poll_rejections, listening, mounted, subprocess_agent, until
 from tools.interrupt import set_interrupt
 
 from dirtside.agent.activity import Activity
@@ -58,7 +58,8 @@ def test_cli_unpaired_is_actionable(tmp_path, capsys):
 
 def test_cli_pair_real_http_pwd_cd_stop_revoke(tmp_path, capsys):
     install = tmp_path / "device-install"
-    with mounted(tmp_path) as (app, reg, relay, _), listening(app) as url:
+    retried = threading.Event()
+    with mounted(tmp_path) as (app, reg, relay, _), listening(generic_poll_rejections(app, retried)) as url:
         code = reg.mint("laptop", int(time.time()))
         scope = set_hermes_home_override(install)
         try:
@@ -101,6 +102,8 @@ def test_cli_pair_real_http_pwd_cd_stop_revoke(tmp_path, capsys):
                 with httpx.Client(headers={"Authorization": f"Bearer {DESKTOP_TOKEN}"}) as client:
                     assert client.post(url + "/api/plugins/dirtside/devices/laptop/revoke").status_code == 200
                 assert future.result(timeout=1)["returncode"] == 130
+                assert retried.wait(5) and proc.poll() is None
+                proc.terminate()
                 assert proc.wait(timeout=5) == 0
                 assert not alive(pid) and not relay.is_online(device.id)
             remote.cleanup()

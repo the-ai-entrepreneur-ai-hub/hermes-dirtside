@@ -116,7 +116,9 @@ def test_real_gateway_restart_stops_silent_work_before_deadline(tmp_path):
 
 
 @pytest.mark.parametrize("body,expected", [
-    ({"error": "unauthenticated", "detail": "Unauthorized"}, True),
+    ({"error": "unauthenticated", "detail": "Unauthorized"}, False),
+    ({"detail": "unknown device credential"}, False),
+    ({"detail": "device revoked"}, True),
     ({"detail": "Unauthorized"}, False),
     ({"error": "proxy", "detail": "Unauthorized"}, False),
     ({"error": "unauthenticated", "detail": "Unauthorized", "extra": True}, False),
@@ -126,20 +128,34 @@ def test_core_credential_rejection_requires_exact_body(body, expected):
     assert not revoked(httpx.Response(503, json=body))
 
 
-def test_agent_stops_when_core_rejects_revoked_token_before_route(tmp_path):
-    with mounted(tmp_path) as (app, reg, _, _), listening(app) as url:
-        device, cfg = setup_agent(reg, tmp_path, url)
-        reg.revoke(device.name, int(time.time()))
-        response = httpx.post(url + API + "/device/poll", headers=headers(cfg.token),
-                              json=sign(cfg.key, "poll", device.id, {"running": []}), trust_env=False)
-        assert response.status_code == 401
-        assert response.json() == {"error": "unauthenticated", "detail": "Unauthorized"}
-        stop = threading.Event()
-        thread = threading.Thread(target=serve, args=(cfg,), kwargs={"stop": stop}, daemon=True)
-        thread.start()
-        try:
-            thread.join(5)
-            assert not thread.is_alive() and stop.is_set()
-        finally:
-            stop.set()
-            thread.join(5)
+def test_agent_retries_generic_core_rejection(tmp_path):
+    retried, attempts = threading.Event(), []
+    with mounted(tmp_path) as (app, reg, _, _):
+        @app.middleware("http")
+        async def observe(request, call_next):
+            response = await call_next(request)
+            if request.url.path.endswith("/device/poll"):
+                attempts.append(response.status_code)
+                if len(attempts) >= 3:
+                    retried.set()
+            return response
+        with listening(app) as url:
+            check_agent_retries(reg, tmp_path, url, retried)
+
+
+def check_agent_retries(reg, tmp_path, url, retried):
+    device, cfg = setup_agent(reg, tmp_path, url)
+    reg.revoke(device.name, int(time.time()))
+    response = httpx.post(url + API + "/device/poll", headers=headers(cfg.token),
+                          json=sign(cfg.key, "poll", device.id, {"running": []}), trust_env=False)
+    assert response.status_code == 401
+    assert response.json() == {"error": "unauthenticated", "detail": "Unauthorized"}
+    stop = threading.Event()
+    thread = threading.Thread(target=serve, args=(cfg,), kwargs={"stop": stop}, daemon=True)
+    thread.start()
+    try:
+        assert retried.wait(5)
+        assert thread.is_alive() and not stop.is_set()
+    finally:
+        stop.set()
+        thread.join(5)

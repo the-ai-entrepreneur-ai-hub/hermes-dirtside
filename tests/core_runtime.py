@@ -177,9 +177,43 @@ class Runtime:
         set_interrupt(True, tid)
         return {}
 
+    def reload(self, args):
+        from hermes_cli.dashboard_auth import get_provider
+        if "enabled" in args or "default_target" in args:
+            from hermes_cli.config import atomic_config_write, load_config
+            from hermes_constants import get_hermes_home
+            config = load_config()
+            if "enabled" in args:
+                config["plugins"]["enabled"] = ["dirtside"] if args["enabled"] else []
+                config["plugins"]["disabled"] = [] if args["enabled"] else ["dirtside"]
+            if "default_target" in args:
+                config["plugins"]["entries"]["dirtside"]["settings"]["default_target"] = args["default_target"]
+            atomic_config_write(get_hermes_home() / "config.yaml", config)
+        previous = self.auth
+        self.manager.discover_and_load(force=True)
+        current = get_provider("dirtside")
+        if current is not None:
+            self.auth = current
+        return dict(replaced=current is not previous, old_enabled=previous.routes.enabled,
+                    enabled=current is not None and current.routes.enabled)
+
+    def stream_attached(self, args):
+        relay = self.auth.relay
+        with relay._condition:
+            return args["request_id"] in relay.handles and args["request_id"] not in relay._streams
+
     def network(self, args):
         (self.blocked.set if args["blocked"] else self.blocked.clear)()
         return {}
+
+    def generation(self, args):
+        api = sys.modules["hermes_dashboard_plugin_dirtside"]
+        mounted = next(route.endpoint.__self__ for route in api.router.routes
+                       if getattr(route.endpoint, "__self__", None) is not None)
+        types = type(mounted).output.__globals__
+        outcome = types["Outcome"](types["RequestState"].LOST, 255, 0, False, "test mounted generation")
+        self.auth.relay.close("r_" + "0" * 24, outcome)
+        return {"close": True}
 
     def dispatch(self, message):
         from gateway.session_context import clear_session_vars, set_session_vars
@@ -195,7 +229,8 @@ class Runtime:
         try:
             handlers = {name: getattr(self, name) for name in (
                 "info", "target", "state", "turn_end", "reap", "terminal", "file",
-                "queue", "cancel", "interrupt", "network", "slash", "prompt", "fake_device")}
+                "queue", "cancel", "interrupt", "network", "slash", "prompt", "fake_device", "reload", "generation",
+                "stream_attached")}
             return handlers[message["method"]](args)
         finally:
             set_interrupt(False)

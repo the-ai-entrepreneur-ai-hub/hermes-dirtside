@@ -19,3 +19,19 @@
 ## 5. Validation and checkpoint
 
 - [x] 5.1 Run package and fast suites, record green output and exact budget changes, then save WP4 checkpoints.
+
+## Correction 1
+
+- [x] C1.1 Prove forced-discovery and registry replacement red; bind each request and local handler to the current instance while preserving live relay state.
+- [x] C1.2 Verify real disable/re-enable, partial refusal, in-flight work and both transports without opening unloaded routes.
+
+## Correction 2
+
+- [x] C2.1 Prove old-provider upgrade and cached in-process/Client re-enable defects; require a runtime version, route retired relays through Client and refuse unclaimed self-forwarding without changing ordinary reload or secondary forwarding.
+- [x] C2.2 Prove retained mounted-generation close and kill defects, then normalize terminal states and compare kill states by value.
+- [x] C2.3 Prove disable's generic core 401 stops agents, then retry generic and unknown-credential errors for poll and upload while retaining exact explicit-revoked shutdown.
+
+## Correction 4
+
+- [x] C4.1 Prove exact disabled-route /exec and /stream loss on C3, add bounded same-id retry with strict refusal controls, and wait for actual stream attachment in the real reload test.
+- [x] C4.2 Run 20 fresh serial client reload cases per prepared core under measured CPU load, in addition to the whole-file correction repeats.

@@ -1,6 +1,6 @@
 # Dirtside architecture
 
-Reference for Dirtside. Written 2026-11-05 against the contracts verified in `DIRTSIDE-PLAN.md` section 17, then revised against the implementation through day 8. The plan says what and when. Part A describes ownership and contracts; its original API sketches are historical where A16's implementation amendments supersede them. A3 records the enforced budgets. Part B explains the choices and alternatives.
+Reference for Dirtside. Written 2026-11-05 against the contracts verified in `DIRTSIDE-PLAN.md` section 17, then revised against the implementation through the catalog review. The plan says what and when. Part A describes ownership and contracts; its original API sketches are historical where A16's implementation amendments supersede them. A3 records the enforced budgets. Part B explains the choices and alternatives.
 
 Two rules govern every choice below. Build the smallest thing that does the job, on top of what Hermes already provides. Put the domain in data structures, so the code has few branches and no scattered modes.
 
@@ -36,7 +36,7 @@ RequestId  = NewType("RequestId", str)    # "r_" + 12 random bytes, hex
 @dataclass(frozen=True)
 class Device:                              # paired, not revoked, not expired; nothing else is a Device
     id: DeviceId; name: str; pubkey: bytes
-    os: str; arch: str; home: str; temp_dir: str; agent_version: str
+    os: str; arch: str; home: str; temp_dir: str; agent_version: str; owner: str = "local"
 
 @dataclass(frozen=True)
 class Pending:                             # a minted pairing code, until the device completes pairing
@@ -60,7 +60,7 @@ class ExecRequest:                         # gateway-side record; the wire form 
     id: RequestId; device_id: DeviceId; session_key: SessionKey; task_id: str
     command: str                           # the model's command, for policy and the pane
     script: str                            # the wrapped bash script BaseEnvironment produced
-    login: bool; timeout_s: int; stdin: str | None; cwd: str
+    login: bool; timeout_s: int; stdin: str | None; cwd: str; sender: str = "local"
 
 @dataclass(frozen=True)
 class Outcome:                             # a terminal report, from the device or from the relay itself
@@ -96,32 +96,32 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | Module | Owns | Depends on | Budget |
 |---|---|---|---|
 | `dirtside/backend.py` | explicit terminal-workdir context and lazy local handoff | stdlib, transitional core local environment | 22 |
-| `dirtside/access.py` | current sender identity, visibility and owner authorization | public session context, environment error | 71 |
+| `dirtside/access.py` | current sender identity, command-source provenance, visibility and owner authorization | public session context, environment error | 82 |
 | `dirtside/model.py` | the types and constants above | stdlib | 111 |
 | `dirtside/protocol.py` | `Envelope`, canonical JSON, `sign`, `verify`, `ReplayGuard`, one `parse_*` per message kind, `PROTOCOL_VERSION = 1` | model, nacl | 147 |
-| `dirtside/registry.py` | the SQLite boundary, relay key and private local secret | model, sqlite3 | 207 |
-| `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), threading | 237 |
-| `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 120 |
-| `dirtside/client.py` | process-verified owner discovery, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 173 |
-| `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, FastAPI, anyio | 147 |
-| `dirtside/provider.py` | dispatch-time conversation context, bounded cwd history and per-target snapshot delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, backend, environment, `gateway.session_context` | 161 |
-| `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 85 |
+| `dirtside/registry.py` | the SQLite boundary, relay key and private local secret | model, sqlite3 | 216 |
+| `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), threading | 239 |
+| `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 124 |
+| `dirtside/client.py` | process-verified owner discovery, bounded disabled-route retry, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 198 |
+| `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, FastAPI, anyio | 152 |
+| `dirtside/provider.py` | dispatch-time conversation context, bounded cwd history and per-target snapshot delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, backend, environment, `gateway.session_context` | 164 |
+| `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 91 |
 | `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`, `resolve_target`, session context) | 110 |
 | `dirtside/prompt.py` | `current_target_section()` | registry, provider (`session_identity`) | 36 |
-| `dirtside/cli.py` | `hermes dirtside serve`, `pair`, `status`, `install-service`, bounded private refusal details and public-host hint | agent/*, argparse, httpx | 180 |
+| `dirtside/cli.py` | `hermes dirtside serve`, `pair`, `status`, `install-service`, re-pair recovery, bounded private refusal details and public-host hint | agent/*, argparse, httpx | 188 |
 | `dirtside/agent/config.py` | `DeviceConfig` read and atomic write (`device.json`, 0600) | model, protocol | 100 |
 | `dirtside/agent/policy.py` | `evaluate(command, policy) -> Decision`, pure | model | 40 |
 | `dirtside/agent/executor.py` | `run(request, policy, send) -> Outcome`, process groups, chunking, cancel | model, subprocess | 114 |
 | `dirtside/agent/loop.py` | poll, backoff, dispatch, bounded parallelism, retrying posts | config, policy, executor, protocol, httpx | 150 |
-| `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 194 |
+| `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 214 |
 | `desktop/plugin.js` | pane, chip | `@hermes/plugin-sdk` | 280 |
 | `__init__.py` | lazy directory entry point | package registration | 50 |
 | `dirtside/__init__.py` | `register(ctx)` wiring | gateway modules | 50 |
-| `tools/bench.py` | in-process metrics and non-gating client latency rows; existing thresholds remain, with report-only in CI | bench_client, statistics | 91 |
+| `tests/bench.py` | in-process metrics and non-gating client latency rows; existing thresholds remain, with report-only in CI | bench_client, statistics | 92 |
 | `tools/fake_device.py` | a signed fake device, including the independently loaded core owner's result parser | agent/executor, relay | 82 |
 | `tools/check_sizes.py` | the size check | stdlib | 30 |
 
-Production core imports, in full: `agent.terminal_env_provider.TerminalEnvironmentProvider` (provider), `tools.environments.base.BaseEnvironment` (environment), `tools.environments.base.EnvironmentConnectionError` (environment), `tools.environments.local.LocalEnvironment` (lazy backend handoff), `gateway.session_context.get_session_env` (provider), `plugins.plugin_storage.plugin_data_dir` (package registration), `hermes_cli.dashboard_auth.DashboardAuthProvider` and `hermes_cli.dashboard_auth.TokenPrincipal` (auth), `hermes_cli.dashboard_auth.get_provider` (dashboard routes), `hermes_cli.dashboard_auth.token_auth.register_token_route` (auth), and `hermes_constants.get_hermes_home` (device config). No production code monkeypatches Hermes. The separate test rig imports core's entry points to exercise them.
+Production core imports, in full: `agent.terminal_env_provider.TerminalEnvironmentProvider` (provider), `tools.environments.base.BaseEnvironment` (environment), `tools.environments.base.EnvironmentConnectionError` (environment), `tools.environments.local.LocalEnvironment` (lazy backend handoff), `gateway.session_context.get_session_env` (provider), `plugins.plugin_storage.plugin_data_dir` (package registration), `hermes_cli.dashboard_auth.DashboardAuthProvider` and `hermes_cli.dashboard_auth.TokenPrincipal` (auth), `hermes_cli.dashboard_auth.get_provider` (registration and dashboard routes), `hermes_cli.dashboard_auth.token_auth.register_token_route` (auth), and `hermes_constants.get_hermes_home` (device config). No production code monkeypatches Hermes. The separate test rig imports core's entry points to exercise them.
 
 ## A4. Registry (the SQLite boundary, and only a log for requests)
 
@@ -131,10 +131,12 @@ Production core imports, in full: `agent.terminal_env_provider.TerminalEnvironme
 CREATE TABLE devices (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash BLOB NOT NULL,
   pubkey BLOB, os TEXT, arch TEXT, home TEXT, temp_dir TEXT, agent_version TEXT,
-  created_at INTEGER NOT NULL, expires_at INTEGER, revoked_at INTEGER
+  created_at INTEGER NOT NULL, expires_at INTEGER, revoked_at INTEGER,
+  owner TEXT NOT NULL DEFAULT 'local'
 );                                   -- pubkey NULL and expires_at set = pending; pubkey set and expires_at NULL = paired
 CREATE UNIQUE INDEX devices_active_name ON devices(name) WHERE revoked_at IS NULL AND pubkey IS NOT NULL;
-CREATE TABLE targets (session_key TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devices(id), set_at INTEGER NOT NULL);
+CREATE TABLE targets (session_key TEXT PRIMARY KEY, target TEXT NOT NULL, set_at INTEGER NOT NULL);
+CREATE TABLE session_defaults (session_key TEXT PRIMARY KEY, target TEXT NOT NULL);
 CREATE TABLE requests (
   id TEXT PRIMARY KEY, device_id TEXT NOT NULL, session_key TEXT NOT NULL, task_id TEXT NOT NULL,
   state TEXT NOT NULL, preview TEXT NOT NULL, created_at INTEGER NOT NULL,
@@ -143,6 +145,8 @@ CREATE TABLE requests (
 ```
 
 The relay's Ed25519 seed is a 0600 file next to the database, `relay.key`, the same shape as `device.json` on the device.
+
+An idempotent transaction adds `owner` to old device rows with default `local`, preserves existing devices, tokens, targets and requests, and records the minting sender on pending rows so completion and re-pairing keep that authority.
 
 ```python
 class Registry:
@@ -153,8 +157,9 @@ class Registry:
     def active_device(self, name: str) -> Device | None
     def device_by_id(self, device_id: DeviceId) -> Device | None
     def revoke(self, name: str, now: int) -> Device | None
-    def set_target(self, session_key: SessionKey, device_id: DeviceId | None) -> None   # None clears (server)
-    def target_device_id(self, session_key: SessionKey) -> DeviceId | None
+    def set_target(self, session_key: SessionKey, target: str | None) -> None   # id, server, or None to restore the captured default
+    def target(self, session_key: SessionKey) -> str | None
+    def default_for(self, session_key: SessionKey, target: str) -> str   # insert first configured name, then return it
     def log(self, req: ExecRequest) -> None                           # INSERT, state queued, preview = command[:120]
     def running(self, request_id: RequestId) -> None                 # at claim: UPDATE queued to running once, no terminal metadata
     def close(self, request_id: RequestId, outcome: Outcome, now: int) -> None   # plain UPDATE; the relay already decided
@@ -227,6 +232,7 @@ def session_identity() -> SessionKey:
     return SessionKey(get_session_env("HERMES_SESSION_KEY") or get_session_env("HERMES_SESSION_ID"))
 
 def resolve_target(session_key, is_cron, default_target, registry, relay, *, require_contact=True, access=None):
+    default_target = registry.default_for(session_key, default_target) if session_key and not is_cron else default_target
     chosen = registry.target(session_key) if session_key else None
     if chosen == "server":
         return Server()
@@ -238,6 +244,8 @@ def resolve_target(session_key, is_cron, default_target, registry, relay, *, req
     if device is None:
         return Server()
     access = access or Access()
+    if not chosen and device.owner != access.identity() and not access.privileged(device.owner):
+        return Server()
     if not access.can(device):
         if chosen:
             access.require(device)
@@ -247,11 +255,11 @@ def resolve_target(session_key, is_cron, default_target, registry, relay, *, req
     return OnDevice(device)
 ```
 
-Registration reads `ctx.get_config("default_target", "server") or "server"` once, so blank and null defaults mean server for the provider, commands, prompt and pane. Bare status calls `resolve_target(..., require_contact=False)`; execution requires contact. Resolver tests cover choices, defaults, cron, missing or revoked devices and offline devices. `ConversationEnvironment` resolves again at dispatch time; `create_environment` has no branch of its own.
+Registration reads `ctx.get_config("default_target", "server") or "server"`, so blank and null defaults mean server. The first non-cron resolution captures that configured name in `session_defaults`, shared by provider, commands, prompt and pane; a reload affects new conversations only. Bare status calls `resolve_target(..., require_contact=False)`; execution requires contact. Resolver tests cover choices, defaults, cron, missing or revoked devices and offline devices. `ConversationEnvironment` resolves again at dispatch time against that snapshot and current authorization; `create_environment` has no branch of its own.
 
 Within a conversation, each target keeps its own working directory and exported-variable snapshot, starting from the device's home on first use and restoring its state on return; server retains core's local behavior.
 
-The pane target endpoint reports a stored choice or the non-cron default without a cron turn context; cron execution still defaults to server. Missing or revoked defaults return HTTP 404, while an offline paired target remains selectable.
+The pane target endpoint uses the shared resolver as local for a stored choice or captured non-cron default, reporting server for an untrusted implicit name; cron execution still defaults to server. Missing or revoked defaults return HTTP 404, while an offline paired target remains selectable.
 
 ## A8. Protocol
 
@@ -307,15 +315,29 @@ def handle_exec(req: WireExec) -> None:
 
 `post_until_2xx` retries with the same backoff and stops on 2xx or 410. A 410 means the gateway already closed the request (cancelled, lost, or finished), so the device has nothing left to say.
 
-`executor.run` evaluates policy first. A `Refused` becomes `Outcome(REFUSED, 126, ...)` without spawning. Otherwise it spawns `bash -l -c` or `bash -c`, `cwd=req.cwd`, `start_new_session=True`, writes the stdin payload from a separate thread and closes it (a child that fills the output pipe before it reads stdin would otherwise deadlock, which is why core has a writer thread too), reads stdout and stderr merged as bytes through `select`, flushes unsent output `FLUSH_MS` after its first byte, at `PART_MAX`, or at exit, whichever comes first (so a command that ends inside 200 ms makes one post), from the same thread and one post at a time (so `seq` arrives in order by construction), carries the final tail inside the result, stops reading about 300 ms after bash exits with the pipe idle (the same rule as core's drain in `tools/environments/base_output.py`, so a backgrounded grandchild such as `sleep 30 &` cannot hold the request open), enforces the backstop `min(req.timeout_s + 1, policy.max_timeout_s)` with SIGTERM then SIGKILL after 3 seconds, caps output at `policy.max_output_bytes` (default `MAX_OUTPUT_BYTES`) and reports `truncated`. Chunk retries share that capped duration. The gateway owns the requested timeout; the device's extra second lets core cancel first without exceeding device policy (A16.4). A 410 on a chunk or result for a running request kills that request's process group: the gateway no longer wants it. The group is killed only on timeout, cancel, revoke or 410, never after a natural exit: a grandchild such as `uvicorn &` or a `spawn_via_env` job must survive on the device exactly as it survives locally. Only exact credential-rejection bodies from the plugin or core's token middleware stop the agent on HTTP 401; differently shaped foreign 401 responses still retry.
+`executor.run` evaluates policy first. A `Refused` becomes `Outcome(REFUSED, 126, ...)` without spawning. Otherwise it spawns `bash -l -c` or `bash -c`, `cwd=req.cwd`, `start_new_session=True`, writes the stdin payload from a separate thread and closes it (a child that fills the output pipe before it reads stdin would otherwise deadlock, which is why core has a writer thread too), reads stdout and stderr merged as bytes through `select`, flushes unsent output `FLUSH_MS` after its first byte, at `PART_MAX`, or at exit, whichever comes first (so a command that ends inside 200 ms makes one post), from the same thread and one post at a time (so `seq` arrives in order by construction), carries the final tail inside the result, stops reading about 300 ms after bash exits with the pipe idle (the same rule as core's drain in `tools/environments/base_output.py`, so a backgrounded grandchild such as `sleep 30 &` cannot hold the request open), enforces the backstop `min(req.timeout_s + 1, policy.max_timeout_s)` with SIGTERM then SIGKILL after 3 seconds, caps output at `policy.max_output_bytes` (default `MAX_OUTPUT_BYTES`) and reports `truncated`. Chunk retries share that capped duration. The gateway owns the requested timeout; the device's extra second lets core cancel first without exceeding device policy (A16.4). A 410 on a chunk or result for a running request kills that request's process group: the gateway no longer wants it. The group is killed only on timeout, cancel, revoke or 410, never after a natural exit: a grandchild such as `uvicorn &` or a `spawn_via_env` job must survive on the device exactly as it survives locally. Only HTTP 401 with the exact body {"detail":"device revoked"} stops the agent; generic core rejection, unknown credentials and foreign 401 responses still retry.
 
 `policy.evaluate(command, policy)` is a pure function with one rule: no deny pattern matches the model's command. It returns `None` or `Refused(reason)`. The wrapped script is never inspected, because it contains the snapshot path, `/dev/null` and whatever the user's login shell references.
 
 What the device enforces, stated plainly: the deny list, the timeout and output caps, the parallelism cap, and the kill switch. It does not confine where a command can dirtside. A folder allowlist cannot be enforced without a sandbox, and claiming one would be a false promise, so v1 does not have one.
 
+Each child gets only set `PATH`, `HOME`, `USER`, `LANG`, `LC_*`, `TERM`, `TMPDIR` and device-owned `env_passthrough` names, without changing the agent's environment or the version-1 wire.
+
+Old four-key policy files mean empty passthrough, while new lists require at most 64 unique ASCII environment names matching `[A-Za-z_][A-Za-z0-9_]{0,127}`.
+
+The names-only `hermes dirtside policy` command shows, replaces or clears passthrough for the next `serve` start, which discloses those names without values.
+
 ## A10. Authentication
 
-`DirtsideDeviceAuth(DashboardAuthProvider)`: `supports_token = True`, `interactive_login = False`, `supports_session = False`. `verify_token(token)` is a pure recogniser: it returns `TokenPrincipal(principal=name, provider="dirtside", scopes=("dirtside",))` when `registry.credential_for(token)` is not `None`, else `None`. It has no side effects, so the handlers' own bearer lookup is the single source of identity whether the gate is on or off. The session methods mirror the bundled drain provider line for line: `verify_session` returns `None` so the cookie loop passes over Dirtside, and `revoke_session` returns `None`. The four device routes are registered with `register_token_route()` at `register()` time.
+`DirtsideDeviceAuth(DashboardAuthProvider)` is token-only and noninteractive, and its side-effect-free recognizer returns `dirtside` scope for valid device or pending credentials and `dirtside-local` for the local secret.
+
+Session verification and revocation return `None`, leaving interactive dashboard sessions to their own provider.
+
+After auth-provider acceptance, all four device and five unique local paths prefer `ctx.register_dashboard_token_route(path, provider="dirtside", required_scopes=(scope,))`, retaining every registration for unload.
+
+A raising, None-returning or noncallable public seam disables the instance, disposes partial registrations and logs one bounded line without falling back.
+
+The instance gate starts disabled, closes before disposal and guards handlers before parsing even if outer path flags survive or the dashboard gate is off.
 
 After recognizing the chunk or result credential, the route counts streamed body bytes before JSON parsing, independently of Content-Length. The chunk bound is `4 * ceil(PART_MAX / 3) + 1024`, or 2,797,228 bytes, for base64 plus the signed envelope. Results allow another 1,024 bytes for outcome fields and reason, totaling 2,798,252 bytes. An excess returns 413 with "output part too large"; the shared decoded-data parser refuses more than `PART_MAX` with that existing reason. After the bounded read, existing workers do JSON parsing, signature verification and body parsing without blocking the dashboard loop.
 
@@ -323,7 +345,9 @@ Signature, identity and request-ownership checks still precede the feed. The rel
 
 Pairing under the gate works because the pairing code is itself a bearer the recogniser knows: `/dirtside pair macbook` creates a pending row whose `token_hash` is the code's hash, the device presents the code as its bearer on `/device/pair`, and `complete_pairing` rotates it to the long-lived token in one transaction. There is one credential type and one lookup path.
 
-The pinned core accepts `hermes_cli.dashboard_auth.token_auth.register_token_route` from this plugin. This is a private import disclosed by the catalog validator, not a `PluginContext` method. Device traffic never falls back to the dashboard's session credential.
+Both prepared cores lack the public method, so only its absence uses one lazy `hermes_cli.dashboard_auth.token_auth.register_token_route` fallback, whose import is disclosed by the catalog validator pending the corrected provider/scoped seam.
+
+Device and local handlers independently refuse each other's credentials and dashboard session credentials in either mode.
 
 ## A11. Routes
 
@@ -337,9 +361,25 @@ Both device lists return exactly `id`, `name`, `online`, `os`, `home`, `last_see
 
 ## A12. Slash commands, CLI, prompt section
 
-`/dirtside`, `/dirtside use <name|server>`, `/dirtside devices`, `/dirtside pair <name>`, `/dirtside revoke <name>`. Handlers are `(raw_args: str) -> str` and resolve the conversation through `session_identity()`. `/dirtside use` with no argument calls `ctx.ask_choice` with the online devices plus `server`. `/dirtside revoke` calls `relay.revoke` so a running command on that device is cancelled immediately. Targets persist (`targets` table); live handles do not.
+`/dirtside`, `/dirtside use <name|server>`, `/dirtside devices`, `/dirtside pair <name>`, `/dirtside revoke <name>`. Handlers accept `raw_args: str` and an optional keyword-only core `source`, return `str` and resolve the conversation through `session_identity()`. `/dirtside use` with no argument calls `ctx.ask_choice` with the online devices plus `server`. `/dirtside revoke` calls `relay.revoke` so a running command on that device is cancelled immediately. Targets persist (`targets` table); live handles do not.
 
-`hermes dirtside pair <gateway-url> --name <name> --code <code>`, `hermes dirtside serve`, `hermes dirtside status`, `hermes dirtside install-service` (launchd on macOS, `systemd --user` on Linux, both idempotent).
+`hermes dirtside pair <gateway-url> --name <name> --code=<code>`, `hermes dirtside serve`, `hermes dirtside status`, `hermes dirtside install-service` (launchd on macOS, `systemd --user` on Linux, both idempotent).
+
+`hermes dirtside policy [--env-passthrough NAME ... | --clear-env-passthrough]` edits only device-owned names, never values or gateway policy.
+
+Public session context yields exact bounded printable `platform:user_id` identities. Canonical platform `local` with trusted CLI, TUI, Desktop or ACP policy yields `local` only for an empty user or this process's exact `uid:<n>`. Policy-free surface `local` additionally needs the actual core-provided non-relay command source, scoped to that call. Legacy empty-user host provenance and trusted cron bindings stay unchanged, never messaging user-id lookalikes or ambiguous missing context.
+
+File-tool limit: core resolves file paths on the gateway; use the terminal for edits on a device.
+
+The direct ACP adapter in both prepared cores omits trusted public provenance, so that ambiguous entry point remains denied pending an upstream binding rather than being guessed local.
+
+Device owners, `local` and the at-most-64 unique configured `owners` may discover, use or manage a device, and foreign-name use/revoke refusals match missing names; pairing availability is observable.
+
+With `owners` empty an admitted known sender may pair a new name, while a nonempty list restricts that operation to `local` and listed owners.
+
+Current-turn authorization runs at terminal/file dispatch and again in the independently configured serving owner before submission or history writes, with sender carried only on local IPC.
+
+An inaccessible explicit target fails without server execution. An implicit default must be sender-owned or privileged-owned and normally authorized; otherwise it resolves server even for privileged senders. The initial prompt uses that same resolution.
 
 `current_target_section(session_info)` returns at most 600 characters naming the target, its OS and its home, or an empty string for `Server`. Registered as `ctx.register_system_prompt_section("dirtside.target", current_target_section, position="after_memory", max_chars=600)`. Core renders it once per new session and freezes it, so after `/dirtside use` mid-conversation the model learns the change from the command's reply text and the section catches up on the next session.
 
@@ -365,7 +405,7 @@ Both device lists return exactly `id`, `name`, `online`, `os`, `home`, `last_see
 | Local and Dirtside agree | `test_conformance`: the A15.3 battery gives the same `output`, `returncode` and `cwd` through `LocalEnvironment` and through `DirtsideEnvironment` with the fake device |
 | A backgrounded grandchild does not hold the tool | `test_grandchild_returns`: `sleep 30 &` returns in under one second on the device |
 | Background jobs run through the relay | `test_spawn_via_env`: `process_registry.spawn_via_env` against the fake device; the log delta arrives and the exit code is recorded |
-| The README numbers are reproducible | `tools/bench.py --loopback` fails a missed A15.1 target locally; CI uses `--report-only` and prints misses without failing |
+| The README numbers are reproducible | `tests/bench.py --loopback` fails a missed A15.1 target locally; CI uses `--report-only` and prints misses without failing |
 | No file grows past its budget | `tools/check_sizes.py` in CI |
 
 ## A14. Build order, each unit ends in its check
@@ -380,7 +420,7 @@ Both device lists return exactly `id`, `name`, `online`, `os`, `home`, `last_see
 8. `commands.py`, `prompt.py`. Check: `/dirtside use` from Telegram changes where `pwd` runs.
 9. `desktop/plugin.js`. Check: pane shows a live request; chip shows the target.
 10. `cli.py install-service`. Check: reboot the device, it comes back online.
-11. Reliability matrix from the plan section 8, run by `scripts/two_machine_matrix.sh`, transcripts saved under `evidence/`. `tools/bench.py` over loopback, LAN and the two-machine rig; its output goes under `evidence/` and into the README with the commit SHA and the date. Remote runs probe a maximum part and warmed small round trip from the device once before the rows, then budget the flood as `max(120, ceil(1.5 * encoded_bytes / measured_bytes_per_second + 32 * round_trip_s + 10))`, record rate, budget and elapsed time in its evidence, and wait command timeout plus 15 s for core's outcome; loopback keeps 120 s and its existing assertions.
+11. Reliability matrix from the plan section 8, run by `scripts/two_machine_matrix.sh`, transcripts saved under `evidence/`. `tests/bench.py` over loopback, LAN and the two-machine rig; its output goes under `evidence/` and into the README with the commit SHA and the date. Remote runs probe a maximum part and warmed small round trip from the device once before the rows, then budget the flood as `max(120, ceil(1.5 * encoded_bytes / measured_bytes_per_second + 32 * round_trip_s + 10))`, record rate, budget and elapsed time in its evidence, and wait command timeout plus 15 s for core's outcome; loopback keeps 120 s and its existing assertions.
 12. README, disclosures, catalog YAML, `validate --install-deps` clean.
 
 ## A15. Execution strategy: fast where it is felt, exact everywhere
@@ -402,7 +442,7 @@ The path of a short command such as `pwd`:
 | Core notices the exit | gateway, core | `_wait_for_process` polls every 5 ms at first and backs off by 1.5x to a 200 ms cap after about 0.6 s | core's `_wait_for_process` in `tools/environments/base.py`, lines 508 to 581 at the pinned SHA |
 | Core stops draining | gateway, core | at EOF, as soon as `close()` shuts the write end; the three 100 ms idle ticks apply only while a grandchild still holds the pipe | `base_output.py` `_drain_fd_select` |
 
-The floor for `pwd` is therefore one round trip plus about 10 ms of work. The poll back-off is core's and the local backend pays it too, but it does not cancel out: the exit is noticed up to one poll interval late, 5 to 200 ms depending on how long the command ran, and that shows up in p95. `tools/bench.py` measures the same command through `LocalEnvironment` and through `DirtsideEnvironment` and reports the difference. The fake device signs and verifies exactly like a real one; otherwise the loopback column would measure nothing.
+The floor for `pwd` is therefore one round trip plus about 10 ms of work. The poll back-off is core's and the local backend pays it too, but it does not cancel out: the exit is noticed up to one poll interval late, 5 to 200 ms depending on how long the command ran, and that shows up in p95. `tests/bench.py` measures the same command through `LocalEnvironment` and through `DirtsideEnvironment` and reports the difference. The fake device signs and verifies exactly like a real one; otherwise the loopback column would measure nothing.
 
 | Measure | Loopback, fake device | LAN | Internet |
 |---|---|---|---|
@@ -456,10 +496,10 @@ The test that others will not write. Every case runs twice, once with direct rel
 
 ### A15.4 Deferred, each with the trigger that reopens it
 
-- **Chunk compression.** `zlib` level 1 costs 0.2 ms per 64 KB and shrinks `ls` output six times, random bytes not at all. Add an `enc` field when `tools/bench.py` over a real uplink shows upload time dominating a test-suite run.
+- **Chunk compression.** `zlib` level 1 costs 0.2 ms per 64 KB and shrinks `ls` output six times, random bytes not at all. Add an `enc` field when `tests/bench.py` over a real uplink shows upload time dominating a test-suite run.
 - **A heartbeat during a running command.** Loss is detected within 50 seconds (`OFFLINE_AFTER_S` 45 plus `LOST_GRACE_S` 5). Add a 5 second heartbeat post while a request runs when a user reports waiting too long after pulling a laptop's cable.
 - **HTTP/2 or WebSocket.** Only if a gateway in front of a proxy cannot hold a 25 second poll; then shorten `POLL_HOLD_S` first.
-- **Throughput above 8 MB/s.** The per-chunk signature is the bound (R6). The lever is to sign a running SHA-256 over the stream and verify once at the result, so chunks carry a hash chain instead of a signature, or to pipeline posts with a window of two. Add when `tools/bench.py` shows a real transfer waiting on CPU.
+- **Throughput above 8 MB/s.** The per-chunk signature is the bound (R6). The lever is to sign a running SHA-256 over the stream and verify once at the result, so chunks carry a hash chain instead of a signature, or to pipeline posts with a window of two. Add when `tests/bench.py` shows a real transfer waiting on CPU.
 - **A pre-warmed shell per session on the device.** Saves the 6 ms spawn per command. Not worth a second process model.
 
 ## A16. Day-1 gate: what was built and what changed
@@ -474,8 +514,8 @@ Deviations the builder found in the source and that are now part of the design:
 - An empty session identity never reads a target row (A7), so an unbound caller cannot borrow a device choice.
 - `bash` is resolved through PATH on the device, so missing-command and missing-directory diagnostics match core's local backend byte for byte.
 - The truncation notice names the configured cap, not a constant.
-- Core forwards `stdin_data` directly for `_stdin_mode = "payload"` (`base.py:727`); there is no separate branch to mirror.
-- `requires_hermes` is `>=0.22.7`. The checks establish the payload mode (`base.py:272`), `_persistent` check (`terminal_tool_lifecycle.py:270`), `register_token_route` (`token_auth.py:31`) and provider ABC at pinned core `84a0301`, not at every supported release.
+- Core forwards `stdin_data` directly for `_stdin_mode = "payload"` (core's `base.py`, line 727 at `84a0301`); there is no separate branch to mirror.
+- `requires_hermes` is `>=0.22.7`. The checks establish the payload mode (core's `base.py`, line 272 at `84a0301`), `_persistent` check (core's `terminal_tool_lifecycle.py`, line 270 at `84a0301`), `register_token_route` (core's `token_auth.py`, line 31 at `84a0301`) and provider ABC at pinned core `84a0301`, not at every supported release.
 
 Open for the next steps, with the section each one changes:
 
@@ -545,19 +585,29 @@ No owner file, a dead pid or a mismatched start epoch means offline for devices,
 
 `Relay.connection()` selects direct access only after device traffic in a registered owner, and `dirtside/client.py` everywhere else, including a second serving process. Domain-only test relays remain direct unless explicitly given a client. Environment dispatch, commands, prompts, pane devices, live history/tails and revocation share this seam. Workers query owner memory rather than write SQLite heartbeats. A forwarded revoke cancels a silent owner request immediately.
 
-`ConversationEnvironment._current()` reads the session key and cron flag at each dispatch, not from cached creation context. Only a context naming no session uses the creation key as fallback. Each conversation and target owns its cwd and export snapshot, starting at a device's home and restoring its own state on return, including switches through server. The provider's `default_cwd` metadata callback restores the selected target's durable cwd before terminal planning reads core's conversation record; file tools with a live facade instead select through its `cwd` property. Core binds turn-local ContextVars through `gateway/run.py:_set_session_env` and `tui_gateway/server.py:_set_session_context`; `tui_gateway/prompt_turn.py` enters that context for each turn. The slash worker supplies its own process key. The existing `get_session_env` import reads those bindings.
+`ConversationEnvironment._current()` reads the session key and cron flag at each dispatch, using the creation key only when no session is bound.
 
-The provider keeps transition identity and saved cwds for the 1,024 most recently selected conversations under one lock, without retaining facades or snapshots; adding another conversation discards the least recently selected history entry. This cwd history survives core's idle facade reaping, reuses core's surviving record for the same target and retains server's initial directory independently of later device-derived command plans. Snapshots still follow core's environment lifetime, and neither history nor snapshots are migrated across process restarts. New device delegates require online contact even during metadata selection; an offline or revoked cwd read returns the last known directory while execution remains fail-closed.
+Each conversation and target owns its cwd and snapshot, with the provider's metadata callback refreshing its selected delegate but never reading or writing core's terminal cwd record.
+
+Core binds turn-local ContextVars through `gateway/run.py:_set_session_env` and `tui_gateway/server.py:_set_session_context`, which public `get_session_env` reads independently of task ids.
+
+The provider keeps transition identity and plugin-owned cwds for the 1,024 most recently selected conversations under a short lock, without retaining facades or snapshots.
+
+History survives idle facade cleanup without consulting core's record, live delegates take priority over evicted history, and server starts from public `ctx.session_cwd()` rather than a device-derived command plan.
+
+Cleanup remembers cwd but drops snapshots with core's environment lifetime, and process restarts retain neither.
+
+New device delegates require contact, while unavailable cwd metadata returns the last known directory and execution stays fail-closed.
 
 Delegate bootstrap holds only the facade's lock, leaving other conversations free to select and execute; the provider lock covers short history and index updates, and a live delegate restores its own cwd if its history was evicted. Optional `get_temp_dir` lookup is registry-free, deferring target resolution until the call inside core's existing fail-soft boundary.
 
-Known ceiling: an outgoing foreground command completing after a target switch in parallel tool calls can still overwrite the new target's cwd because core records the observed directory by conversation only (core's `tools/terminal_tool_result.py`, lines 223 to 225 at the pinned SHA).
+Core still records observed cwd by conversation (core's `tools/terminal_tool_result.py`, lines 223 to 225 at `84a0301`), but an inferred workdir no longer feeds that record back into plugin-owned target state.
 
 Device pairing remains distinct from local IPC: an authenticated non-loopback HTTPS peer can pair with either dashboard gate mode. The device CLI prints HTTP status and at most 512 printable refusal characters, redacts the submitted code and falls back to the status phrase for non-string or non-JSON bodies. The user's public-tunnel refusal was core's "Invalid Host header" check: configure `dashboard.public_url` to the public HTTPS URL on the gateway and restart it; that refusal also prints the same fix in the CLI.
 
 The owner retains an exec handle until stream attachment, including a short result that finishes first. A `FEED_BLOCK_S` attachment timer abandons an unclaimed stream and closes its descriptor. Streaming reads at most `CHUNK_BYTES` at a time. Each raw block has a four-byte big-endian length; zero introduces one trailing JSON outcome line. Arbitrary output cannot impersonate that line, and no final output line must be buffered. Disconnect closes the live request as LOST with "gateway stopped reading output". The client uses the same bounded pipe writer and the same `RemoteProcessHandle`, mirroring output and owner outcomes. An owner-confirmed cancellation completes that handle immediately even if its output pipe is full; the bounded writer releases its duplicate descriptor. The owner detects device loss while reading the stream. Core still owns requested timeout rendering and cancellation, and the device's requested-timeout-plus-one policy-capped deadline remains the backstop from A16.4.
 
-Targets, credentials and request history stay in SQLite. Device polling, signing, live queues, output tails, state transitions and deadline/loss decisions stay in the owner. No core patch, daemon, new dependency or device wire-version change is needed. The conformance battery covers both paths without changed assertions. `tools/bench.py` retains its in-process checks and appends non-gating client p50/p95 pwd latency. The remote matrix worker now imports its case list after path setup, so its documented command does not require PYTHONPATH.
+Targets, credentials and request history stay in SQLite. Device polling, signing, live queues, output tails, state transitions and deadline/loss decisions stay in the owner. No core patch, daemon, new dependency or device wire-version change is needed. The conformance battery covers both paths without changed assertions. `tests/bench.py` retains its in-process checks and appends non-gating client p50/p95 pwd latency. The remote matrix worker now imports its case list after path setup, so its documented command does not require PYTHONPATH.
 
 ### A16.6 Day-8 slow links and truthful outcomes
 
@@ -585,6 +635,88 @@ Core's exit-code hint table has entries for 124, 126 and 137, not 255. Loss no l
 
 ---
 
+### A16.7 Catalog-review public boundaries
+
+- Public `tool_execution` middleware marks explicit terminal workdir with a ContextVar and resets it in `finally`, while the facade ignores inferred cwd and preserves explicit transient-directory behavior.
+- Middleware can fail open in core, so sender authorization remains independently enforced at each dispatch rather than relying on that marker.
+- `ctx.session_cwd()` reads workspace/policy state (core's `hermes_cli/plugin_session.py`, lines 33 to 40 at `84a0301` at `84a0301`), not the private terminal cwd table.
+- Server delegates use one lazy `LocalEnvironment` handoff to retain core's credential stripping and all other local behavior until a public backend factory exists.
+- `EnvironmentConnectionError` is imported only in `environment.py`, remains necessary for core's rendering (core's `tools/terminal_tool.py`, lines 1451 to 1468, 1596 to 1597 at `84a0301`) and needs documenting in the provider contract.
+- The corrected token-route seam must use the serving manager's policy scope and refuse non-TokenPrincipal results, the two unresolved assumptions in withdrawn #87462.
+- Non-runtime private-core helpers live at `tests/core_runtime.py`, `tests/bench.py` and `tests/bench_client.py`, with callers updated instead of re-export shims or misleading non-test `test_` files.
+- Tests use temporary homes outside source, and `tests/test_public_surfaces.py` invokes core's unmodified private-import lint on a clean intended export to require exactly the three disclosed sites once each.
+
+---
+
+### A16.8 Correction 1 boundaries
+
+An implicit device default is eligible only if its owner is the current sender, `local` or a configured owner, and normal dispatch authorization still applies. Even a privileged sender gets server rather than an unprivileged owner's implicit default. Empty `owners` still permits minting an unused default name: names are not a trust grant. Privileged explicit selection identifies an unprivileged owner in the confirmation.
+
+Re-pairing reuses only the latest paired identity for the same owner. A different owner gets the pending row's fresh id; any active previous row is revoked in the same transaction, and old targets remain revoked. `use` and `revoke` hide foreign-name facts like missing names. Pairing deliberately discloses availability: foreign occupied names refuse while free names produce codes.
+
+Core forced discovery disposes old route gates and replaces the public auth provider without remounting the router. BoundaryRoute resolves that provider once before parsing, checks its current gate, and binds it across asynchronous work and copied thread contexts. Local handlers select the same request-bound LocalAPI. Missing, refused and unloaded current providers keep routes closed. The owner-origin cache includes relay identity.
+
+For the same registry, successful forced discovery carries the live registry, relay, provider and its workdir middleware through the previous persistent public auth provider. Its model/protocol and LocalAPI runtime types stay with existing handles, because core evicts the plugin's module namespace. Validated owners and context refresh; each new auth instance has a separate route gate. In-flight work, cached facades, streams and queues survive. A real disabled configuration closes all paths; re-enabling lets the still-mounted router use the new provider. Code updates still require the restart documented in README.
+
+Idle and shutdown cleanup run without a sender context. Only cleanup's generated quoted snapshot removal uses the recorded device owner and an empty preview, through the same serving-owner authorization as ordinary requests. It does not call model execution, accept a model script or consume the command ContextVar.
+
+Re-pairing preserves only a safely readable, valid existing device file's `env_passthrough` names. An unreadable, unsafe or invalid old file instead produces a constant short note and an empty list; only pairing has this recovery path, and configuration reads elsewhere stay strict. It does not copy values; other policy fields retain the previous default reset. On WSL2, Windows `.exe` execution requires enabled interop, its binfmt handler and a usable executable path. `WSL_INTEROP` chooses a live server socket, but `/init` also searches `/run/WSL/<pid>_interop` along the process/parent chain if unset. Passing an existing value can help when fallback fails; it neither enables disabled interop nor repairs a dead socket.
+
+The frozen target section is shared model context, not per-sender privacy. A later participant can receive the first render's device name, OS, home and online state, including stale facts, while their device execution remains denied. A server-target command instead runs as the gateway OS user and can read `local.secret` to act as `local` on IPC. Core approvals and sender allowlists must restrict arbitrary gateway execution; device ownership cannot isolate users who can execute as that same account.
+
+### A16.9 Correction 2 lifecycle and defaults
+
+Only a previous provider with runtime_version 1 and the same registry path can supply compatible runtime references; unmarked catalog-pin providers start a fresh runtime without reading missing C1 fields.
+
+The relay's existing route gate also governs local ownership: while retired it uses Client rather than old local queues, and its parked polls return without dispatching more work.
+
+Compatible ordinary rediscovery rebinds that gate and preserves live handles, while a cached pre-disable facade reaches the new serving owner through loopback after re-enable.
+
+Local authentication rejects self-forwarding to the same incoming base URL before reading a body, so an unclaimed new runtime cannot recurse through its old owner address; independent secondary-server state forwarding remains supported.
+
+The relay canonicalizes incoming outcome states by value into its own RequestState, and queue, recovery and local-kill comparisons use values rather than generation-specific Enum identities.
+
+The session_defaults table captures the configured default name, including server, on a non-cron conversation's first target resolution, shared across prompt, status, Desktop, dispatch and independent registry instances.
+
+That captured name survives idle recreation, reload and disable/re-enable; new conversations get changed settings, explicit choices remain live, and all resolutions still authorize the current sender.
+
+Existing pre-upgrade conversations capture their default on their first new-version resolution; core's already frozen prompt bytes cannot be reconstructed or rewritten.
+
+Desktop target GET uses the same resolver with local identity and the serving owners list without requiring contact, reporting server for an untrusted implicit device and preserving missing/revoked 404.
+
+Successful pairing reads the old active id under the pairing lock and cancels its live gateway requests immediately if completion installed a different id; invalid pairing and same-owner id reuse do not cancel them.
+
+Only exact HTTP 401 `{"detail":"device revoked"}` shuts the agent down successfully; unknown credentials, generic core unauthenticated errors and transient failures retain retry/backoff.
+
+Revoked tokens remain invalid rather than gaining an auth principal just to report revocation, so an agent receiving only a generic pre-route rejection needs owner stop/re-pair and may continue its existing bounded local work until then.
+
+Explicit-revocation tests still require automatic shutdown; thread and subprocess tests deliberately replacing the signal with generic 401 require retry followed by owner-initiated shutdown, retaining existing interrupt and cancellation bounds.
+
+Restart after code updates to replace already-mounted method bodies; a full disable/re-enable is not an in-flight-work continuity promise.
+
+### A16.10 Correction 3 native local authority
+
+Core's public session surface can be `local` without an active local policy, including canonical plugin slash dispatch. C3's empty-or-same-uid rule alone was insufficient because relay ingress accepts wire platform `local`; C4 narrows that branch to the actual non-relay command source. Other uid or arbitrary raw subjects remain ordinary platform-qualified senders; a messaging user id alone never grants host authority.
+
+The native integration tests use the ordinary daemon, same-user control ticket, real CLI session opening and slash dispatch, canonical TUI RPCs, loopback model turns and a signed device agent. They verify local-owned discovery, target selection, server/device cd and export isolation, actual device execution, revocation and refusal of the next command without server fallback. No policy or session identity is fabricated; both prepared cores run the same test.
+
+The owner-loss test writes its shell pid to an absolute quoted path so retained terminal cwd cannot hide it from teardown. A retained-cwd case checks the process dies and performs scoped safety cleanup even on a red assertion. Its existing wait bounds are unchanged, as is agent.loop.
+
+The optional omission of server session_defaults rows is not applied: missing rows cannot preserve the existing cross-process server-default snapshot after configuration changes. That table remains unbounded. C3 raised the access budget from 71 to its measured 73 lines; C4 budgets are recorded below. Complexity 8 and hard cap 400 remain.
+
+### A16.11 Correction 4 ingress and reload boundaries
+
+At both prepared cores, core's `gateway/relay/ws_transport.py`, lines 198 to 238 at `84a0301` and `8d7061f`, reads platform and chat id from wire but stamps the wire-invisible relay flag itself. Chat/session id equality is not authentication. Core's `hermes_cli/plugin_command_dispatch.py`, lines 11 to 32, opts a handler into the actual source keyword; core's `gateway/run_inbound_hooks.py`, lines 288 to 299, supplies it. Commands binds it in an instance-owned ContextVar and resets it in finally. Surface `local` requires source platform value `local`, relay flag exactly false and no detached route, in addition to the existing uid rule. Turns retain their trusted policy surface. Native CLI/TUI slash and turn tests stay the positive control; real relay decode and session binding cover both empty and same-uid wire users, including a matching chat/session id.
+
+Core maps all dashboard and Webapp sign-ins, including forwarded logins, to the host owner in core's `gateway/owner_identity.py`, lines 23 to 44 at both prepared revisions. They therefore act as `local` on POSIX gateways. Windows gateways' `sid:` subjects are not recognized as the host yet.
+
+Local /exec and /stream retry only raw JSON HTTP 401 detail exactly `Dirtside token routes are disabled`, closing each rejection within a fixed three-second monotonic retry window per operation and preserving the request id and captured owner. This gate runs before submission or stream consumption. Other authorization/status/transport failures and partial successful streams are never replayed. The reload regression observes live owner stream attachment before rediscovery; loaded repeats exercise each core separately.
+
+The owner's 2026-11-09 Mac/WSL2 observation established the file-path disclosure in A12: an absolute device read worked, but the write parent was resolved on the Mac gateway. No file-path runtime change or independent two-host reproduction is included.
+
+Only exhausted budgets rise: access 73 to 82, client 173 to 198 and cli 182 to 188 lines, each exactly its measured size. Commands remains within 110. Complexity stays 8 and the hard cap stays 400.
+
+---
 # Part B. Explanation
 
 ## B1. Why a global backend with per-conversation targets
@@ -639,7 +771,7 @@ Every "keep files small" and "no scattered conditionals" instruction gets ignore
 - Eight plugin events, their broadcasts and the pane's subscriptions. The pane polls.
 - The settings page. `config_schema` renders the form.
 - The `on_session_end` hook. It fires per turn with a session id the relay does not index, and core already calls `cleanup()` on idle reap and session close.
-- A `Settings` dataclass and three knobs that were constants. `default_target` is the one setting.
+- A `Settings` dataclass and three knobs that were constants. `default_target` was the original setting; the catalog review adds `owners`.
 - `session_key` and `task_id` on the wire, `token_hash` on the `Device` type, `script_sha256` and `bytes_out` columns, the poll offset field, a `Backoff` class, `hermes dirtside demo`, the gateway-side replay LRU, and the explicit `skip_container_guards` override (the ABC derives it from `is_container`; the test pins the value).
 
 ## B13. What a reviewer should push back on first

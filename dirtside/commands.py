@@ -16,7 +16,14 @@ class Commands:
     def visible(self):
         return [d for d in self.registry.devices() if self.access.can(d)]
 
-    def __call__(self, raw_args: str) -> str:
+    def __call__(self, raw_args: str, *, source=None) -> str:
+        token = self.access.command_source.set(source)
+        try:
+            return self.dispatch(raw_args)
+        finally:
+            self.access.command_source.reset(token)
+
+    def dispatch(self, raw_args):
         parts = raw_args.split()
         handlers = dict(use=self.use, devices=self.devices, pair=self.pair, revoke=self.revoke)
         if len(parts) > 2 or (parts and parts[0] not in handlers):
@@ -66,6 +73,8 @@ class Commands:
         if name != "server" and not self.access.can(device):
             return f"Device '{name}' is not paired; the target was not changed."
         label = self.label(device) if device else "server"
+        if device and self.access.privileged(self.access.identity()) and not self.access.privileged(device.owner):
+            label += f", owned by {device.owner}"
         self.registry.set_target(key, device.id if device else "server")
         return f"This conversation now targets {label}. The change applies to this conversation from the next command."
 

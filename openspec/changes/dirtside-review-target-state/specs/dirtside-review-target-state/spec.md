@@ -53,3 +53,39 @@ All existing day-9 requirements MUST pass without editing their tests.
 #### Scenario: test_target_switch_restores_cwd_and_exports
 - **WHEN** the unedited day-9 battery runs in both transports
 - **THEN** cwd, exports, failures, transient workdir, file-first switching and bounded history retain their assertions
+
+### Requirement: Context-free snapshot cleanup
+Plugin cleanup MUST remove only its own snapshot and temporary snapshot fragments without requiring a turn context or running a model command.
+
+#### Scenario: test_context_free_cleanup_removes_only_its_snapshot
+- **WHEN** core reaps or shuts down an environment in an empty-context thread
+- **THEN** its snapshot artifacts disappear, unrelated files remain, the cleanup preview is empty, and a model command in that thread still refuses
+
+### Requirement: Conversation default snapshot
+A non-cron conversation MUST snapshot its configured default name at its first target resolution and retain it through reload and environment recreation. New conversations MUST use the new configured default. Explicit choices MUST remain live and authorization MUST remain per turn.
+
+#### Scenario: test_default_snapshot_survives_reload
+- **WHEN** a real conversation resolves its prompt or runs its first command before default configuration changes
+- **THEN** its cached or recreated environment keeps the original default, its frozen prompt is unchanged, and a new conversation uses the new default
+
+#### Scenario: test_default_snapshot_is_shared_with_independent_registry
+- **WHEN** independent registry instances resolve one conversation under different configured defaults and later clear an explicit choice
+- **THEN** they share its first captured name and clearing restores that captured default
+
+#### Scenario: test_cron_does_not_snapshot_an_interactive_default
+- **WHEN** cron resolves before the same key is used interactively
+- **THEN** cron does not capture a default, keeps its server behavior and still honors an explicit device
+
+### Requirement: Local Desktop target resolution
+Desktop target GET MUST use the dispatch resolver with local authority and MUST NOT display an untrusted implicit device when dispatch resolves server.
+
+#### Scenario: test_desktop_default_uses_local_trust_rule
+- **WHEN** another sender owns the configured implicit device name
+- **THEN** target GET reports server until local explicitly selects that device
+
+### Requirement: Honest device file-path guidance
+Documentation MUST promise chosen-machine terminal commands without promising device-side file-path resolution.
+
+#### Scenario: test_readme_promises_terminal_not_device_file_path_resolution
+- **WHEN** the reader sees the headline, product description and earlier live-check list
+- **THEN** terminal routing is the promise and the gateway-side file-path limitation is explicit

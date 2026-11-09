@@ -27,3 +27,19 @@ None.
 ## Impact
 
 Only this plugin work tree, tests, documentation and private review notes. Keep signed device protocol version 1, requires_hermes >=0.22.7, and existing dependencies. No core edits, archive, commit or network writes.
+
+## Correction 1
+
+Prevent configured-default and revoked-name squatting, name unprivileged ownership in privileged explicit confirmations, and state the limited pairing-name availability disclosure.
+
+## Correction 2
+
+Cancel the displaced owner's live relay requests immediately after a privileged cross-owner pairing succeeds. Desktop implicit target display must apply the same owner trust rule as dispatch.
+
+## Correction 3
+
+Recognize core's canonical local platform and surface only for an empty user or this process's exact uid subject. Prove the real authenticated CLI and TUI slash/turn demo in temporary homes, preserving wrong-uid and messaging refusals.
+
+## Correction 4
+
+Narrow C3's policy-free local-surface branch to actual core command-source provenance that relay wire cannot forge. Keep native CLI/TUI slash and turn paths working, correct the dashboard-login authority disclosure and state the unsupported Windows host subject.

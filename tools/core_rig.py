@@ -49,7 +49,7 @@ def install(home, backend="dirtside", user_home=None, token=None, public_url=Non
            if not k.startswith(("TERMINAL_", "HERMES_", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"))}
     env.update(HERMES_HOME=str(home), HOME=str(user_home), TMPDIR=str(home / "tmp"),
                HERMES_RUNTIME_DIR=str(home / "runtime"), TERMINAL_TEMP_DIR=str(home / "tmp"),
-               PYTHONPATH=os.pathsep.join((str(CORE), str(ROOT))),
+               PYTHONPATH=os.pathsep.join((str(CORE), str(ROOT), str(ROOT / "tools"))),
                PYTHONDONTWRITEBYTECODE="1", NO_PROXY="127.0.0.1,localhost",
                HERMES_DASHBOARD_SESSION_TOKEN=token or secrets.token_urlsafe(32))
     return env
@@ -73,7 +73,7 @@ class Core:
         self.log = (home / "core.log").open("a")
         ready = Future()
         self.lock, self.pending, self.serial = threading.Lock(), {"ready": ready}, 0
-        command = [sys.executable, str(ROOT / "tools" / "core_runtime.py"), str(port)]
+        command = [sys.executable, str(ROOT / "tests" / "core_runtime.py"), str(port)]
         self.proc = subprocess.Popen(command + (["--worker"] if worker else []),
                                      cwd=home, env=self.env, stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=self.log, text=True)

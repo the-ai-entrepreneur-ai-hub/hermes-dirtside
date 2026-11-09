@@ -33,3 +33,19 @@ None.
 ## Impact
 
 Only this plugin work tree, tests, documentation and private review notes. Keep signed device protocol version 1, requires_hermes >=0.22.7, and existing dependencies. No core edits, archive, commit or network writes.
+
+## Correction 1
+
+Disclose frozen shared target facts, gateway-user server execution, pairing availability, preserved re-pair names and exact WSL interop behavior. Record correction red/green evidence and the required two-core gates, five serial repeats and C1 checkpoints.
+
+## Correction 2
+
+Record Correction 2 lifecycle, default-snapshot and revocation decisions with red/green evidence, both-core admission and full-suite checks, strict benchmark, matrix, five serial C1/C2 file-union repeats and cumulative C2 checkpoints.
+
+## Correction 3
+
+Record real native local identity red/green evidence, correct owner-loss test teardown, repeat all C1-C3 changed test/helper files five times and rerun every final gate. Keep the optional server-row optimization out because it would weaken C2's durable server-default snapshot contract without a larger change.
+
+## Correction 4
+
+Correct every core citation across repository documentation, login/Windows authority, safe pairing examples and device file-tool claims. Run the actual unchanged citation checker. Preserve prior report history, add C4 red/green and all gates, five whole-file correction rounds, 20 loaded client reload runs per core, reconstructed C4 checkpoints and inventories since C3 and WP5.

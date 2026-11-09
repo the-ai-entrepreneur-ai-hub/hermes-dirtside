@@ -46,6 +46,7 @@ class LocalAPI:
             raise HTTPException(401, "Dirtside token routes are disabled")
 
     def authenticate(self, request):
+        self = request.state.dirtside_auth.local
         self.require_routes()
         try:
             peer = ipaddress.ip_address(request.client.host if request.client else "")
@@ -56,6 +57,10 @@ class LocalAPI:
         scheme, _, token = request.headers.get("authorization", "").partition(" ")
         if scheme.lower() != "bearer" or not hmac.compare_digest(token.encode(), self.registry.local_secret.encode()):
             raise HTTPException(401, "local credential required")
+        connection = self.relay.connection()
+        if connection is not self.relay and connection.origin() == str(request.base_url).rstrip("/") + PREFIX:
+            raise HTTPException(409, "this server is not the device owner")
+        return self
 
     def owner(self, id=None):
         if id is not None and not re.fullmatch(r"r_[0-9a-f]{24}", id):
@@ -64,7 +69,7 @@ class LocalAPI:
             raise HTTPException(409, "this server is not the device owner")
 
     async def execute(self, request: Request):
-        self.authenticate(request)
+        self = self.authenticate(request)
         data = await body(request)
         if type(data) is not dict:
             raise ValueError("invalid execution")
@@ -89,7 +94,7 @@ class LocalAPI:
         return {"state": handle.state.value}
 
     async def stream(self, id: str, request: Request):
-        self.authenticate(request)
+        self = self.authenticate(request)
         self.owner(id)
         handle = self.relay.take_stream(id)
         if handle is None:
@@ -116,30 +121,30 @@ class LocalAPI:
                                        Outcome(RequestState.LOST, 255, 0, False, "gateway stopped reading output"))
 
     async def kill(self, id: str, request: Request):
-        self.authenticate(request)
+        self = self.authenticate(request)
         self.owner(id)
         await self.empty(request)
         with self.relay._condition:
             handle = self.relay.handles.get(id)
         await asyncio.to_thread(self.relay.kill, id)
-        return {"cancelled": handle is not None and handle.state is RequestState.CANCELLED}
+        return {"cancelled": handle is not None and handle.state.value == RequestState.CANCELLED.value}
 
     async def empty(self, request):
         if await body(request) != {}:
             raise ValueError("empty object required")
 
     async def devices(self, request: Request):
-        self.authenticate(request)
+        self = self.authenticate(request)
         return [dict(id=d.id, name=d.name, online=online, os=d.os, home=d.home, last_seen=seen)
                 for d, online, seen in await asyncio.to_thread(self.relay.connection().device_status)]
 
     async def recent(self, request: Request, limit: int = 50, session_key: str | None = None):
-        self.authenticate(request)
+        self = self.authenticate(request)
         rows = await asyncio.to_thread(self.relay.connection().recent, min(limit, 50), session_key)
         return [asdict(row) | {"tail": base64.b64encode(tail).decode()} for row, tail in rows]
 
     async def revoke(self, request: Request):
-        self.authenticate(request)
+        self = self.authenticate(request)
         data = await body(request)
         if type(data) is not dict or set(data) != {"device_id"} or not re.fullmatch("[0-9a-f]{32}", data["device_id"]):
             raise ValueError("invalid device id")

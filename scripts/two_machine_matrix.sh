@@ -11,5 +11,5 @@ if [[ ! -x "$PYTHON" ]]; then
   exit 2
 fi
 export HERMES_SRC
-export PYTHONPATH="$HERMES_SRC:$ROOT"
+export PYTHONPATH="$HERMES_SRC:$ROOT:$ROOT/tools"
 exec "$PYTHON" "$ROOT/tools/run_matrix.py" "$@"

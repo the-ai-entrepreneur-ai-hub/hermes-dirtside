@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import uvicorn
 from fastapi import FastAPI
+from starlette.responses import JSONResponse
 from hermes_cli.dashboard_auth.middleware import gated_auth_middleware
 from hermes_cli.dashboard_auth.registry import (
     register_global_provider, restore_registration, snapshot_registration,
@@ -35,6 +36,21 @@ def until(predicate, timeout=10):
             return value
         threading.Event().wait(0.01)
     raise AssertionError("network test did not reach its expected state")
+
+
+def generic_poll_rejections(app, retried):
+    # Test transport fault: a proxy loses the plugin's explicit revocation detail.
+    attempts = []
+    @app.middleware("http")
+    async def ambiguous(request, call_next):
+        response = await call_next(request)
+        if request.url.path.endswith("/device/poll") and response.status_code == 401:
+            attempts.append(401)
+            if len(attempts) >= 2:
+                retried.set()
+            return JSONResponse({"error": "unauthenticated", "detail": "Unauthorized"}, status_code=401)
+        return response
+    return app
 
 
 @contextmanager

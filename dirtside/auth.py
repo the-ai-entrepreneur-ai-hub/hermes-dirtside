@@ -37,6 +37,12 @@ class DirtsideDeviceAuth(DashboardAuthProvider):
         self.routes = TokenRoutes()
         self.local = LocalAPI(registry, relay, lambda: self.routes.enabled)
 
+    def target_name(self, key):
+        from .provider import Access, OnDevice, resolve_target
+        target = resolve_target(key, False, self.default_target, self.registry, self.relay,
+                                require_contact=False, access=Access(owners=list(self.relay.access.owners)))
+        return target.device.name if isinstance(target, OnDevice) else "server"
+
     def verify_token(self, *, token):
         if hmac.compare_digest(token.encode(), self.registry.local_secret.encode()):
             return TokenPrincipal("local", self.name, ("dirtside-local",))

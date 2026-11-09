@@ -21,7 +21,7 @@ def test_manifest_uses_only_supported_middleware_declarations():
 
 
 @pytest.mark.parametrize("command", ['"$HERMES_SRC/venv/bin/hermes" plugins validate .',
-                                    '"$HERMES_SRC/venv/bin/python" tools/bench.py --loopback --report-only'])
+                                    '"$HERMES_SRC/venv/bin/python" tests/bench.py --loopback --report-only'])
 def test_ci_runs_catalog_validation_and_prints_non_gating_benchmark(command):
     workflow = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())
     runs = "\n".join(step.get("run", "") for step in workflow["jobs"]["gate"]["steps"])

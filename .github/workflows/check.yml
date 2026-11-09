@@ -43,13 +43,11 @@ jobs:
           "$HERMES_SRC/venv/bin/python" -m pytest -q
           "$HERMES_SRC/venv/bin/python" -m ruff check .
           "$HERMES_SRC/venv/bin/python" tools/check_sizes.py
-          openspec validate dirtside-day1-gate --strict
-          openspec validate dirtside-day5-linux --strict
-          openspec validate dirtside-day6-hardening --strict
+          openspec validate --all --strict
           "$HERMES_SRC/venv/bin/hermes" plugins doctor . --ci
-          "$HERMES_SRC/venv/bin/python" tools/bench.py --loopback --report-only
+          "$HERMES_SRC/venv/bin/python" tests/bench.py --loopback --report-only
       - name: Report catalog admission and private import diagnostics
-        # The pinned scanner also rejects inert architecture examples and local test artifacts.
+        # The clean-export test above pins the allowed transitional private imports.
         continue-on-error: true
         env:
           HERMES_HOME: ${{ runner.temp }}/ci-home

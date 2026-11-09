@@ -13,7 +13,7 @@ Non-goals: core changes, model tools, events, a settings page, folder confinemen
 ## Decisions
 
 1. **Targets.** Store `target TEXT NOT NULL` without a device foreign key, because `server` is not a device. Migrate the old table transactionally, copying device ids and timestamps. `None` deletes a row; `server` persists. Validate new selections against paired devices. Resolution checks the explicit choice before cron/default rules and fails closed on a removed chosen device. Keep the six existing truth-table rows and add explicit server over macbook.
-2. **Cached execution.** A provider-owned conversation adapter resolves before each command and delegates to ordinary local/device environments. It keeps separate snapshots per target, uses a lock for delegate creation, and keeps filesystem access through shell operations so a cached local file adapter cannot bypass a later device selection. In-flight commands keep their original delegate. Core's recorded conversation cwd still crosses targets: its execute boundary does not distinguish an explicit workdir from the recorded cwd (`tools/terminal_tool.py:1014-1061,1373`). Preserve it rather than guess; document an explicit workdir when that path is absent on the new device. Rejected alternative: importing core cwd/cache internals, outside A3's imports.
+2. **Cached execution.** A provider-owned conversation adapter resolves before each command and delegates to ordinary local/device environments. It keeps separate snapshots per target, uses a lock for delegate creation, and keeps filesystem access through shell operations so a cached local file adapter cannot bypass a later device selection. In-flight commands keep their original delegate. Core's recorded conversation cwd still crosses targets: its execute boundary does not distinguish an explicit workdir from the recorded cwd (core's `tools/terminal_tool.py`, lines 1014 to 1061, 1373 at `84a0301`). Preserve it rather than guess; document an explicit workdir when that path is absent on the new device. Rejected alternative: importing core cwd/cache internals, outside A3's imports.
 3. **Commands.** Bind one sync text handler to ctx, registry, relay and configured default. Use `session_identity()` for conversation writes, online choices plus server for the picker, single-use minting for pair, and both registry/relay revocation. Validate arity, names and absent session identity. Pair replies use `--code=<value>` and a user-filled `<gateway-url>`, not a guessed endpoint.
 4. **Prompt.** Bind `current_target_section(session_info)` through a small instance. Prefer bound session identity, then the supplied session id when unbound. Look up target facts without requiring online contact; do not replace a missing selected device with the default. JSON-quote bounded facts so device strings remain data. Core owns freezing; never invalidate its prompt.
 5. **Desktop.** Plain ESM uses only the SDK, React and jsx-runtime. React Query owns polling and error state. Devices/requests poll every 2 seconds only while the contributed pane is visible. Queries are connection/profile/activation/session scoped. Read the focused durable session key, not its unrelated runtime id; disable writes when the focused owner differs from the REST helper's active route. Refetch/invalidate after writes, never optimistically claim success. Show failures instead of stale target success.
@@ -26,17 +26,17 @@ Paths below are relative to the pinned core checkout, inspected on 2026-11-05.
 
 | Call / contract | Source |
 |---|---|
-| `ctx.ask_choice(question, choices) -> str or None` | `hermes_cli/plugins.py:618-622` |
-| `ctx.register_command("dirtside", handler, description=..., args_hint="<use|devices|pair|revoke>", argument_mode="text")` | `hermes_cli/plugins.py:649-674` |
-| `ctx.register_system_prompt_section("dirtside.target", callable, position="after_memory", max_chars=600)` | `hermes_cli/plugins.py:959-984` |
-| Prompt metadata and frozen snapshots | `agent/system_prompt.py:86-137` |
-| `ctx.register({id:"pane", area:"panes", title:"Dirtside", data:{placement:"right", width:"320px"}, render})` and chip at `STATUSBAR_AREAS.right` | `apps/desktop/src/contrib/plugin.ts:371-400`, `sdk/areas.ts` |
-| `ctx.rest(path, {method, body})`, namespace-relative and profile-aware | `apps/desktop/src/contrib/plugin.ts:396`, `api/plugins.ts:44-99` |
-| `useValue(host.state.focusedSessionId)`, focusedStoredSessionId, focusedSessionOwner, connectionId, profile | `apps/desktop/src/sdk/index.ts:560-610` |
-| `useValue(host.paneVisibility("dirtside:pane"))` | `apps/desktop/src/sdk/index.ts:1299`; saved SDK host API |
-| `useQuery`, `useQueryClient`, `useGatewayActivationEpoch`, `useValue`, `StatusDot({tone})` | `apps/desktop/src/sdk/index.ts:1695,1897,1977-1981`; `components/status-dot.tsx` |
-| `desktop/plugin.js` unified-package discovery, no Desktop manifest needed | `apps/desktop/electron/desktop-plugins-root.ts:220-230`; `desktop-plugin-install.ts:222-232` |
-| Stored session_key differs from runtime session_id | `tui_gateway/methods_session.py:372,427`; context binding `tui_gateway/server.py:931-950` |
+| `ctx.ask_choice(question, choices) -> str or None` | core's `hermes_cli/plugins.py`, lines 618 to 622 at `84a0301` |
+| `ctx.register_command("dirtside", handler, description=..., args_hint="<use|devices|pair|revoke>", argument_mode="text")` | core's `hermes_cli/plugins.py`, lines 649 to 674 at `84a0301` |
+| `ctx.register_system_prompt_section("dirtside.target", callable, position="after_memory", max_chars=600)` | core's `hermes_cli/plugins.py`, lines 959 to 984 at `84a0301` |
+| Prompt metadata and frozen snapshots | core's `agent/system_prompt.py`, lines 86 to 137 at `84a0301` |
+| `ctx.register({id:"pane", area:"panes", title:"Dirtside", data:{placement:"right", width:"320px"}, render})` and chip at `STATUSBAR_AREAS.right` | core's `apps/desktop/src/contrib/plugin.ts`, lines 371 to 400 at `84a0301`, `sdk/areas.ts` |
+| `ctx.rest(path, {method, body})`, namespace-relative and profile-aware | core's `apps/desktop/src/contrib/plugin.ts`, line 396 at `84a0301`, core's `api/plugins.ts`, lines 44 to 99 at `84a0301` |
+| `useValue(host.state.focusedSessionId)`, focusedStoredSessionId, focusedSessionOwner, connectionId, profile | core's `apps/desktop/src/sdk/index.ts`, lines 560 to 610 at `84a0301` |
+| `useValue(host.paneVisibility("dirtside:pane"))` | core's `apps/desktop/src/sdk/index.ts`, line 1299 at `84a0301`; saved SDK host API |
+| `useQuery`, `useQueryClient`, `useGatewayActivationEpoch`, `useValue`, `StatusDot({tone})` | core's `apps/desktop/src/sdk/index.ts`, lines 1695, 1897, 1977 to 1981 at `84a0301`; `components/status-dot.tsx` |
+| `desktop/plugin.js` unified-package discovery, no Desktop manifest needed | core's `apps/desktop/electron/desktop-plugins-root.ts`, lines 220 to 230 at `84a0301`; core's `desktop-plugin-install.ts`, lines 222 to 232 at `84a0301` |
+| Stored session_key differs from runtime session_id | core's `tui_gateway/methods_session.py`, lines 372, 427 at `84a0301`; context binding core's `tui_gateway/server.py`, lines 931 to 950 at `84a0301` |
 
 The existing hidden `dashboard/manifest.json` already declares the backend. Keep it; adding a dashboard JS entry would incorrectly claim a web-dashboard UI.
 

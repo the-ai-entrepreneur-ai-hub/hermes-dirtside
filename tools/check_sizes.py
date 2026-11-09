@@ -3,13 +3,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUDGETS = {
-    "backend": 22, "access": 71, "model": 111, "protocol": 147, "registry": 207, "relay": 237, "client": 173, "local": 147,
-    "environment": 120, "provider": 161, "auth": 85, "commands": 110, "prompt": 36, "cli": 180,
+    "backend": 22, "access": 82, "model": 111, "protocol": 147, "registry": 216, "relay": 239, "client": 198, "local": 152,
+    "environment": 124, "provider": 164, "auth": 91, "commands": 110, "prompt": 36, "cli": 188,
     "agent/config": 100, "agent/policy": 40, "agent/executor": 114, "agent/loop": 150,
 }
 BUDGETS = {f"dirtside/{name}.py": n for name, n in BUDGETS.items()} | {
-    "__init__.py": 50, "dirtside/__init__.py": 50, "dashboard/plugin_api.py": 194,
-    "tools/bench.py": 91, "tools/fake_device.py": 82, "tools/check_sizes.py": 30,
+    "__init__.py": 50, "dirtside/__init__.py": 50, "dashboard/plugin_api.py": 214,
+    "tests/bench.py": 92, "tools/fake_device.py": 82, "tools/check_sizes.py": 30,
     "desktop/plugin.js": 280,
 }
 

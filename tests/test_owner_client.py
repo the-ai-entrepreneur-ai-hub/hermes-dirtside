@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import shlex
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -153,10 +154,15 @@ def test_owner_death_never_falls_back(owner_client):
         env.execute(f"touch '{marker}'")
     assert not marker.exists() and not relay.handles
 
-def test_core_owner_loss_midstream_has_no_timeout_hint(owner_client, monkeypatch):
+@pytest.mark.parametrize("retained_cwd", [False, True])
+def test_core_owner_loss_midstream_has_no_timeout_hint(owner_client, monkeypatch, retained_cwd):
     from dirtside.client import OWNER_MISSING
     owner, _, relay, _, work = owner_client
     assert terminal("true")["exit_code"] == 0
+    if retained_cwd:
+        retained = work / "retained-cwd"
+        retained.mkdir()
+        assert terminal("cd " + shlex.quote(str(retained)))["exit_code"] == 0
     delivered, write = threading.Event(), relay._write
     def observe(handle, fd, data, deadline):
         accepted = write(handle, fd, data, deadline)
@@ -164,7 +170,7 @@ def test_core_owner_loss_midstream_has_no_timeout_hint(owner_client, monkeypatch
             delivered.set()
         return accepted
     monkeypatch.setattr(relay, "_write", observe)
-    command = "echo $$ > owner-loss.pid; printf retained; while :; do sleep 1; done"
+    command = f"echo $$ > {shlex.quote(str(work / 'owner-loss.pid'))}; printf retained; while :; do sleep 1; done"
     with ThreadPoolExecutor(1) as pool:
         future = pool.submit(terminal, command)
         try:
@@ -182,3 +188,10 @@ def test_core_owner_loss_midstream_has_no_timeout_hint(owner_client, monkeypatch
                 owner.proc.wait(3)
             if (work / "owner-loss.pid").exists():
                 stop_group(int((work / "owner-loss.pid").read_text()))
+            pids = [int(path.read_text()) for path in work.rglob("owner-loss.pid")]
+            try:
+                assert len(pids) == 1
+                until(lambda: not alive(pids[0]), timeout=1)
+            finally:
+                for pid in pids:
+                    stop_group(pid)
