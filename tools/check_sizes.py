@@ -3,8 +3,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUDGETS = {
-    "access": 70, "model": 111, "protocol": 147, "registry": 207, "relay": 237, "client": 173, "local": 141,
-    "environment": 120, "provider": 146, "auth": 60, "commands": 110, "prompt": 36, "cli": 180,
+    "backend": 22, "access": 71, "model": 111, "protocol": 147, "registry": 207, "relay": 237, "client": 173, "local": 141,
+    "environment": 120, "provider": 161, "auth": 60, "commands": 110, "prompt": 36, "cli": 180,
     "agent/config": 100, "agent/policy": 40, "agent/executor": 114, "agent/loop": 150,
 }
 BUDGETS = {f"dirtside/{name}.py": n for name, n in BUDGETS.items()} | {

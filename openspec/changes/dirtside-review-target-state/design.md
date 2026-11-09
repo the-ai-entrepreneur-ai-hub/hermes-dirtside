@@ -17,6 +17,7 @@ Rejected: reset in slash handlers misses pane switches and reaping; ignore all c
 Each scenario names its regression test below. Run every new file on a pristine git archive of 0ae9359 with only the test files copied in, then on this tree; keep logs in the supplied notes folder. Existing compatibility controls may already pass on the old code and are reported separately, never claimed as red fixes. Use temporary HOME and HERMES_HOME for every process. Run package and fast suites before the next package. Save cumulative tracked diff and untracked tar checkpoints. Final verification uses both supplied core interpreters without changing core or installing a replacement CLI.
 
 - `test_no_terminal_internals`: Public target state.
+- `test_execution_middleware_matches_manifest`: Core's capability probe and provides_middleware declare the same tool_execution callback.
 - `test_gateway_target_roundtrips`: Stable target round trips.
 - `test_switch_after_idle_cleanup`: Idle continuity.
 - `test_server_environment_control`: Core local control.

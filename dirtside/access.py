@@ -11,7 +11,8 @@ _UNSET = object()
 
 def valid_sender(value):
     return type(value) is str and (value == "local" or bool(re.fullmatch(
-        r"[a-z][a-z0-9_-]{0,31}:[A-Za-z0-9_.@:-]{1,256}", value)))
+        r"[a-z][a-z0-9_-]{0,31}:[^\s\x00-\x1f\x7f-\x9f]{1,256}", value))
+        and value.isprintable())
 
 
 class Access:

@@ -14,6 +14,10 @@ With a nonempty owners list only local and listed senders MUST pair new names; w
 - **WHEN** the owners list is empty or populated
 - **THEN** minting follows the rule and pending completion binds the minting sender
 
+#### Scenario: test_native_sender_spelling_can_own_device
+- **WHEN** an admitted email address, Signal phone number or IRC nick pairs a device
+- **THEN** its exact public sender identity owns the device and another sender cannot discover it
+
 ### Requirement: Dispatch authority
 An explicit device target MUST be authorized against the current turn sender in both transports and MUST never fall back to the server.
 

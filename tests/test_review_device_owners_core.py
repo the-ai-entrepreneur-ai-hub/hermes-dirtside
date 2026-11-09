@@ -48,6 +48,8 @@ def test_group_dispatch(tmp_path, transport, tool):
         assert not marker.exists()
         assert rig.core.http("GET", "/requests").json() == before
         assert "laptop" not in as_user(core, "slash", "B", raw_args="devices")
+        again = as_user(core, "terminal", "A", task_id="shared-cache", args={"command": "pwd"})
+        assert again["exit_code"] == 0 and again["output"].strip() == rig.device_env["HOME"]
         as_user(core, "slash", "B", raw_args="use server")
         assert as_user(core, "terminal", "B", args={"command": "pwd"})["output"].strip() == rig.core.env["HOME"]
 
@@ -69,6 +71,9 @@ def test_owned_default(tmp_path, transport):
         as_user(core, "slash", "A", raw_args="devices")
         prompt = as_user(core, "prompt", "B", snapshot="B-default")
         assert "server" in str(prompt).lower() and "laptop" not in str(prompt)
+        assert "laptop" in str(as_user(core, "prompt", "A", snapshot="A-default"))
+        owner = as_user(core, "terminal", "A", args={"command": "pwd"})
+        assert owner["exit_code"] == 0 and owner["output"].strip() == rig.device_env["HOME"]
         result = as_user(core, "terminal", "B", args={"command": "pwd"})
         assert result["exit_code"] == 0 and result["output"].strip() == rig.core.env["HOME"]
         cron = as_user(core, "terminal", "A", cron="1", args={"command": "pwd"})

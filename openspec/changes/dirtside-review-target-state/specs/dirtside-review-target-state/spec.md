@@ -4,8 +4,27 @@
 Runtime code MUST import nothing from tools.terminal_tool and MUST own per-target cwd and snapshots.
 
 #### Scenario: test_no_terminal_internals
-- **WHEN** target dispatch executes with private terminal imports blocked
-- **THEN** cwd and exports work without touching core's cwd table
+- **WHEN** runtime imports are inspected
+- **THEN** no module imports tools.terminal_tool
+
+#### Scenario: test_creation_and_selection_never_call_core_cwd_helpers
+- **WHEN** creation and target selection run with private cwd helpers refusing calls
+- **THEN** server and device execution succeed without those helpers
+
+#### Scenario: test_history_comes_from_live_delegate_not_mutable_core_table
+- **WHEN** the unrelated core record changes between target switches
+- **THEN** saved cwd follows the live delegate and the plugin leaves that record untouched
+
+#### Scenario: test_direct_cwd_argument_remains_explicit
+- **WHEN** a direct environment caller supplies cwd without tool middleware
+- **THEN** execution honors it normally
+
+### Requirement: Declared public execution middleware
+The plugin MUST declare its tool_execution middleware in the manifest.
+
+#### Scenario: test_execution_middleware_matches_manifest
+- **WHEN** core probes the plugin's registered capabilities
+- **THEN** the registered middleware and manifest both contain exactly tool_execution
 
 ### Requirement: Stable target round trips
 Targets MUST restore their own cwd and exports across repeated switches, including when task ids differ from session keys.

@@ -4,11 +4,10 @@ import weakref
 
 from agent.terminal_env_provider import TerminalEnvironmentProvider
 from gateway.session_context import get_session_env
-from tools.environments.base import EnvironmentConnectionError
-from tools.environments.local import LocalEnvironment
 
 from .access import Access
-from .environment import DirtsideEnvironment, require_online
+from .backend import local_environment, terminal_workdir
+from .environment import DirtsideEnvironment, EnvironmentConnectionError, require_online
 from .model import OnDevice, Server, SessionKey
 
 def session_identity():
@@ -41,6 +40,8 @@ class ConversationEnvironment:
 
     def __init__(self, provider, key, cwd, timeout, task_id):
         self._provider, self._fallback_key = provider, key
+        if provider._access.ctx is not None:
+            cwd = provider._access.ctx.session_cwd() or "~"
         self._cwd, self._timeout, self._task_id = cwd, timeout, task_id
         self._environments, self._lock = {}, threading.RLock()
         self._current(True)
@@ -59,33 +60,41 @@ class ConversationEnvironment:
             require_online(target.device, self._provider._relay)
             return DirtsideEnvironment(self._provider._relay, target.device, key, self._task_id, cwd, self._timeout,
                                        access=self._provider._access)
-        return LocalEnvironment(cwd=cwd, timeout=self._timeout)
+        return local_environment(cwd, self._timeout)
 
     def _select(self, identity, target):
-        from tools.terminal_tool import get_session_cwd, record_session_cwd
         p = self._provider
         with p._lock:
             state = p._state(identity[0], self._cwd)
             cwd = state["cwds"].get(identity, "~")
-            if state["identity"] == identity:
-                cwd = get_session_cwd(identity[0]) or cwd
-        existing = identity in self._environments
-        if not existing:
+        if identity not in self._environments:
             self._environments[identity] = self._create(target, identity[0], cwd)
         env = self._environments[identity]
+        env._dirtside_target = identity
         with p._lock:
             state = p._state(identity[0], self._cwd)
             previous, cwds = state["identity"], state["cwds"]
-            if previous != identity:
-                if previous:
-                    cwds[previous] = get_session_cwd(previous[0]) or cwds[previous]
-                elif existing:
-                    cwds[identity] = env.cwd
-                record_session_cwd(identity[0], cwds.setdefault(identity, env.cwd))
-                state["identity"] = identity
+            if previous in self._environments:
+                cwds[previous] = self._environments[previous].cwd
+            cwds[identity], state["identity"] = env.cwd, identity
             p._conversations[identity[0]] = self
         self._last = env
         return env
+
+    def _remember(self, env):
+        p, identity = self._provider, env._dirtside_target
+        with p._lock:
+            p._state(identity[0], self._cwd)["cwds"][identity] = env.cwd
+
+    def execute(self, command, cwd="", **kwargs):
+        env, mode = self._current(True), terminal_workdir()
+        previous = env.cwd
+        try:
+            return env.execute(command, "" if mode is False else cwd, **kwargs)
+        finally:
+            if mode is True:
+                env.cwd = previous
+            self._remember(env)
 
     def get_temp_dir(self):
         return self._current().get_temp_dir()
@@ -107,8 +116,14 @@ class ConversationEnvironment:
         self._current().cwd = value
 
     def cleanup(self):
-        for env in self._environments.values():
+        for env in list(self._environments.values()):
+            self._remember(env)
             env.cleanup()
+        with self._provider._lock:
+            for key, facade in list(self._provider._conversations.items()):
+                if facade is self:
+                    self._provider._conversations.pop(key, None)
+        self._environments.clear()
 
 class DirtsideProvider(TerminalEnvironmentProvider):
     name = "dirtside"

@@ -111,11 +111,35 @@ def test_sender_provenance(surface, platform, user, source, expected):
 
 
 @pytest.mark.parametrize("owners", [None, "telegram:A", ["A"], [1], ["local", "local"],
-                                    ["telegram:"], ["telegram:A\n"], [""]])
+                                    ["telegram:"], ["telegram:A\n"], [""], ["email:bad\rvalue"],
+                                    ["irc:bad user"], ["irc:\0"], ["irc:\u202e"]])
 def test_bad_owners_refused(owners):
     from dirtside.access import Access
     with pytest.raises(ValueError, match="owners"):
         Access(context(owners=()), owners=owners)
+
+
+@pytest.mark.parametrize("platform,user", [
+    ("email", "build+release@example.test"), ("signal", "+15550102000"), ("irc", "[native-nick]"),
+])
+def test_native_sender_spelling_can_own_device(tmp_path, platform, user):
+    reg = Registry(tmp_path / "data.db")
+    relay = Relay(reg)
+    with sender(user, platform) as ctx:
+        reply = Commands(ctx, reg, relay)("pair native")
+        assert "--code=" in reply
+    code = re.search(r"--code=(\S+)", reply)[1]
+    hello = DeviceHello(bytes(SigningKey.generate().verify_key), "native", "test-os", "",
+                        str(tmp_path), str(tmp_path), "0.1.0")
+    device = reg.complete_pairing("native", hello, int(time.time()), code=code)[0]
+    with sender("other", platform) as ctx:
+        assert "native" not in Commands(ctx, reg, relay)("devices")
+    with sender(user, platform) as ctx:
+        cmd = Commands(ctx, reg, relay)
+        assert device.owner == f"{platform}:{user}"
+        assert "native" in cmd("devices")
+        cmd("use native")
+        assert reg.target("shared-group") == device.id
 
 
 def test_owner_config_schema():

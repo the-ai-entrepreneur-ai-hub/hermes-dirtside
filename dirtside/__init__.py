@@ -5,6 +5,7 @@ from plugins.plugin_storage import plugin_data_dir
 def register(ctx):
     from .access import Access
     from .auth import DirtsideDeviceAuth, register_device_routes
+    from .backend import tool_execution
     from .cli import handle, setup_parser
     from .client import Client
     from .commands import Commands
@@ -20,6 +21,7 @@ def register(ctx):
     default = ctx.get_config("default_target", "server") or "server"
     ctx.register_terminal_environment_provider(
         DirtsideProvider(registry, relay, default, access))
+    ctx.register_middleware("tool_execution", tool_execution)
     ctx.register_dashboard_auth_provider(DirtsideDeviceAuth(registry, relay, default))
     register_device_routes()
     ctx.register_cli_command("dirtside", "Pair and run a personal device", setup_parser, handle)

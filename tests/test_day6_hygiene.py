@@ -17,7 +17,7 @@ def test_auth_types_use_the_exported_public_seam():
 
 def test_manifest_uses_only_supported_middleware_declarations():
     manifest = yaml.safe_load((ROOT / "plugin.yaml").read_text())
-    assert "provides_middleware" not in manifest
+    assert manifest["provides_middleware"] == ["tool_execution"]
 
 
 @pytest.mark.parametrize("command", ['"$HERMES_SRC/venv/bin/hermes" plugins validate .',

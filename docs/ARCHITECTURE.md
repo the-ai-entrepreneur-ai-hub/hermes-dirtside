@@ -95,7 +95,8 @@ Dependency direction is top to bottom. No module imports one below it except thr
 
 | Module | Owns | Depends on | Budget |
 |---|---|---|---|
-| `dirtside/access.py` | current sender identity, visibility and owner authorization | public session context, environment error | 70 |
+| `dirtside/backend.py` | explicit terminal-workdir context and lazy local handoff | stdlib, transitional core local environment | 22 |
+| `dirtside/access.py` | current sender identity, visibility and owner authorization | public session context, environment error | 71 |
 | `dirtside/model.py` | the types and constants above | stdlib | 111 |
 | `dirtside/protocol.py` | `Envelope`, canonical JSON, `sign`, `verify`, `ReplayGuard`, one `parse_*` per message kind, `PROTOCOL_VERSION = 1` | model, nacl | 147 |
 | `dirtside/registry.py` | the SQLite boundary, relay key and private local secret | model, sqlite3 | 207 |
@@ -103,7 +104,7 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 120 |
 | `dirtside/client.py` | process-verified owner discovery, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 173 |
 | `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, FastAPI, anyio | 141 |
-| `dirtside/provider.py` | dispatch-time conversation context, bounded cwd history and per-target snapshot delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, `tools.environments.local`, `tools.terminal_tool`, `gateway.session_context` | 146 |
+| `dirtside/provider.py` | dispatch-time conversation context, bounded cwd history and per-target snapshot delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, backend, environment, `gateway.session_context` | 161 |
 | `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 60 |
 | `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`, `resolve_target`, session context) | 110 |
 | `dirtside/prompt.py` | `current_target_section()` | registry, provider (`session_identity`) | 36 |
@@ -120,7 +121,7 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | `tools/fake_device.py` | a signed fake device, including the independently loaded core owner's result parser | agent/executor, relay | 82 |
 | `tools/check_sizes.py` | the size check | stdlib | 30 |
 
-Production core imports, in full: `agent.terminal_env_provider.TerminalEnvironmentProvider` (provider), `tools.environments.base.BaseEnvironment` (environment), `tools.environments.base.EnvironmentConnectionError` (environment, provider), `tools.environments.local.LocalEnvironment` (provider), `tools.terminal_tool.get_session_cwd` and `tools.terminal_tool.record_session_cwd` (provider), `gateway.session_context.get_session_env` (provider), `plugins.plugin_storage.plugin_data_dir` (package registration), `hermes_cli.dashboard_auth.DashboardAuthProvider` and `hermes_cli.dashboard_auth.TokenPrincipal` (auth), `hermes_cli.dashboard_auth.get_provider` (dashboard routes), `hermes_cli.dashboard_auth.token_auth.register_token_route` (auth), and `hermes_constants.get_hermes_home` (device config). No production code monkeypatches Hermes. The separate test rig imports core's entry points to exercise them.
+Production core imports, in full: `agent.terminal_env_provider.TerminalEnvironmentProvider` (provider), `tools.environments.base.BaseEnvironment` (environment), `tools.environments.base.EnvironmentConnectionError` (environment), `tools.environments.local.LocalEnvironment` (lazy backend handoff), `gateway.session_context.get_session_env` (provider), `plugins.plugin_storage.plugin_data_dir` (package registration), `hermes_cli.dashboard_auth.DashboardAuthProvider` and `hermes_cli.dashboard_auth.TokenPrincipal` (auth), `hermes_cli.dashboard_auth.get_provider` (dashboard routes), `hermes_cli.dashboard_auth.token_auth.register_token_route` (auth), and `hermes_constants.get_hermes_home` (device config). No production code monkeypatches Hermes. The separate test rig imports core's entry points to exercise them.
 
 ## A4. Registry (the SQLite boundary, and only a log for requests)
 

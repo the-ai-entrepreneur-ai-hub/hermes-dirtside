@@ -12,6 +12,8 @@ Rejected: per-conversation ownership permits group-chat borrowing; checking only
 
 ## Validation and migration
 
+Follow-on core tracing during WP3 found native user ids outside the initial ASCII subset: plugins/platforms/email/adapter.py:839 carries the full sender address, plugins/platforms/signal/adapter.py:423-424,471 carries a phone number, and plugins/platforms/irc/adapter.py:318 carries the nick. Preserve bounded printable non-whitespace ids verbatim, including plus signs and brackets; reject control and formatting characters. test_native_sender_spelling_can_own_device covers ownership and private discovery for these three sources.
+
 Each scenario names its regression test below. Run every new file on a pristine git archive of 0ae9359 with only the test files copied in, then on this tree; keep logs in the supplied notes folder. Existing compatibility controls may already pass on the old code and are reported separately, never claimed as red fixes. Use temporary HOME and HERMES_HOME for every process. Run package and fast suites before the next package. Save cumulative tracked diff and untracked tar checkpoints. Final verification uses both supplied core interpreters without changing core or installing a replacement CLI.
 
 - `test_owner_commands`: Owner controls.

@@ -141,13 +141,19 @@ class Runtime:
         return self.state(args)
 
     def terminal(self, args):
+        from hermes_cli.middleware import run_tool_execution_middleware
         from tools.terminal_tool import terminal_tool
-        return json.loads(terminal_tool(task_id=args.get("task_id", args["session"]), **args["args"]))
+        result = run_tool_execution_middleware("terminal", args["args"],
+            lambda payload: terminal_tool(task_id=args.get("task_id", args["session"]), **payload))
+        return json.loads(result)
 
     def file(self, args):
+        from hermes_cli.middleware import run_tool_execution_middleware
         from tools.file_tools import patch_tool, read_file_tool, search_tool, write_file_tool
         fn = dict(read_file=read_file_tool, write_file=write_file_tool, patch=patch_tool, search_files=search_tool)
-        return json.loads(fn[args["tool"]](task_id=args.get("task_id", args["session"]), **args["args"]))
+        result = run_tool_execution_middleware(args["tool"], args["args"],
+            lambda payload: fn[args["tool"]](task_id=args.get("task_id", args["session"]), **payload))
+        return json.loads(result)
 
     def queue(self, args):
         import secrets
