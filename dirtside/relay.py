@@ -6,6 +6,7 @@ import time
 from collections import defaultdict
 from dataclasses import replace
 
+from .access import Access
 from .environment import RemoteProcessHandle
 from .model import FEED_BLOCK_S, LOST_GRACE_S, OFFLINE_AFTER_S, PANE_TAIL_BYTES, TERMINAL, Outcome, RequestState
 
@@ -16,6 +17,7 @@ class Relay:
         self.cancels, self._revoked = defaultdict(set), set()
         self._paired_keys = {}
         self._client, self._owner_pid, self._streams = None, None, {}
+        self.access = Access()
 
     def connection(self):
         return self if self._client is None or self._owner_pid == os.getpid() else self._client
@@ -44,6 +46,7 @@ class Relay:
             handle.stdout.close()
 
     def submit(self, req):
+        self.access.require(self.registry.device_by_id(req.device_id), req.sender)
         self.registry.log(req)
         handle = RemoteProcessHandle(self, req)
         with self._condition:

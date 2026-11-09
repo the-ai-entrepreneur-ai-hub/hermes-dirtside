@@ -3,6 +3,7 @@ import shlex
 from pathlib import Path
 
 from core_rig import Rig
+from test_review_device_owners_core import as_user, owned_pair
 
 
 def test_target_put_redirects_cached_terminal_and_file_operations(tmp_path):
@@ -43,17 +44,19 @@ def test_target_put_redirects_cached_terminal_and_file_operations(tmp_path):
 
 def test_registered_command_changes_telegram_context_and_core_freezes_prompt(tmp_path):
     with Rig(tmp_path / "rig") as rig:
-        rig.pair().start_agent()
+        owned_pair(rig, user="42", session="telegram:42")
         core, session = rig.core, "telegram:42"
-        assert core.terminal("printf '%s' \"$HOME\"", session=session)["output"] == core.env["HOME"]
-        reply = core.call("slash", session=session, source="telegram", raw_args="use " + rig.name)
+        def call(method, **params):
+            return as_user(core, method, "42", session=session, **params)
+        assert call("terminal", args=dict(command="printf '%s' \"$HOME\""))["output"] == core.env["HOME"]
+        reply = call("slash", raw_args="use " + rig.name)
         assert "from the next command" in reply
-        assert core.terminal("printf '%s' \"$HOME\"", session=session)["output"] == rig.device_env["HOME"]
-        section = core.call("prompt", session=session)
+        assert call("terminal", args=dict(command="printf '%s' \"$HOME\""))["output"] == rig.device_env["HOME"]
+        section = call("prompt")
         assert len(section) == 1 and rig.name in section[0] and len(section[0]) <= 600
-        assert core.call("slash", session=session, source="telegram", raw_args="use server")
-        assert core.call("prompt", session=session) == section
-        assert core.call("prompt", session=session, snapshot="new-agent") == []
-        assert core.terminal("printf '%s' \"$HOME\"", session=session)["output"] == core.env["HOME"]
-        assert "Revoked" in core.call("slash", session=session, raw_args="revoke " + rig.name)
+        assert call("slash", raw_args="use server")
+        assert call("prompt") == section
+        assert call("prompt", snapshot="new-agent") == []
+        assert call("terminal", args=dict(command="printf '%s' \"$HOME\""))["output"] == core.env["HOME"]
+        assert "Revoked" in call("slash", raw_args="revoke " + rig.name)
         assert core.http("GET", "/devices").json() == []

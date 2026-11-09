@@ -65,8 +65,9 @@ class DirtsideEnvironment(BaseEnvironment):
     _persistent = True
     _passwordless_sudo_probe_supported = False
 
-    def __init__(self, relay, device, session_key, task_id, cwd, timeout):
+    def __init__(self, relay, device, session_key, task_id, cwd, timeout, *, access=None):
         self._relay, self._device = relay, device
+        self._access = access
         self._session_key, self._task_id = session_key, task_id
         super().__init__(cwd=device.home if cwd in ("", "~") else cwd, timeout=timeout)
         self.init_session()
@@ -82,10 +83,13 @@ class DirtsideEnvironment(BaseEnvironment):
             _COMMAND.reset(token)
 
     def _run_bash(self, cmd_string, *, login=False, timeout=120, stdin_data=None, cwd=None):
+        if self._access is not None:
+            self._access.require(self._relay.registry.device_by_id(self._device.id))
         require_online(self._device, self._relay)
         req = ExecRequest(RequestId("r_" + secrets.token_hex(12)), self._device.id,
                           self._session_key, self._task_id, _COMMAND.get(), cmd_string,
-                          login, timeout, stdin_data, cwd or self.cwd)
+                          login, timeout, stdin_data, cwd or self.cwd,
+                          self._access.identity() if self._access is not None else "local")
         return self._relay.connection().submit(req)
 
     def _wait_for_process(self, proc, timeout=120, **kwargs):

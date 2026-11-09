@@ -74,7 +74,7 @@ def test_status_agrees_with_unpaired_default_and_cron(tmp_path, cron):
     tokens = set_session_vars(session_key="status", cron_session=cron)
     try:
         target = "server" if cron else "an unpaired device"
-        assert commands("") == f"This conversation targets {target}. Online devices: none."
+        assert commands("") == f"This conversation targets {target}. Online devices: none. Sender: local."
     finally:
         clear_session_vars(tokens)
 
@@ -114,7 +114,7 @@ def test_pairing_cli_reserves_server_before_network(monkeypatch, capsys):
 def test_empty_default_is_shared_as_server_at_registration(tmp_path, monkeypatch, default):
     captured = {}
     ctx = SimpleNamespace(
-        get_config=lambda name, fallback: default,
+        get_config=lambda name, fallback: default if name == "default_target" else fallback,
         register_terminal_environment_provider=lambda value: captured.update(provider=value),
         register_dashboard_auth_provider=lambda value: captured.update(auth=value),
         register_command=lambda name, value, **kwargs: captured.update(commands=value),
@@ -145,6 +145,6 @@ def test_empty_yaml_default_runs_on_server_through_core(tmp_path, default, cron)
         assert result["exit_code"] == 0 and result["output"] == "normalized-default", result
         assert result["cwd"] == str((home / "user").resolve())
         assert core.call("slash", session="empty-default", cron=cron, raw_args="") == (
-            "This conversation targets server. Online devices: none.")
+            "This conversation targets server. Online devices: none. Sender: local.")
         assert core.call("prompt", session="empty-default", cron=cron) == []
         assert core.http("GET", "/sessions/empty-default/target").json() == {"target": "server"}

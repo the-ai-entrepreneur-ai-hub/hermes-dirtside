@@ -13,14 +13,15 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .model import PAIR_TTL_S, Device, Pending, RequestRow, RequestState
-_COLUMNS = "id,name,pubkey,os,arch,home,temp_dir,agent_version"
+_COLUMNS = "id,name,pubkey,os,arch,home,temp_dir,agent_version,owner"
 _ACTIVE = "revoked_at IS NULL AND pubkey IS NOT NULL AND expires_at IS NULL"
 _TARGETS = "CREATE TABLE IF NOT EXISTS targets (session_key TEXT PRIMARY KEY, target TEXT NOT NULL, set_at INTEGER NOT NULL)"
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS devices (
  id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash BLOB NOT NULL,
  pubkey BLOB, os TEXT, arch TEXT, home TEXT, temp_dir TEXT, agent_version TEXT,
- created_at INTEGER NOT NULL, expires_at INTEGER, revoked_at INTEGER);
+ created_at INTEGER NOT NULL, expires_at INTEGER, revoked_at INTEGER,
+ owner TEXT NOT NULL DEFAULT 'local');
 CREATE UNIQUE INDEX IF NOT EXISTS devices_active_name ON devices(name)
  WHERE revoked_at IS NULL AND pubkey IS NOT NULL;
 {_TARGETS};
@@ -41,6 +42,8 @@ class Registry:
         with self._seed() as self.relay_seed:
             self._connection().executescript(_SCHEMA)
             with self._tx() as conn:
+                if not any(row["name"] == "owner" for row in conn.execute("PRAGMA table_info(devices)")):
+                    conn.execute("ALTER TABLE devices ADD COLUMN owner TEXT NOT NULL DEFAULT 'local'")
                 if any(row["name"] == "device_id" for row in conn.execute("PRAGMA table_info(targets)")):
                     conn.execute("ALTER TABLE targets RENAME TO old_targets")
                     conn.execute(_TARGETS)
@@ -82,14 +85,16 @@ class Registry:
                 raise ValueError(f"{name} must contain a {size} byte seed")
             yield seed
 
-    def mint(self, name, now):
+    def mint(self, name, now, *, owner="local", privileged=False):
         if name == "server" or not re.fullmatch(r"[a-z0-9-]{1,32}", name):
             raise ValueError("device name must contain 1 to 32 lowercase letters, digits or hyphens; 'server' is reserved")
         code = secrets.token_urlsafe(32)
         with self._tx() as conn:
+            if not self._name_allowed(conn, name, now, owner, privileged):
+                raise ValueError("Pairing is unavailable for this sender")
             conn.execute("UPDATE devices SET revoked_at=? WHERE name=? AND pubkey IS NULL", (now, name))
-            conn.execute("INSERT INTO devices(id,name,token_hash,created_at,expires_at) VALUES(?,?,?,?,?)",
-                         (secrets.token_hex(16), name, _hash(code), now, now + PAIR_TTL_S))
+            conn.execute("INSERT INTO devices(id,name,token_hash,created_at,expires_at,owner) VALUES(?,?,?,?,?,?)",
+                         (secrets.token_hex(16), name, _hash(code), now, now + PAIR_TTL_S, owner))
         return code
 
     def credential_for(self, bearer, now):
@@ -109,7 +114,7 @@ class Registry:
             raise ValueError("pairing name does not match hello")
         bearer = secrets.token_urlsafe(32)
         with self._tx() as conn:
-            row = conn.execute("SELECT id FROM devices WHERE name=? AND pubkey IS NULL "
+            row = conn.execute("SELECT id,owner FROM devices WHERE name=? AND pubkey IS NULL "
                                "AND revoked_at IS NULL AND expires_at>? AND (? IS NULL OR token_hash=?)",
                                (name, now, code, _hash(code) if code is not None else None)).fetchone()
             if row is None:
@@ -121,7 +126,8 @@ class Registry:
                 conn.execute("DELETE FROM devices WHERE id=?", (row["id"],))
             facts = (hello.pubkey, hello.os, hello.arch, hello.home, hello.temp_dir, hello.agent_version)
             conn.execute("UPDATE devices SET pubkey=?,os=?,arch=?,home=?,temp_dir=?,agent_version=?,"
-                         "token_hash=?,expires_at=NULL,revoked_at=NULL WHERE id=?", (*facts, _hash(bearer), identity))
+                         "token_hash=?,expires_at=NULL,revoked_at=NULL,owner=? WHERE id=?",
+                         (*facts, _hash(bearer), row["owner"], identity))
             return _device(conn.execute("SELECT * FROM devices WHERE id=?", (identity,)).fetchone()), bearer
 
     def _find(self, column, value):
@@ -138,8 +144,21 @@ class Registry:
         with self._tx() as conn:
             return [_device(row) for row in conn.execute(f"SELECT * FROM devices WHERE {_ACTIVE} ORDER BY name")]
 
-    def revoke(self, name, now):
+    def owners_for_name(self, name):
         with self._tx() as conn:
+            return [row["owner"] for row in conn.execute(
+                "SELECT owner FROM devices WHERE name=? AND revoked_at IS NULL "
+                "AND (expires_at IS NULL OR expires_at>?)", (name, int(time.time())))]
+
+    def _name_allowed(self, conn, name, now, owner, privileged):
+        rows = conn.execute("SELECT owner FROM devices WHERE name=? AND revoked_at IS NULL "
+                            "AND (expires_at IS NULL OR expires_at>?)", (name, now))
+        return owner == "local" or privileged or all(row["owner"] == owner for row in rows)
+
+    def revoke(self, name, now, *, owner="local", privileged=False):
+        with self._tx() as conn:
+            if not self._name_allowed(conn, name, now, owner, privileged):
+                return None
             device = _device(conn.execute(f"SELECT * FROM devices WHERE name=? AND {_ACTIVE}", (name,)).fetchone())
             conn.execute("UPDATE devices SET revoked_at=? WHERE name=? AND revoked_at IS NULL", (now, name))
             return device

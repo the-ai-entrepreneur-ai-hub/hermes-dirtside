@@ -95,17 +95,18 @@ Dependency direction is top to bottom. No module imports one below it except thr
 
 | Module | Owns | Depends on | Budget |
 |---|---|---|---|
-| `dirtside/model.py` | the types and constants above | stdlib | 110 |
+| `dirtside/access.py` | current sender identity, visibility and owner authorization | public session context, environment error | 70 |
+| `dirtside/model.py` | the types and constants above | stdlib | 111 |
 | `dirtside/protocol.py` | `Envelope`, canonical JSON, `sign`, `verify`, `ReplayGuard`, one `parse_*` per message kind, `PROTOCOL_VERSION = 1` | model, nacl | 147 |
-| `dirtside/registry.py` | the SQLite boundary, relay key and private local secret | model, sqlite3 | 188 |
-| `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), threading | 234 |
-| `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 116 |
+| `dirtside/registry.py` | the SQLite boundary, relay key and private local secret | model, sqlite3 | 207 |
+| `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), threading | 237 |
+| `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 120 |
 | `dirtside/client.py` | process-verified owner discovery, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 173 |
-| `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, FastAPI, anyio | 136 |
-| `dirtside/provider.py` | dispatch-time conversation context, bounded cwd history and per-target snapshot delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, `tools.environments.local`, `tools.terminal_tool`, `gateway.session_context` | 138 |
+| `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, FastAPI, anyio | 141 |
+| `dirtside/provider.py` | dispatch-time conversation context, bounded cwd history and per-target snapshot delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, `tools.environments.local`, `tools.terminal_tool`, `gateway.session_context` | 146 |
 | `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 60 |
 | `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`, `resolve_target`, session context) | 110 |
-| `dirtside/prompt.py` | `current_target_section()` | registry, provider (`session_identity`) | 25 |
+| `dirtside/prompt.py` | `current_target_section()` | registry, provider (`session_identity`) | 36 |
 | `dirtside/cli.py` | `hermes dirtside serve`, `pair`, `status`, `install-service`, bounded private refusal details and public-host hint | agent/*, argparse, httpx | 180 |
 | `dirtside/agent/config.py` | `DeviceConfig` read and atomic write (`device.json`, 0600) | model, protocol | 100 |
 | `dirtside/agent/policy.py` | `evaluate(command, policy) -> Decision`, pure | model | 40 |
@@ -224,7 +225,7 @@ class DirtsideEnvironment(BaseEnvironment):
 def session_identity() -> SessionKey:
     return SessionKey(get_session_env("HERMES_SESSION_KEY") or get_session_env("HERMES_SESSION_ID"))
 
-def resolve_target(session_key, is_cron, default_target, registry, relay, *, require_contact=True):
+def resolve_target(session_key, is_cron, default_target, registry, relay, *, require_contact=True, access=None):
     chosen = registry.target(session_key) if session_key else None
     if chosen == "server":
         return Server()
@@ -235,17 +236,14 @@ def resolve_target(session_key, is_cron, default_target, registry, relay, *, req
                                          retry_hint="Run /dirtside use server, or pair the device again.")
     if device is None:
         return Server()
+    access = access or Access()
+    if not access.can(device):
+        if chosen:
+            access.require(device)
+        return Server()
     if require_contact:
         require_online(device, relay)
     return OnDevice(device)
-
-class DirtsideProvider(TerminalEnvironmentProvider):
-    name = "dirtside"; display_name = "Dirtside (your own devices)"
-    is_remote = True; is_container = False         # the ABC derives skip_container_guards from is_container, so approvals stay on; a test pins it
-    default_cwd = property(lambda self: "~")
-    def is_available(self): return True
-    def create_environment(self, *, cwd, timeout, task_id="default", image=None, container_config=None, **kwargs):
-        return ConversationEnvironment(self, session_identity(), cwd, timeout, task_id)
 ```
 
 Registration reads `ctx.get_config("default_target", "server") or "server"` once, so blank and null defaults mean server for the provider, commands, prompt and pane. Bare status calls `resolve_target(..., require_contact=False)`; execution requires contact. Resolver tests cover choices, defaults, cron, missing or revoked devices and offline devices. `ConversationEnvironment` resolves again at dispatch time; `create_environment` has no branch of its own.

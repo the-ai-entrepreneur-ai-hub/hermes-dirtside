@@ -7,13 +7,14 @@ from gateway.session_context import get_session_env
 from tools.environments.base import EnvironmentConnectionError
 from tools.environments.local import LocalEnvironment
 
+from .access import Access
 from .environment import DirtsideEnvironment, require_online
 from .model import OnDevice, Server, SessionKey
 
 def session_identity():
     return SessionKey(get_session_env("HERMES_SESSION_KEY") or get_session_env("HERMES_SESSION_ID"))
 
-def resolve_target(session_key, is_cron, default_target, registry, relay, *, require_contact=True):
+def resolve_target(session_key, is_cron, default_target, registry, relay, *, require_contact=True, access=None):
     chosen = registry.target(session_key) if session_key else None
     if chosen == "server":
         return Server()
@@ -23,6 +24,11 @@ def resolve_target(session_key, is_cron, default_target, registry, relay, *, req
         raise EnvironmentConnectionError("Dirtside: this conversation's device is no longer paired.",
                                          retry_hint="Run /dirtside use server, or pair the device again.")
     if device is None:
+        return Server()
+    access = access or Access()
+    if not access.can(device):
+        if chosen:
+            access.require(device)
         return Server()
     if require_contact:
         require_online(device, relay)
@@ -43,7 +49,7 @@ class ConversationEnvironment:
         p = self._provider
         key, cron = session_identity() or self._fallback_key, get_session_env("HERMES_CRON_SESSION") == "1"
         target = resolve_target(key, cron, p._default_target, p._registry, p._relay,
-                                require_contact=require_contact)
+                                require_contact=require_contact, access=p._access)
         identity = key, target.device if isinstance(target, OnDevice) else "server"
         with self._lock:
             return self._select(identity, target)
@@ -51,7 +57,8 @@ class ConversationEnvironment:
     def _create(self, target, key, cwd):
         if isinstance(target, OnDevice):
             require_online(target.device, self._provider._relay)
-            return DirtsideEnvironment(self._provider._relay, target.device, key, self._task_id, cwd, self._timeout)
+            return DirtsideEnvironment(self._provider._relay, target.device, key, self._task_id, cwd, self._timeout,
+                                       access=self._provider._access)
         return LocalEnvironment(cwd=cwd, timeout=self._timeout)
 
     def _select(self, identity, target):
@@ -109,8 +116,9 @@ class DirtsideProvider(TerminalEnvironmentProvider):
     is_remote = True
     is_container = False
 
-    def __init__(self, registry, relay, default_target="server"):
+    def __init__(self, registry, relay, default_target="server", access=None):
         self._registry, self._relay, self._default_target = registry, relay, default_target
+        self._access = access or Access()
         self._conversations = weakref.WeakValueDictionary()
         self._states, self._lock = {}, threading.RLock()
 

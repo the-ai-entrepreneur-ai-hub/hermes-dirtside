@@ -16,6 +16,10 @@ provides_tools: []
 provides_hooks: []
 requires_env: []
 config_schema:
+  owners:
+    type: list
+    default: []
+    description: Global device owners (local or platform:user). Local host users always retain access.
   default_target:
     type: str
     default: server

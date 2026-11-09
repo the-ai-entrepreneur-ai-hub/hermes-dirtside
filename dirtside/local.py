@@ -13,6 +13,7 @@ from dataclasses import asdict
 from anyio import CancelScope
 from fastapi import HTTPException, Request
 from starlette.responses import StreamingResponse
+from .environment import EnvironmentConnectionError
 from .model import CHUNK_BYTES, ExecRequest, Outcome, RequestState
 from .protocol import parse_exec
 
@@ -61,7 +62,7 @@ class LocalAPI:
         data = await body(request)
         if type(data) is not dict:
             raise ValueError("invalid execution")
-        extra = {k: data[k] for k in ("device_id", "session_key", "task_id")}
+        extra = {k: data[k] for k in ("device_id", "session_key", "task_id", "sender")}
         if not all(type(v) is str and len(v) <= 4096 and "\0" not in v for v in extra.values()):
             raise ValueError("invalid local identity")
         parse_exec({k: v for k, v in data.items() if k not in extra})
@@ -69,6 +70,10 @@ class LocalAPI:
             raise ValueError("invalid device id")
         self.owner()
         device = await asyncio.to_thread(self.registry.device_by_id, extra["device_id"])
+        try:
+            self.relay.access.require(device, extra["sender"])
+        except EnvironmentConnectionError:
+            raise HTTPException(403, "device is unavailable for this sender") from None
         if device is None or not self.relay.is_online(device.id):
             raise HTTPException(409, "device is unavailable")
         try:

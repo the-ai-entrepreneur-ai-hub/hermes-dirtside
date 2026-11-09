@@ -18,6 +18,7 @@ class Device:
     home: str
     temp_dir: str
     agent_version: str
+    owner: str = "local"
 
 @dataclass(frozen=True)
 class Pending:
@@ -58,6 +59,7 @@ class ExecRequest:
     timeout_s: int
     stdin: str | None
     cwd: str
+    sender: str = "local"
 
 @dataclass(frozen=True)
 class Outcome:

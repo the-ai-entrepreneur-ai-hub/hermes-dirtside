@@ -84,7 +84,7 @@ def test_no_live_owner_is_offline_everywhere(tmp_path, state):
         with mounted(tmp_path, gate=False, relay=relay) as (app, *_), TestClient(app) as web:
             commands = Commands(SimpleNamespace(), registry, relay)
             assert commands("devices") == "Paired devices: macbook (macOS, offline)."
-            assert commands("") == "This conversation targets macbook (macOS, offline). Online devices: none."
+            assert commands("") == "This conversation targets macbook (macOS, offline). Online devices: none. Sender: local."
             assert "(offline, data)" in TargetPrompt(registry, relay).current_target_section({})
             assert web.get(API + "/devices").json() == [
                 dict(id=device.id, name=device.name, online=False, os=device.os, home=device.home, last_seen=None)]

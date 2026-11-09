@@ -26,14 +26,14 @@ def commands(tmp_path):
 
 
 def test_status_and_device_states(commands, tmp_path):
-    assert commands("") == "This conversation targets server. Online devices: none."
+    assert commands("") == "This conversation targets server. Online devices: none. Sender: local."
     assert commands("devices") == "No devices are paired."
     device, _, _ = paired(commands.registry, tmp_path)
     spare, _, _ = paired(commands.registry, tmp_path, "spare")
     commands.relay.touch(device.id)
     assert commands("devices") == "Paired devices: macbook (macOS, online); spare (macOS, offline)."
     commands("use spare")
-    assert commands("") == "This conversation targets spare (macOS, offline). Online devices: macbook."
+    assert commands("") == "This conversation targets spare (macOS, offline). Online devices: macbook. Sender: local."
     commands.registry.revoke(spare.name, int(time.time()))
     assert "unpaired device" in commands("")
 

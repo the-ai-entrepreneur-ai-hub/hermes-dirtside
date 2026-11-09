@@ -182,6 +182,7 @@ class Runtime:
         session = args.get("session", "integration")
         args = {"session": session, **args}
         tokens = set_session_vars(session_key=session, session_id=session, source=args.get("source", "cli"),
+                                  platform=args.get("platform", ""), user_id=args.get("user_id", ""),
                                   cron_session=args.get("cron", ""))
         with self.lock:
             self.active[message["id"]] = threading.get_ident()

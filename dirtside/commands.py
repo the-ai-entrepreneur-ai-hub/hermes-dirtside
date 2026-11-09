@@ -1,5 +1,6 @@
 """User-only conversation controls, bound to the registered runtime."""
 import time
+from .access import Access
 
 from .model import OnDevice
 from .provider import get_session_env, resolve_target, session_identity
@@ -8,8 +9,12 @@ from .environment import EnvironmentConnectionError
 USAGE = "Use /dirtside, /dirtside use <name|server>, /dirtside devices, /dirtside pair <name>, or /dirtside revoke <name>."
 
 class Commands:
-    def __init__(self, ctx, registry, relay, default_target="server"):
+    def __init__(self, ctx, registry, relay, default_target="server", access=None):
         self.ctx, self.registry, self.relay, self.default_target = ctx, registry, relay, default_target
+        self.access = access or Access(ctx if hasattr(ctx, "session_surface") else None)
+
+    def visible(self):
+        return [d for d in self.registry.devices() if self.access.can(d)]
 
     def __call__(self, raw_args: str) -> str:
         parts = raw_args.split()
@@ -28,13 +33,13 @@ class Commands:
     def status(self):
         try:
             target = resolve_target(session_identity(), get_session_env("HERMES_CRON_SESSION") == "1",
-                                    self.default_target, self.registry, self.relay, require_contact=False)
+                                    self.default_target, self.registry, self.relay, require_contact=False, access=self.access)
         except EnvironmentConnectionError:
             name = "an unpaired device"
         else:
             name = self.label(target.device) if isinstance(target, OnDevice) else "server"
-        online = ", ".join(d.name for d in self.registry.devices() if self.relay.connection().is_online(d.id)) or "none"
-        return f"This conversation targets {name}. Online devices: {online}."
+        online = ", ".join(d.name for d in self.visible() if self.relay.connection().is_online(d.id)) or "none"
+        return f"This conversation targets {name}. Online devices: {online}. Sender: {self.access.identity() or 'unknown'}."
 
     def label(self, device):
         state = "online" if self.relay.connection().is_online(device.id) else "offline"
@@ -43,7 +48,7 @@ class Commands:
     def devices(self, argument):
         if argument:
             return USAGE
-        names = "; ".join(self.label(d) for d in self.registry.devices())
+        names = "; ".join(self.label(d) for d in self.visible())
         return f"Paired devices: {names}." if names else "No devices are paired."
 
     def use(self, name):
@@ -51,28 +56,33 @@ class Commands:
         if not key:
             return "No conversation is bound; the target was not changed."
         if not name:
-            choices = [d.name for d in self.registry.devices() if self.relay.connection().is_online(d.id)] + ["server"]
+            choices = [d.name for d in self.visible() if self.relay.connection().is_online(d.id)] + ["server"]
             name = self.ctx.ask_choice("Where should this conversation run commands?", choices)
             if name is None:
                 return "No target was changed."
             if name not in choices:
                 return "The choice was not offered; the target was not changed."
         device = self.registry.active_device(name) if name != "server" else None
-        if name != "server" and device is None:
+        if name != "server" and not self.access.can(device):
             return f"Device '{name}' is not paired; the target was not changed."
         label = self.label(device) if device else "server"
         self.registry.set_target(key, device.id if device else "server")
         return f"This conversation now targets {label}. The change applies to this conversation from the next command."
 
     def pair(self, name):
-        code = self.registry.mint(name, int(time.time()))
+        if not self.access.may_pair() or not self.access.name_allowed(self.registry, name):
+            return "Pairing is unavailable for this sender."
+        sender = self.access.identity()
+        code = self.registry.mint(name, int(time.time()), owner=sender, privileged=self.access.privileged(sender))
         return (f"Pairing code {code} expires in 10 minutes. On the device run: "
                 f"hermes dirtside pair <gateway-url> --name {name} --code={code}")
 
     def revoke(self, name):
         if not name:
             return USAGE
-        device = self.registry.revoke(name, int(time.time()))
+        device = (self.registry.revoke(name, int(time.time()), owner=self.access.identity(),
+                                       privileged=self.access.privileged(self.access.identity()))
+                  if self.access.name_allowed(self.registry, name) else None)
         if device:
             self.relay.connection().revoke(device.id)
             return f"Revoked {name} and cancelled its live requests."
