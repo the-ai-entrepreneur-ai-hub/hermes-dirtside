@@ -14,7 +14,7 @@ from test_registry import paired, request
 
 
 @pytest.fixture
-def commands(tmp_path):
+def commands(tmp_path, configured_backend):
     registry = Registry(tmp_path / "data.db")
     relay = Relay(registry)
     handler = Commands(SimpleNamespace(ask_choice=lambda question, choices: None), registry, relay)

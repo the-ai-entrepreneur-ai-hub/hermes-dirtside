@@ -47,7 +47,8 @@ def install(home, backend="dirtside", user_home=None, token=None, public_url=Non
         config["terminal"]["cwd"] = str(explicit_home)
     (home / "config.yaml").write_text(json.dumps(config) + "\n")
     env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("TERMINAL_", "HERMES_", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"))}
+           if k != "DIRTSIDE_HOME"
+           and not k.startswith(("TERMINAL_", "HERMES_", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"))}
     env.update(HERMES_HOME=str(home), HOME=str(user_home), TMPDIR=str(home / "tmp"),
                HERMES_RUNTIME_DIR=str(home / "runtime"), TERMINAL_TEMP_DIR=str(home / "tmp"),
                PYTHONPATH=os.pathsep.join((str(CORE), str(ROOT), str(ROOT / "tools"))),

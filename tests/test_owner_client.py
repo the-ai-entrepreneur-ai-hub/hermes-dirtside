@@ -27,7 +27,7 @@ from test_network import stop_group
 from test_core_terminal import semantic
 
 @pytest.fixture
-def owner_client(tmp_path, monkeypatch):
+def owner_client(tmp_path, monkeypatch, configured_backend):
     work = tmp_path / "work"
     work.mkdir()
     with Core(tmp_path / "owner", user_home=work) as owner:

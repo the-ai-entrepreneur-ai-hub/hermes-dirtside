@@ -18,7 +18,7 @@ Device configuration SHALL be atomically saved with mode 0600 at the selected He
 - **THEN** configuration is rejected without starting execution
 
 ### Requirement: Pair and serve commands
-The CLI SHALL support `hermes dirtside pair <gateway-url> --name <name> --code <code>` and `hermes dirtside serve`. Pair SHALL send a signed hello, save the returned identity and pinned key, and never print the long-lived token.
+The CLI SHALL support `hermes dirtside pair <gateway-url> --name <name> --code=<code>` and `hermes dirtside serve`. Pair SHALL send a signed hello, save the returned identity and pinned key, and never print the long-lived token.
 
 #### Scenario: CLI pairing
 - **WHEN** pair is invoked with a minted code

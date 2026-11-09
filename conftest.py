@@ -17,6 +17,7 @@ sys.path.insert(0, CORE)
 sys.path.append(str(ROOT / "tools"))
 sys.path.append(str(ROOT / "tests"))
 pytest_plugins = ["fd_guard"]
+os.environ.pop("DIRTSIDE_HOME", None)
 _test_home = tempfile.TemporaryDirectory(prefix="dirtside-tests-")
 TEST_HOME = Path(_test_home.name).resolve()
 for name in ("home", "tmp", "runtime"):
@@ -51,3 +52,9 @@ def registry_connections(descriptor_guard, monkeypatch):
                 return owned.enter_context(closing(connection))
         monkeypatch.setattr(registry, "sqlite3", SimpleNamespace(connect=connect, Row=sqlite3.Row))
         yield
+
+
+@pytest.fixture
+def configured_backend(monkeypatch):
+    from hermes_cli import config
+    monkeypatch.setattr(config, "read_raw_config_readonly", lambda: {"terminal": {"backend": "dirtside"}})

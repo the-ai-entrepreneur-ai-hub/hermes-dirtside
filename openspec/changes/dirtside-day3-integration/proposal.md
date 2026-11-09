@@ -7,7 +7,7 @@ The existing suite proves the isolated transport, not a user installation select
 ## What Changes
 
 - Test an enabled directory installation through startup discovery and the plugin CLI.
-- Compare terminal and file tool results with the local backend using a paired subprocess device and the real gated dashboard.
+- Compare terminal and file tool results with the local backend using a paired subprocess device and the real gated dashboard; file paths remain subject to gateway-side resolution.
 - Test device credentials and dashboard sessions on every plugin route.
 - Add idempotent user-service installation, removal and dry-run rendering.
 - Add a repeatable eight-row reliability matrix with private transcripts and a managed loopback rig.

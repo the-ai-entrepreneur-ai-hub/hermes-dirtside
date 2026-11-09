@@ -13,7 +13,7 @@ from test_registry import paired
 
 
 @pytest.fixture
-def prompt(tmp_path):
+def prompt(tmp_path, configured_backend):
     registry = Registry(tmp_path / "data.db")
     tokens = set_session_vars(session_key="", session_id="")
     try:

@@ -27,7 +27,7 @@ def _status_suffix(proc, timeout, code):
 def require_online(device, relay):
     if not relay.connection().is_online(device.id):
         raise EnvironmentConnectionError(f"Dirtside: device '{device.name}' is offline. Nothing was run on the server.",
-                                         retry_hint="Start hermes dirtside serve on it, or run /dirtside use server.")
+                                         retry_hint="Start dirtside-agent serve or hermes dirtside serve on it, or run /dirtside use server.")
 
 class RemoteProcessHandle:
     def __init__(self, relay, req):

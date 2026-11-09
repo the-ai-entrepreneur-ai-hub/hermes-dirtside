@@ -13,12 +13,12 @@ Two rules govern every choice below. Build the smallest thing that does the job,
 | Layer | Language and runtime | Why this and nothing else |
 |---|---|---|
 | Gateway plugin (provider, relay, registry, commands, auth) | Python, the interpreter Hermes runs on (3.11 assumed, confirm against Hermes' `pyproject.toml` on day 0) | plugins load in-process; no choice |
-| Device agent (`hermes dirtside serve`) | the same Python, the same package, run through the device's own Hermes install | one codebase, one protocol module, nothing to drift |
+| Device agent (`dirtside-agent serve` or `hermes dirtside serve`) | Python 3.11+, the same package, with or without Hermes | one codebase, one protocol module, nothing to drift |
 | Relay HTTP routes | FastAPI `APIRouter` in `dashboard/plugin_api.py` | the only route surface Hermes mounts for plugins |
 | Desktop half | JavaScript ES module, React through `jsx()` from `react/jsx-runtime`, `@hermes/plugin-sdk` | the loader takes uncompiled ESM only |
 | Storage | one SQLite file under `plugin_data_dir("dirtside")`, WAL | survives `hermes plugins update`; no ORM |
-| Signatures | Ed25519 through PyNaCl, pinned `pynacl>=1.5,<2` | the one new dependency; upper bound per catalog rule 10 |
-| HTTP client on the device | `httpx`, present in every Hermes install | installed dependency beats a new one |
+| Signatures | Ed25519 through PyNaCl, pinned `pynacl>=1.5,<2` | bounded dependency; upper bound per catalog rule 10 |
+| HTTP client on the device | `httpx>=0.28.1,<0.29`, declared for standalone installs | compatible with both checked core pins |
 | Tests | pytest | what the official Singularity plugin uses |
 | Lint | ruff with `mccabe.max-complexity = 8`; `tools/check_sizes.py` fails any Python file over 400 lines or `plugin.js` over 400 | the no-spaghetti and no-giant-file rules as checks, not prose |
 
@@ -96,32 +96,40 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | Module | Owns | Depends on | Budget |
 |---|---|---|---|
 | `dirtside/backend.py` | explicit terminal-workdir context and lazy local handoff | stdlib, transitional core local environment | 22 |
-| `dirtside/access.py` | current sender identity, command-source provenance, visibility and owner authorization | public session context, environment error | 82 |
+| `dirtside/access.py` | sender identity, command-source provenance, visibility, owner authorization and shared configuration warning | public session context, environment error, lazy public config reader and prompt.quoted | 103 |
 | `dirtside/model.py` | the types and constants above | stdlib | 111 |
 | `dirtside/protocol.py` | `Envelope`, canonical JSON, `sign`, `verify`, `ReplayGuard`, one `parse_*` per message kind, `PROTOCOL_VERSION = 1` | model, nacl | 147 |
+| `dirtside/readiness.py` | bounded pipe readiness without a descriptor-number ceiling | stdlib selectors | 8 |
 | `dirtside/registry.py` | the SQLite boundary, relay key and private local secret | model, sqlite3 | 216 |
-| `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), threading | 239 |
+| `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), readiness, threading | 239 |
 | `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 124 |
 | `dirtside/client.py` | process-verified owner discovery, bounded disabled-route retry, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 198 |
-| `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, FastAPI, anyio | 152 |
+| `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, readiness, FastAPI, anyio | 152 |
 | `dirtside/provider.py` | dispatch-time conversation context, bounded cwd history and per-target snapshot delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, backend, environment, `gateway.session_context` | 164 |
 | `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 91 |
+| `dirtside/shortcuts.py` | /land and /orbit adapters over Commands | commands | 20 |
 | `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`, `resolve_target`, session context) | 110 |
-| `dirtside/prompt.py` | `current_target_section()` | registry, provider (`session_identity`) | 36 |
-| `dirtside/cli.py` | `hermes dirtside serve`, `pair`, `status`, `install-service`, re-pair recovery, bounded private refusal details and public-host hint | agent/*, argparse, httpx | 188 |
+| `dirtside/awareness.py` | per-turn bounded target facts or configuration warning, no liveness probe | prompt, provider, shared Access | 33 |
+| `dirtside/prompt.py` | authorized frozen target facts or shared configuration warning | registry, provider (`session_identity`), shared Access | 38 |
+| `dirtside/agent/platform.py` | Termux detection and measured system environment names | stdlib | 24 |
+| `dirtside/agent/home.py` | override, legacy profile and standalone state lookup; service state environment | stdlib, optional public home helper | 22 |
+| `dirtside/agent/console.py` | standalone console entry point | cli | 13 |
+| `dirtside/cli.py` | shared standalone/Hermes device commands, service installation, re-pair recovery, bounded private refusal details and public-host hint | agent/*, argparse, httpx | 194 |
 | `dirtside/agent/config.py` | `DeviceConfig` read and atomic write (`device.json`, 0600) | model, protocol | 100 |
 | `dirtside/agent/policy.py` | `evaluate(command, policy) -> Decision`, pure | model | 40 |
-| `dirtside/agent/executor.py` | `run(request, policy, send) -> Outcome`, process groups, chunking, cancel | model, subprocess | 114 |
+| `dirtside/agent/executor.py` | `run(request, policy, send) -> Outcome`, process groups, chunking, cancel | model, readiness, subprocess | 115 |
 | `dirtside/agent/loop.py` | poll, backoff, dispatch, bounded parallelism, retrying posts | config, policy, executor, protocol, httpx | 150 |
 | `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 214 |
 | `desktop/plugin.js` | pane, chip | `@hermes/plugin-sdk` | 280 |
 | `__init__.py` | lazy directory entry point | package registration | 50 |
-| `dirtside/__init__.py` | `register(ctx)` wiring | gateway modules | 50 |
+| `dirtside/__init__.py` | `register(ctx)` wiring | gateway modules | 58 |
 | `tests/bench.py` | in-process metrics and non-gating client latency rows; existing thresholds remain, with report-only in CI | bench_client, statistics | 92 |
 | `tools/fake_device.py` | a signed fake device, including the independently loaded core owner's result parser | agent/executor, relay | 82 |
+| `tools/termux_forward.py` | owner-run container loopback bridge over stdio | stdlib | 62 |
+| `tools/termux_check.py` | owner-run signed Termux lifecycle check and cleanup | core_rig, httpx, stdlib | 157 |
 | `tools/check_sizes.py` | the size check | stdlib | 30 |
 
-Production core imports, in full: `agent.terminal_env_provider.TerminalEnvironmentProvider` (provider), `tools.environments.base.BaseEnvironment` (environment), `tools.environments.base.EnvironmentConnectionError` (environment), `tools.environments.local.LocalEnvironment` (lazy backend handoff), `gateway.session_context.get_session_env` (provider), `plugins.plugin_storage.plugin_data_dir` (package registration), `hermes_cli.dashboard_auth.DashboardAuthProvider` and `hermes_cli.dashboard_auth.TokenPrincipal` (auth), `hermes_cli.dashboard_auth.get_provider` (registration and dashboard routes), `hermes_cli.dashboard_auth.token_auth.register_token_route` (auth), and `hermes_constants.get_hermes_home` (device config). No production code monkeypatches Hermes. The separate test rig imports core's entry points to exercise them.
+Production core imports, in full: `agent.terminal_env_provider.TerminalEnvironmentProvider` (provider), `tools.environments.base.BaseEnvironment` (environment), `tools.environments.base.EnvironmentConnectionError` (environment), `tools.environments.local.LocalEnvironment` (lazy backend handoff), `gateway.session_context.get_session_env` (access and provider), `plugins.plugin_storage.plugin_data_dir` (package registration), `hermes_cli.dashboard_auth.DashboardAuthProvider` and `hermes_cli.dashboard_auth.TokenPrincipal` (auth), `hermes_cli.dashboard_auth.get_provider` (registration and dashboard routes), `hermes_cli.dashboard_auth.token_auth.register_token_route` (auth), `hermes_cli.config.read_raw_config_readonly` (lazy gateway configuration warning), and `hermes_constants.get_hermes_home` (lazy optional device home lookup and legacy service installation). No production code monkeypatches Hermes. The separate test rig imports core's entry points to exercise them.
 
 ## A4. Registry (the SQLite boundary, and only a log for requests)
 
@@ -321,7 +329,7 @@ def handle_exec(req: WireExec) -> None:
 
 What the device enforces, stated plainly: the deny list, the timeout and output caps, the parallelism cap, and the kill switch. It does not confine where a command can dirtside. A folder allowlist cannot be enforced without a sandbox, and claiming one would be a false promise, so v1 does not have one.
 
-Each child gets only set `PATH`, `HOME`, `USER`, `LANG`, `LC_*`, `TERM`, `TMPDIR` and device-owned `env_passthrough` names, without changing the agent's environment or the version-1 wire.
+Each child gets only set `PATH`, `HOME`, `USER`, `LANG`, `LC_*`, `TERM`, `TMPDIR` and device-owned `env_passthrough` names, without changing the agent's environment or the version-1 wire. Termux additionally keeps the fixed, secret-free system names in `agent/platform.py`, derived from the owner's 2026-11-08 image and app-source probe, including `PREFIX` and `LD_PRELOAD` for termux-exec. Pairing reports `Android (Termux)` in the existing OS field. The full container check is owner-run; physical Android services are untested.
 
 Old four-key policy files mean empty passthrough, while new lists require at most 64 unique ASCII environment names matching `[A-Za-z_][A-Za-z0-9_]{0,127}`.
 
@@ -381,7 +389,7 @@ Current-turn authorization runs at terminal/file dispatch and again in the indep
 
 An inaccessible explicit target fails without server execution. An implicit default must be sender-owned or privileged-owned and normally authorized; otherwise it resolves server even for privileged senders. The initial prompt uses that same resolution.
 
-`current_target_section(session_info)` returns at most 600 characters naming the target, its OS and its home, or an empty string for `Server`. Registered as `ctx.register_system_prompt_section("dirtside.target", current_target_section, position="after_memory", max_chars=600)`. Core renders it once per new session and freezes it, so after `/dirtside use` mid-conversation the model learns the change from the command's reply text and the section catches up on the next session.
+`current_target_section(session_info)` returns at most 600 characters naming the authorized target, its OS and its home, or the shared configuration warning when another backend is configured. Server behavior is unchanged. Registered as `ctx.register_system_prompt_section("dirtside.target", current_target_section, position="after_memory", max_chars=600)`. Core renders it once per new session and freezes it, so after `/dirtside use` mid-conversation the model learns the change from the command's reply text and the section catches up on the next session. Already frozen bytes are not rewritten.
 
 ## A13. Invariants, each with the test that proves it
 
@@ -639,7 +647,7 @@ Core's exit-code hint table has entries for 124, 126 and 137, not 255. Loss no l
 
 - Public `tool_execution` middleware marks explicit terminal workdir with a ContextVar and resets it in `finally`, while the facade ignores inferred cwd and preserves explicit transient-directory behavior.
 - Middleware can fail open in core, so sender authorization remains independently enforced at each dispatch rather than relying on that marker.
-- `ctx.session_cwd()` reads workspace/policy state (core's `hermes_cli/plugin_session.py`, lines 33 to 40 at `84a0301` at `84a0301`), not the private terminal cwd table.
+- `ctx.session_cwd()` reads workspace/policy state (core's `hermes_cli/plugin_session.py`, lines 33 to 40 at `84a0301`), not the private terminal cwd table.
 - Server delegates use one lazy `LocalEnvironment` handoff to retain core's credential stripping and all other local behavior until a public backend factory exists.
 - `EnvironmentConnectionError` is imported only in `environment.py`, remains necessary for core's rendering (core's `tools/terminal_tool.py`, lines 1451 to 1468, 1596 to 1597 at `84a0301`) and needs documenting in the provider contract.
 - The corrected token-route seam must use the serving manager's policy scope and refuse non-TokenPrincipal results, the two unresolved assumptions in withdrawn #87462.
@@ -662,7 +670,7 @@ Idle and shutdown cleanup run without a sender context. Only cleanup's generated
 
 Re-pairing preserves only a safely readable, valid existing device file's `env_passthrough` names. An unreadable, unsafe or invalid old file instead produces a constant short note and an empty list; only pairing has this recovery path, and configuration reads elsewhere stay strict. It does not copy values; other policy fields retain the previous default reset. On WSL2, Windows `.exe` execution requires enabled interop, its binfmt handler and a usable executable path. `WSL_INTEROP` chooses a live server socket, but `/init` also searches `/run/WSL/<pid>_interop` along the process/parent chain if unset. Passing an existing value can help when fallback fails; it neither enables disabled interop nor repairs a dead socket.
 
-The frozen target section is shared model context, not per-sender privacy. A later participant can receive the first render's device name, OS, home and online state, including stale facts, while their device execution remains denied. A server-target command instead runs as the gateway OS user and can read `local.secret` to act as `local` on IPC. Core approvals and sender allowlists must restrict arbitrary gateway execution; device ownership cannot isolate users who can execute as that same account.
+The frozen target section and every authorized turn's fact line are shared model context, not per-sender privacy. Each fact line stays in conversation history and is replayed on later turns. A later participant can receive the device name, OS, home and online state, including stale facts, while their device execution remains denied. `/land` and `/dirtside use` replies also show the home to the whole chat. A server-target command instead runs as the gateway OS user and can read `local.secret` to act as `local` on IPC. Core approvals and sender allowlists must restrict arbitrary gateway execution; device ownership cannot isolate users who can execute as that same account.
 
 ### A16.9 Correction 2 lifecycle and defaults
 
@@ -717,6 +725,18 @@ The owner's 2026-11-09 Mac/WSL2 observation established the file-path disclosure
 Only exhausted budgets rise: access 73 to 82, client 173 to 198 and cli 182 to 188 lines, each exactly its measured size. Commands remains within 110. Complexity stays 8 and the hard cap stays 400.
 
 ---
+### A16.12 Device reach and file-path truth
+
+The standalone device uses lazy optional home lookup and shares the CLI handlers without loading gateway modules. State precedence is DIRTSIDE_HOME, the importable Hermes home path (including explicit HERMES_HOME), then ~/.dirtside. The override expands tilde and resolves to an absolute path from the invocation's working directory, like service rendering. Starting from another directory requires that same absolute override; no cross-process relative-path cache is added. An unknown tilde user returns the usual one-line CLI error. Only the hermes entry point applies the sticky active profile. Legacy service rendering keeps the selected Hermes profile separate from an absolute device-state override, and logs beside that state. HTTPX is now an explicit bounded dependency compatible with the two checked cores.
+
+Plain-text reads and searches with absolute paths reach the device, with the gateway-side resolution limit from A12. Writes, patches and extractable document reads (such as .pdf and .docx) use gateway-resolved paths and work only when no path component is a symlink on the gateway; on a macOS gateway that excludes /home, /tmp, /var and /etc. Use terminal commands for edits and documents under rewritten paths. Terminal commands are not affected, and a Termux home is not affected. This was tested on one shared-disk rig. Core's `tools/file_tools_paths.py`, lines 273, 310 and 334 at `84a0301`, special-cases ssh; lines 147 to 154 expand tilde on the gateway, and line 173 resolves gateway symlinks. Core's `tools/file_tools.py`, lines 442 and 685 at `84a0301`, sends the resolved path for extractable documents and the raw path for plain-text reads respectively; lines 1102 to 1104 send raw paths for search, line 902 sends the resolved write path, and line 1004 sends the resolved patch path. Tilde writes still execute on the device at a gateway-shaped path. Named known-limit tests record both this split and the resolved path received by the device after signature verification. No plugin path rewrite or core edit is added. Latest 8d7061f retains these relevant paths.
+
+The pre_llm_call hook resolves the current bound target through the same Access rules as commands, requires no device contact, quotes and bounds data, and fails open on unavailable state. It compares the device home with its gateway-side resolution to choose an absolute-path warning or direct edits and extractable documents through terminal commands, while plain-text reads/searches retain the gateway-path limit. It adds facts to the current user turn through core's public hook without rewriting the frozen prompt. Core stores the composed text as api_content and replays it later, so every authorized turn's fact line stays in conversation history (core's `agent/turn_context.py`, lines 997 to 1013 and 1381 to 1388 at `84a0301`; lines 1089 to 1105 and 1481 to 1487 at `8d7061f`). Explicit server selection emits the fixed server line; an untouched conversation with a server default and unauthorized device targets yield nothing new. Device selection replies include the absolute home for the whole chat. Publicly registered land and orbit commands call that same Commands instance, declaring and forwarding the actual source through select so native authority and relay refusal match the long form; only successful reply wording changes. Core's `hermes_cli/plugins.py`, lines 649 to 674 at `84a0301`, rejects built-in collisions, and both checked cores accept these names through real dispatch.
+
+The shared Access.backend_warning helper lazily reads terminal.backend through public hermes_cli.config.read_raw_config_readonly (core's `hermes_cli/config.py`, lines 1860 to 1864 at both `84a0301` and `8d7061f`). A non-empty string other than dirtside keeps the configured-backend sentence naming the bounded, quoted value and requiring hermes config set terminal.backend dirtside plus a gateway restart. A missing or empty setting uses stripped process TERMINAL_ENV, or local if empty, and warns unless that result is dirtside. Its sentence names the fallback and explains that terminal.backend is not set. Core's `tools/terminal_tool.py`, lines 813 to 817, reads the process fallback, and core's `hermes_cli/config.py`, lines 2082 to 2086 at both revisions, gives the environment precedence when the file omits the setting. A missing or unparseable file returns an empty mapping and follows that rule; a process already bridged to dirtside remains silent if the file becomes unreadable. Non-string explicit values and a reader that raises or exits remain silent. After target authorization the hook and a newly rendered frozen section return only the shared sentence, with no device facts, for saved and configured-default device targets; server selection never calls the helper. This is advice from raw configuration and process environment, not a frozen-session effective-scope check or a hard gate. It does not rewrite already frozen bytes, import core on the device, or add a private core import.
+
+The merged sizes require budgets of 103 for access, 194 for cli, 115 for the device executor, 58 for registration and 38 for prompt. Review raises only access, from 96 to its measured 103 lines; A3 and the size checker agree. Native-source and real CLI/TUI regressions cover shortcuts, and real prompt calls cover configured and fallback warnings and unchanged silent cases. Relay-decoded local events receive no new device facts from either prompt path.
+
 # Part B. Explanation
 
 ## B1. Why a global backend with per-conversation targets
@@ -757,7 +777,7 @@ The first draft scanned the script for absolute paths and refused anything outsi
 
 ## B10. Why there are no model tools and no device-side prompts
 
-The thread that produced this design was explicit that the model must never choose where a command runs. A device-listing tool would be an invitation to do exactly that through prompt injection. The model learns the target from a prompt section. Hermes already asks the user in chat before a dangerous command and the provider keeps that on, so a second prompt on the device would add a third actor, a timeout policy and a UI on a machine that may have no screen. It stays on the stretch list.
+The thread that produced this design was explicit that the model must never choose where a command runs. A device-listing tool would be an invitation to do exactly that through prompt injection. The model gets initial target facts from a frozen prompt section and current authorized facts from the public pre_llm_call hook. Hermes already asks the user in chat before a dangerous command and the provider keeps that on, so a second prompt on the device would add a third actor, a timeout policy and a UI on a machine that may have no screen. It stays on the stretch list.
 
 ## B11. Why the lints exist
 

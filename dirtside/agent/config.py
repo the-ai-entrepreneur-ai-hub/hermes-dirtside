@@ -1,4 +1,4 @@
-"""Private device configuration, resolved in the device's selected Hermes home."""
+"""Private device configuration with backward-compatible state discovery."""
 import json
 import os
 import re
@@ -7,14 +7,12 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
-from hermes_constants import get_hermes_home
+from .home import device_path
 from nacl.signing import SigningKey, VerifyKey
 from ..model import MAX_OUTPUT_BYTES, Policy
 DEFAULT_DENY = (r"\bsudo\b", r"rm\s+-rf\s+/(?:\s|$)", r"\bmkfs\b", r"\bdd\s+if=",
                 r"\b(?:shutdown|reboot)\b", r"launchctl\s+unload",
                 r"systemctl\b.*\b(?:stop|disable)\b", r":\(\)\s*\{", r"curl\b.*\|\s*(?:ba)?sh")
-def device_path():
-    return get_hermes_home() / "dirtside" / "device.json"
 def gateway_url(value):
     url = urlsplit(value)
     if url.port is not None and not 1 <= url.port <= 65535:

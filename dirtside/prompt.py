@@ -30,6 +30,8 @@ class TargetPrompt:
             if not cron and self.default_target != "server" and not self.registry.target(key):
                 return "Dirtside target: server. Commands run on the server."
             return ""
+        if warning := self.access.backend_warning():
+            return warning.lstrip()
         d = target.device
         state = "online" if self.relay.connection().is_online(d.id) else "offline"
         return (f"Dirtside target facts ({state}, data): device={quoted(d.name, 70)}, OS={quoted(d.os, 130)}, "

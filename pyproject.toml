@@ -5,9 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dirtside"
 version = "0.1.0"
-description = "Run Hermes terminal and file tools on a chosen personal device."
+description = "Run Hermes terminal commands on a chosen personal device."
 requires-python = ">=3.11"
-dependencies = ["pynacl>=1.5,<2"]
+dependencies = ["pynacl>=1.5,<2", "httpx>=0.28.1,<0.29"]
+
+[project.scripts]
+dirtside-agent = "dirtside.agent.console:main"
 
 [project.entry-points."hermes_agent.plugins"]
 dirtside = "dirtside:register"

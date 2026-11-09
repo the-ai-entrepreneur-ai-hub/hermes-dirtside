@@ -5,6 +5,7 @@ from .access import Access
 from .model import OnDevice
 from .provider import get_session_env, resolve_target, session_identity
 from .environment import EnvironmentConnectionError
+from .prompt import quoted
 
 USAGE = "Use /dirtside, /dirtside use <name|server>, /dirtside devices, /dirtside pair <name>, or /dirtside revoke <name>."
 
@@ -76,14 +77,16 @@ class Commands:
         if device and self.access.privileged(self.access.identity()) and not self.access.privileged(device.owner):
             label += f", owned by {device.owner}"
         self.registry.set_target(key, device.id if device else "server")
-        return f"This conversation now targets {label}. The change applies to this conversation from the next command."
+        home = f" Home: {quoted(device.home, 270)}." if device else ""
+        return f"This conversation now targets {label}.{home} The change applies to this conversation from the next command." + (self.access.backend_warning() if device else "")
 
     def pair(self, name):
         if not self.access.may_pair() or not self.access.name_allowed(self.registry, name):
             return "Pairing is unavailable for this sender."
         sender = self.access.identity()
         code = self.registry.mint(name, int(time.time()), owner=sender, privileged=self.access.privileged(sender))
-        return (f"Pairing code {code} expires in 10 minutes. On the device run: "
+        return (f"Pairing code {code} expires in 10 minutes. Without Hermes run: "
+                f"dirtside-agent pair <gateway-url> --name {name} --code={code}\nOn the device run: "
                 f"hermes dirtside pair <gateway-url> --name {name} --code={code}")
 
     def revoke(self, name):

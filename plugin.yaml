@@ -13,7 +13,7 @@ description: >
   not a filesystem sandbox. No telemetry.
 requires_hermes: ">=0.22.7"
 provides_tools: []
-provides_hooks: []
+provides_hooks: [pre_llm_call]
 provides_middleware: [tool_execution]
 requires_env: []
 config_schema:
@@ -27,3 +27,4 @@ config_schema:
     description: Default target before a conversation chooses a device (server or a paired name).
 python_dependencies:
   - "pynacl>=1.5,<2"
+  - "httpx>=0.28.1,<0.29"

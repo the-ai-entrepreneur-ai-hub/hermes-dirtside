@@ -1,4 +1,4 @@
-"""Current-turn sender authority, independent of conversation target selection."""
+"""Current-turn sender authority and fail-soft gateway configuration warnings."""
 import os
 import re
 from contextvars import ContextVar
@@ -80,3 +80,24 @@ class Access:
 
     def name_allowed(self, registry, name):
         return all(self.allowed(owner) for owner in registry.owners_for_name(name))
+
+    def backend_warning(self):
+        try:
+            from hermes_cli.config import read_raw_config_readonly
+            from .prompt import quoted
+            backend = read_raw_config_readonly().get("terminal", {}).get("backend", "")
+            if not isinstance(backend, str):
+                return ""
+            fallback = not backend
+            if fallback:
+                backend = os.environ.get("TERMINAL_ENV", "").strip() or "local"
+            if backend != "dirtside":
+                name = quoted(" ".join(backend.splitlines()), 80)
+                description = (f"Terminal backend is {name} because terminal.backend is not set" if fallback
+                               else f"Configured terminal.backend is {name}")
+                return (f" {description}; commands will not run on the device until you run "
+                        "hermes config set terminal.backend dirtside and restart the gateway.")
+        except (Exception, SystemExit):
+            # Config backends may report unreadability through SystemExit.
+            return ""
+        return ""

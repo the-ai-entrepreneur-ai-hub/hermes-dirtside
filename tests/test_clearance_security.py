@@ -117,17 +117,22 @@ def test_empty_default_is_shared_as_server_at_registration(tmp_path, monkeypatch
         get_config=lambda name, fallback: default if name == "default_target" else fallback,
         register_terminal_environment_provider=lambda value: captured.update(provider=value),
         register_dashboard_auth_provider=lambda value: captured.update(auth=value),
-        register_command=lambda name, value, **kwargs: captured.update(commands=value),
+        register_command=lambda name, value, **kwargs: captured.update({name: value}),
         register_system_prompt_section=lambda name, value, **kwargs: captured.update(prompt=value.__self__),
+        register_hook=lambda name, value: captured.update(hook=value),
         register_cli_command=lambda *args: None,
         register_middleware=lambda *args: None,
         on_unload=lambda callback: None,
     )
-    monkeypatch.setattr(dirtside, "plugin_data_dir", lambda name: tmp_path)
+    # Cover the lazy storage import and the base tree's module alias.
+    monkeypatch.setattr(dirtside, "plugin_data_dir", lambda name: tmp_path, raising=False)
+    monkeypatch.setattr("plugins.plugin_storage.plugin_data_dir", lambda name: tmp_path)
     dirtside.register(ctx)
     try:
         assert captured["provider"]._default_target == "server"
-        assert all(captured[name].default_target == "server" for name in ("auth", "commands", "prompt"))
+        assert all(captured[name].default_target == "server" for name in ("auth", "dirtside", "prompt", "hook"))
+        assert captured["land"].__self__.commands is captured["dirtside"]
+        assert captured["orbit"].__self__.commands is captured["dirtside"]
     finally:
         captured["provider"]._relay._client.http.close()
 

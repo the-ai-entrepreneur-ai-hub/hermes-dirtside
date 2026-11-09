@@ -13,9 +13,13 @@ from hermes_cli.plugin_command_dispatch import invoke_plugin_command
 from hermes_cli.plugin_session import session_surface
 
 from dirtside.access import Access
+from dirtside.awareness import TargetAwareness
 from dirtside.commands import Commands
+from dirtside.prompt import TargetPrompt
 from dirtside.registry import Registry
 from dirtside.relay import Relay
+from dirtside.shortcuts import Shortcuts
+from test_registry import paired
 
 
 def context():
@@ -139,3 +143,76 @@ def test_relay_wire_host_surface_labels_are_not_host(tmp_path, platform):
         assert access.identity() != "local"
         command = Commands(context(), reg, Relay(reg), access=access)
         assert "--code=" not in invoke_plugin_command(command, "pair private", source=source)
+
+
+@pytest.mark.parametrize("user", ["", f"uid:{os.getuid()}"])
+@pytest.mark.parametrize("name,argument", [("land", "macbook"), ("land", ""), ("orbit", "")])
+def test_native_shortcuts_preserve_command_source(tmp_path, monkeypatch, user, name, argument):
+    registry = Registry(tmp_path / "data.db")
+    device, _, _ = paired(registry, tmp_path)
+    relay, ctx, questions = Relay(registry), context(), []
+    monkeypatch.setattr(relay, "is_online", lambda device_id: True)
+    def choose(question, choices):
+        questions.append((question, choices))
+        return "macbook"
+    ctx.ask_choice = choose
+    commands = Commands(ctx, registry, relay)
+    selected_by, use = [], commands.use
+    def select(name):
+        selected_by.append(commands.access.identity())
+        return use(name)
+    monkeypatch.setattr(commands, "use", select)
+    shortcut = getattr(Shortcuts(commands), name)
+    source = SessionSource(Platform.LOCAL, "canonical-session", user_id=user)
+    with bound(source):
+        long = invoke_plugin_command(commands, "use " + ("server" if name == "orbit" else argument), source=source)
+        target = registry.target("agent:main:local:route")
+        offered = questions[:]
+        questions.clear()
+        registry.set_target("agent:main:local:route", device.id if name == "orbit" else "server")
+        reply = invoke_plugin_command(shortcut, argument, source=source)
+        expected = ("Back in orbit. Commands run on the server." if name == "orbit" else
+                    long.replace("This conversation now targets ", "Landed on ", 1))
+        assert reply == expected
+        assert selected_by == ["local", "local"]
+        assert registry.target("agent:main:local:route") == target
+        assert questions == offered
+        assert commands.access.identity() != "local"
+
+
+@pytest.mark.parametrize("user", [None, f"uid:{os.getuid()}"])
+@pytest.mark.parametrize("selection", ["saved", "default"])
+def test_relay_shortcuts_and_prompt_do_not_disclose_host_devices(tmp_path, monkeypatch, user, selection):
+    registry = Registry(tmp_path / "data.db")
+    device, _, _ = paired(registry, tmp_path)
+    relay, ctx, questions = Relay(registry), context(), []
+    monkeypatch.setattr(relay, "is_online", lambda device_id: True)
+    def choose(question, choices):
+        questions.append(choices)
+        return device.name
+    ctx.ask_choice = choose
+    default = device.name if selection == "default" else "server"
+    commands = Commands(ctx, registry, relay, default)
+    shortcuts = Shortcuts(commands)
+    wire = dict(platform="local", chat_id="canonical-session", delivered_via_upstream_relay=False)
+    if user is not None:
+        wire["user_id"] = user
+    source = _event_from_wire({"source": wire, "text": "/land macbook"}).source
+    assert source.delivered_via_upstream_relay is True
+    with bound(source):
+        registry.set_target("agent:main:local:route", device.id if selection == "saved" else None)
+        access = commands.access
+        turn = TargetAwareness(registry, relay, default, access)()
+        frozen = TargetPrompt(registry, relay, default, access).current_target_section({})
+        assert not turn
+        assert all(value not in frozen for value in (device.name, device.os, device.home, "device=", "OS=", "home="))
+        for argument in (device.name, ""):
+            long = invoke_plugin_command(commands, "use " + argument, source=source)
+            reply = invoke_plugin_command(shortcuts.land, argument, source=source)
+            assert reply == long and "not changed" in reply
+        assert questions == [["server"], ["server"]]
+        assert registry.target("agent:main:local:route") == (device.id if selection == "saved" else None)
+        long = invoke_plugin_command(commands, "use server", source=source)
+        assert long.startswith("This conversation now targets server.")
+        assert invoke_plugin_command(shortcuts.orbit, "", source=source) == "Back in orbit. Commands run on the server."
+        assert access.identity() != "local"

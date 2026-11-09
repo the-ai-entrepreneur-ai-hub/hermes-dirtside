@@ -109,7 +109,10 @@ def test_frozen_group_prompt_disclosure_matches_core(tmp_path):
         result = as_user(rig.core, "terminal", "B", args={"command": "printf forbidden"})
         assert result["exit_code"] != 0
         readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
-        assert "Other participants can receive the first render's device name, OS, home and online state" in readme
+        assert "Every authorized turn's fact line stays in conversation history, not just the first frozen render." in readme
+        assert "Other participants can receive the device name, OS and home from those lines and the frozen section" in readme
+        assert "including stale facts and online state, even when their own device calls are denied." in readme
+        assert "`/land` and `/dirtside use` replies also show the home to the whole chat." in readme
 
 
 def test_server_execution_limit_is_explicit(tmp_path):

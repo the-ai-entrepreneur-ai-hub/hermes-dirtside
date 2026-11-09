@@ -113,7 +113,7 @@ def test_cli_pair_failure_is_private(tmp_path, capsys):
     scope = set_hermes_home_override(tmp_path)
     try:
         args = parser().parse_args(["dirtside", "pair", "http://remote.invalid", "--name", "device",
-                                    "--code", "private-code"])
+                                    "--code=private-code"])
         assert args.func(args) == 1
         output = capsys.readouterr().out
         assert "Pairing failed" in output and "private-code" not in output

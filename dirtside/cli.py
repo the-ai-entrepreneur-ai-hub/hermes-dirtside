@@ -14,12 +14,15 @@ from dataclasses import replace
 import httpx
 from nacl.signing import SigningKey, VerifyKey
 from .agent.activity import recent_activity
-from .agent.config import DeviceConfig, default_policy, device_path, gateway_url, passthrough_names, policy_data
+from .agent.config import DeviceConfig, default_policy, gateway_url, passthrough_names, policy_data
+from .agent.home import service_environment
 from .agent.loop import DEVICE_API, serve
+from .agent.platform import device_os
 from .model import OFFLINE_AFTER_S
 from .protocol import sign
 
-def setup_parser(parser):
+def setup_parser(parser, *, standalone=False):
+    parser.set_defaults(command_prefix="dirtside-agent" if standalone else "hermes dirtside")
     actions = parser.add_subparsers(dest="dirtside_action", required=True)
     pairing = actions.add_parser("pair", help="Pair this device with a gateway")
     pairing.add_argument("gateway_url")
@@ -31,13 +34,15 @@ def setup_parser(parser):
     options = policy.add_mutually_exclusive_group()
     options.add_argument("--env-passthrough", nargs="+", metavar="NAME")
     options.add_argument("--clear-env-passthrough", action="store_true")
+    if standalone:
+        return
     service = actions.add_parser("install-service", help="Install a persistent per-user device service")
     service.add_argument("--dry-run", action="store_true", help="Print the unit without changing anything")
     service.add_argument("--remove", action="store_true", help="Remove the installed user service")
 
 def service_spec(system, executable, home, state):
-    log = state / "dirtside" / "service.log"
-    env = dict(HOME=str(home), HERMES_HOME=str(state), PATH=os.environ.get("PATH", "/usr/bin:/bin"))
+    env = dict(HOME=str(home), **service_environment(state), PATH=os.environ.get("PATH", "/usr/bin:/bin"))
+    log = Path(env.get("DIRTSIDE_HOME", state / "dirtside")) / "service.log"
     args = [executable, "dirtside", "serve"]
     if system == "Darwin":
         path = home / "Library/LaunchAgents/ai.hermes.dirtside.plist"
@@ -77,9 +82,10 @@ def write_service(path, unit, log):
                 stream.write(content)
 
 def install_service(args):
+    from hermes_constants import get_hermes_home
     executable = shutil.which("hermes") or str(Path(sys.executable).with_name("hermes"))
     path, unit, log, tool, loads, unload = service_spec(
-        platform.system(), executable, Path.home(), device_path().parents[1])
+        platform.system(), executable, Path.home(), get_hermes_home())
     if args.dry_run:
         print(unit, end="")
         return
@@ -114,7 +120,7 @@ def pair(args):
         print("Existing device configuration could not be read safely; env_passthrough reset to none.")
     key = SigningKey.generate()
     body = dict(pubkey=base64.b64encode(bytes(key.verify_key)).decode(), name=args.name,
-                os=platform.system(), arch=platform.machine(), home=str(Path.home()),
+                os=device_os(), arch=platform.machine(), home=str(Path.home()),
                 temp_dir=tempfile.gettempdir(), agent_version="0.1.0")
     with httpx.Client(base_url=url + "/", headers={"Authorization": f"Bearer {args.code}"}, timeout=35) as client:
         response = client.post(DEVICE_API + "pair", json=sign(key, "hello", args.name, body))
@@ -124,7 +130,7 @@ def pair(args):
                        VerifyKey(base64.b64decode(data["relay_pubkey"], validate=True)), args.name,
                        replace(default_policy(), env_passthrough=names))
     cfg.save()
-    print(f"Paired {cfg.name} to {url}. Run 'hermes dirtside serve' to connect.")
+    print(f"Paired {cfg.name} to {url}. Run '{getattr(args, 'command_prefix', 'hermes dirtside')} serve' to connect.")
 
 def status(cfg):
     events = recent_activity()
@@ -175,7 +181,7 @@ def handle(args):
             return policy_command(args)
         cfg = DeviceConfig.load()
         return {"serve": start, "status": status}[args.dirtside_action](cfg)
-    except (OSError, ValueError, KeyError, TypeError, httpx.HTTPError, subprocess.CalledProcessError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, httpx.HTTPError, subprocess.CalledProcessError) as exc:
         message = ("Pairing failed. Check the URL and mint a fresh pairing code." if args.dirtside_action == "pair" else "Service installation failed."
                    if args.dirtside_action == "install-service" else "Cannot load device configuration. Pair this device first.")
         print(f"Dirtside: {message} ({failure_detail(exc, getattr(args, 'code', ''))})")

@@ -10,8 +10,9 @@ from ..model import CHUNK_BYTES, FLUSH_MS, PART_MAX, Outcome, RequestState, devi
 from ..protocol import Chunk
 from ..readiness import wait_ready
 from .policy import evaluate
+from .platform import system_environment_names
 def child_environment(policy):
-    names = {"PATH", "HOME", "USER", "LANG", "TERM", "TMPDIR", *policy.env_passthrough}
+    names = {"PATH", "HOME", "USER", "LANG", "TERM", "TMPDIR", *system_environment_names(), *policy.env_passthrough}
     return {k: v for k, v in os.environ.items() if k in names or k.startswith("LC_")}
 def _signal(proc, sig):
     with suppress(ProcessLookupError):

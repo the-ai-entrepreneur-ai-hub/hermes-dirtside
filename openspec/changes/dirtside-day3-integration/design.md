@@ -18,6 +18,10 @@ See proposal.md. Core evidence below was rechecked against revision `84a03014`. 
 
 **Non-Goals:** Model inference, messaging transport setup, desktop rendering, benchmark claims, target persistence changes and live service-manager or reboot tests.
 
+File-tool conformance below covers paths unchanged by gateway-side resolution.
+Core resolves file paths on the gateway; use the terminal for edits on a device.
+The existing shared-disk tests do not establish separate-filesystem correctness.
+
 ## Decisions
 
 - Use a small subprocess rig with a private stdio control channel. The gateway process loads through discovery, imports the real dashboard, serves it with uvicorn and dispatches normal tool entry points. The device is a second real process. This avoids reloading core modules or patching registries inside pytest.

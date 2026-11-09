@@ -1,11 +1,12 @@
 """Provider registration for the in-process plugin."""
-from plugins.plugin_storage import plugin_data_dir
 
 
 def register(ctx):
     from hermes_cli.dashboard_auth import get_provider
+    from plugins.plugin_storage import plugin_data_dir
     from .access import Access
     from .auth import DirtsideDeviceAuth, register_device_routes
+    from .awareness import TargetAwareness
     from .backend import tool_execution
     from .cli import handle, setup_parser
     from .client import Client
@@ -14,6 +15,7 @@ def register(ctx):
     from .provider import DirtsideProvider
     from .registry import Registry
     from .relay import Relay
+    from .shortcuts import Shortcuts
 
     path, access = plugin_data_dir("dirtside") / "data.db", Access(ctx)
     default = ctx.get_config("default_target", "server") or "server"
@@ -42,8 +44,15 @@ def register(ctx):
         auth.routes = register_device_routes(ctx)
     relay._routes_enabled = lambda: auth.routes.enabled
     ctx.register_cli_command("dirtside", "Pair and run a personal device", setup_parser, handle)
-    ctx.register_command("dirtside", Commands(ctx, registry, relay, default, access),
+    ctx.register_hook("pre_llm_call", TargetAwareness(registry, relay, default, access))
+    commands = Commands(ctx, registry, relay, default, access)
+    ctx.register_command("dirtside", commands,
                          description="Choose a personal device", args_hint="<use|devices|pair|revoke>",
+                         argument_mode="text")
+    shortcuts = Shortcuts(commands)
+    ctx.register_command("land", shortcuts.land, description="Choose a personal device",
+                         args_hint="[name|server]", argument_mode="text")
+    ctx.register_command("orbit", shortcuts.orbit, description="Run commands on the server",
                          argument_mode="text")
     ctx.register_system_prompt_section("dirtside.target", TargetPrompt(registry, relay, default, access).current_target_section,
                                       position="after_memory", max_chars=600)

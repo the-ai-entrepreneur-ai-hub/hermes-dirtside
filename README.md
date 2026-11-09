@@ -13,7 +13,7 @@
   <a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions/workflows/check.yml"><img alt="checks" src="https://img.shields.io/github/actions/workflow/status/the-ai-entrepreneur-ai-hub/hermes-dirtside/check.yml?branch=main&label=checks&style=flat-square&labelColor=0B0F14&logo=githubactions&logoColor=white"></a>
   <a href="https://www.python.org/"><img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-57606A?style=flat-square&labelColor=0B0F14&logo=python&logoColor=white"></a>
   <a href="https://github.com/NousResearch/hermes-agent"><img alt="Hermes 0.22.7 or newer" src="https://img.shields.io/badge/hermes-%3E%3D0.22.7-57606A?style=flat-square&labelColor=0B0F14"></a>
-  <img alt="935 tests passing" src="https://img.shields.io/badge/tests-935_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
+  <img alt="1012 tests passing" src="https://img.shields.io/badge/tests-1012_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
   <img alt="macOS and Linux" src="https://img.shields.io/badge/platforms-macOS%2C_Linux-57606A?style=flat-square&labelColor=0B0F14">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-57606A?style=flat-square&labelColor=0B0F14"></a>
 </p>
@@ -67,9 +67,10 @@ Dirtside is a terminal environment provider, the backend seam Hermes exposes for
 ```text
 you      /dirtside pair macbook
 hermes   Pairing code Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
-         expires in 10 minutes. On the device run:
-         hermes dirtside pair <gateway-url> --name macbook \
-           --code=Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
+         expires in 10 minutes. Without Hermes run: dirtside-agent pair
+         <gateway-url> --name macbook --code=Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
+         On the device run: hermes dirtside pair <gateway-url> --name macbook
+         --code=Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
 
 laptop $ hermes dirtside pair https://hermes.example.com --name macbook \
            --code=Q4m9vXr2hZc1Lw8pT6nKb3sYf0GdJ5eUoA7iRqN_tHk
@@ -78,8 +79,8 @@ laptop $ hermes dirtside serve
 Dirtside env_passthrough: none
 
 you      /dirtside use macbook
-hermes   This conversation now targets macbook (Darwin, online). The change
-         applies to this conversation from the next command.
+hermes   This conversation now targets macbook (Darwin, online).
+         Home: "/Users/you". The change applies to this conversation from the next command.
 
 you      what is filling up my disk?
 hermes   runs du on macbook through the ordinary terminal tool, reads the
@@ -90,24 +91,109 @@ The replies are the plugin's own words, wrapped to fit here. The last line descr
 
 ## Quick start
 
-### Install on both ends
+### Install on the gateway
 
-Install in the Hermes profile that will use it, on the gateway and on each device:
+Install in the Hermes profile that will use it on the gateway:
 
 ```sh
 hermes plugins install https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside
 hermes plugins enable dirtside
 ```
 
-On the gateway, select the backend, then restart the gateway and open a new conversation:
+On the gateway, this backend step is mandatory. Select it, then restart the
+gateway (or CLI) and open a new conversation:
 
 ```sh
 hermes config set terminal.backend dirtside
 ```
 
-Read the install disclosure before enabling it. The manifest requires Hermes 0.22.7 or newer and Python 3.11 or newer. PyNaCl is the only added dependency. The catalog-review checks use core commits `84a0301415edd6d1385207ec96e4d7f2b6c1fcd9` and `8d7061f`, not every supported release; the dated numbers below describe their stated earlier run.
+Selection does not switch core's backend. If a non-empty `terminal.backend`
+string names another backend, `/land` and `/dirtside use` still save the device
+but append a warning naming that value, the config command above and the
+required gateway restart. If the setting is missing or empty, the warning uses
+process `TERMINAL_ENV`, stripped, or `local` when that is empty, and explains
+that `terminal.backend` is not set. Either source is silent for `dirtside`.
+The per-turn hook and newly rendered frozen target section return the same
+warning without device facts after authorization. A missing or unparseable
+file follows the missing-setting rule; a process already bridged to `dirtside`
+stays silent if the file becomes unreadable. Non-string values and a reader
+that raises or exits stay silent. This is advice from configuration and process
+environment, not the frozen session's effective backend; it never refuses selection.
+
+Read the install disclosure before enabling it. The manifest requires Hermes 0.22.7 or newer and Python 3.11 or newer. Dependencies are PyNaCl and HTTPX. The catalog-review checks use core commits `84a0301415edd6d1385207ec96e4d7f2b6c1fcd9` and `8d7061f`, not every supported release; the dated numbers below describe their stated earlier run.
 
 After a plugin update, restart even a CLI auto-started gateway (`gateway run --quiet --idle-exit`); it keeps its previously loaded plugin code until it exits.
+
+### Install on a device without Hermes
+
+Python 3.11 or newer is enough. Pin a published commit in place of `<sha>`:
+
+```sh
+pip install "git+https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside@<sha>"
+# Or install into pipx's isolated environment:
+pipx install "git+https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside@<sha>"
+dirtside-agent pair https://gateway.example --name laptop --code=PASTE_CODE
+dirtside-agent serve
+```
+
+`dirtside-agent status` and `dirtside-agent policy` share the plugin commands.
+No Hermes installation or .env loading is needed on the device.
+A device that already has Hermes can use `hermes dirtside pair` and
+`hermes dirtside serve` only with this plugin installed and enabled on that
+device. Standalone service installation is not offered.
+
+State lives in `$DIRTSIDE_HOME/device.json` when set. Otherwise an importable
+Hermes keeps its existing `<hermes home>/dirtside/device.json` and pairings.
+The override expands `~` and resolves relative paths from the invocation's
+working directory. Use the same absolute override when starting from another
+directory; generated service units preserve it. An unknown `~user` produces a
+one-line command error, not a traceback.
+`dirtside-agent` honors explicit `HERMES_HOME`; only the `hermes` entry point
+applies the sticky active profile. Without Hermes, state lives in
+`~/.dirtside/device.json`. No pairing migration is needed.
+Legacy Hermes service units preserve the override and the selected Hermes profile;
+their logs live beside the device state.
+A clean local pip install, pipx install, signed terminal execution and revoke
+were tested on macOS on 2026-11-08 without a device-side Hermes package.
+
+### Run on an Android phone
+
+Install Termux from F-Droid or the official Termux GitHub releases, then run
+outside a venv so pip can use Termux's PyNaCl package:
+
+```sh
+pkg install python python-pynacl git
+pip install "git+https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside@<sha>"
+dirtside-agent pair https://gateway.example --name phone --code=PASTE_CODE
+termux-wake-lock
+dirtside-agent serve
+```
+
+Mint the code with `/dirtside pair phone` on the gateway. Keep Termux running
+and exempt it from battery restrictions if necessary. Use `termux-wake-unlock`
+when finished. The gateway lists it as `Android (Termux)`.
+
+On Termux only, commands also inherit the observed Android system names,
+`PREFIX`, `LD_PRELOAD`, `LD_LIBRARY_PATH` and `TZ`. This preserves termux-exec's
+shebang handling without forwarding provider credentials. Explicit device
+policy passthrough still applies on top. Other platforms keep the same defaults.
+
+For speech, vibration and notifications, install the matching Termux:API app
+from the same source as Termux, grant its Android permissions, then run
+`pkg install termux-api`. Commands such as `termux-tts-speak`,
+`termux-vibrate` and `termux-notification` are untested through the selected
+terminal. The default allowlist does not pass `TERMUX_*` names. Termux:API
+cannot run in the Docker userland; a physical phone must check its permissions
+and environment.
+
+On 2026-11-08 the owner's real aarch64 Termux userland in Docker passed signed
+pairing, terminal shebang/Python/PREFIX commands, exit 7, cancel with exit 130
+and revoke, using Python 3.14.10 and PyNaCl 1.6.2. Unit checks cover detection,
+pairing OS and the names-only environment merge. The owner's final-tree
+`bash scripts/termux_check.sh` rerun also passed. No physical phone, mobile-data link or
+Termux:API has been tested.
+The container script explicitly loads termux-exec because its image lacks
+Android's getprop; the real app normally exports it already.
 
 ### Pair in four commands
 
@@ -119,10 +205,14 @@ Chat commands run in an authenticated Hermes conversation on the gateway. Shell 
    ```
 2. In the device's shell, pair with your gateway URL and the fresh code:
    ```sh
+   dirtside-agent pair https://gateway.example --name macbook --code=PASTE_CODE
+   # Or, with this plugin installed and enabled on this device:
    hermes dirtside pair https://gateway.example --name macbook --code=PASTE_CODE
    ```
 3. In that shell, keep the device agent running:
    ```sh
+   dirtside-agent serve
+   # Or, with this plugin installed and enabled on this device:
    hermes dirtside serve
    ```
 4. In the conversation that should use it:
@@ -181,6 +271,18 @@ The provider hands core a conversation environment that resolves its target at d
 
 Any number of gateway or dashboard processes may mount the routes, but only the process receiving verified device traffic owns the relay; every other process, including the unmanaged gateway that `hermes chat` may auto-start, reaches that owner over authenticated loopback HTTP. The local secret stays on the machine; workers do not start another relay service.
 
+Subject to the gateway-side path-resolution limit above, plain-text reads and
+searches with absolute paths reach the device. Writes,
+patches and extractable document reads (such as `.pdf` and `.docx`) use
+gateway-resolved paths; they work only when no path component is a symlink on
+the gateway. Use terminal commands for edits and documents under rewritten paths.
+On a macOS gateway that excludes `/home`, `/tmp`, `/var` and `/etc`.
+Terminal commands are not affected, and a Termux home is not affected.
+This was tested on one shared-disk rig, not separate device and gateway disks.
+Use the home printed by `/dirtside use`, subject to that edit/document limit.
+Do not use `~` in file tools: writes and patches run on the device at a
+gateway-shaped path, while plain-text reads and searches can expand it on the device.
+
 ### What runs where
 
 | Work | Where |
@@ -203,6 +305,9 @@ Online means contact within 45 seconds. A request on a device that stops reporti
 | `/dirtside use` | Offer visible online devices and `server`. Cancelling changes nothing. |
 | `/dirtside use <name>` | Select that device for this conversation, even if it is offline right now. |
 | `/dirtside use server` | Pin this conversation to the server, even when the default is a device. |
+| `/land <name>` | Land on a device, with the same selection and owner checks as `/dirtside use <name>`. |
+| `/land` | Offer the same online-device picker. |
+| `/orbit` | Return to the server, the same as `/dirtside use server`. |
 | `/dirtside pair <name>` | Mint a code owned by you, if allowed, and print the device-side command. |
 | `/dirtside revoke <name>` | Revoke a device you may manage and cancel its live requests. |
 
@@ -222,9 +327,19 @@ A change applies from the next command. Work already dispatched keeps its origin
 
 The configured default is captured at a conversation's first target resolution, including its first prompt render. Reloaded defaults apply to new conversations; existing ones retain their captured name through idle cleanup and disable/re-enable. Explicit choices still change the next command; clearing one restores that conversation's captured default. Pre-upgrade conversations capture it on their first resolution under this version, since already frozen prompt bytes cannot be reconstructed.
 
-Core freezes the system prompt's target facts once per session, so a switch mid-session changes where commands run but not the facts the model was given. Start a new session when that matters.
+Core freezes the system prompt once per session. A public `pre_llm_call` hook adds
+one short, quoted fact line to each current user turn while an authorized device
+is selected: name, OS, absolute home and a file-path warning based on gateway
+resolution. Switching devices refreshes it on the next turn. After `/orbit` or
+explicit server selection, it says "Dirtside target: server. Commands run on the server."
+An untouched conversation with a server default gets no extra line.
+Core stores each authorized turn's fact line in conversation history and
+replays it on later turns. The system prompt and earlier messages are not rewritten.
+When the configured or fallback backend is not `dirtside`, the hook and a newly rendered frozen
+section give only the shared configuration warning after authorization, as
+described in gateway setup. Already frozen bytes remain unchanged.
 
-This is not per-sender prompt privacy in a shared conversation. Other participants can receive the first render's device name, OS, home and online state in the model context, even when their own device calls are denied. Those facts can also be stale. Use separate conversations for private device facts; per-turn execution authorization does not erase a frozen prompt.
+This is not per-sender prompt privacy in a shared conversation. Every authorized turn's fact line stays in conversation history, not just the first frozen render. Other participants can receive the device name, OS and home from those lines and the frozen section, including stale facts and online state, even when their own device calls are denied. `/land` and `/dirtside use` replies also show the home to the whole chat. Use separate conversations for private device facts; per-turn execution authorization does not erase the frozen prompt or history.
 
 ## Device commands
 
@@ -278,7 +393,7 @@ The pane lists paired devices with an online dot, OS, home, last seen and a revo
 What is kept, and where:
 
 - The gateway stores token hashes, a 120-character preview of each command and its outcome metadata. A 4,096-byte output tail lives in memory only while a request runs.
-- The device stores its token, private key and policy in `<hermes home>/dirtside/device.json` with mode 0600, and an activity log of request ids and outcomes, also 0600.
+- The device stores its token, private key and policy in its selected state directory's `device.json` with mode 0600, and an activity log of request ids and outcomes, also 0600.
 - No telemetry. Dirtside talks to the gateway you paired and to nothing else. Scripts and file contents you ask it to move can still contain secrets, as they would on the server.
 
 The disclosures in `plugin.yaml` say the same in one paragraph: shell execution with the device user's privileges, signed gateway routes, authenticated session controls, outbound polling, pinned keys, device-side deny, timeout, output and parallelism checks, and no filesystem confinement.
@@ -358,7 +473,7 @@ Gateway, in the Hermes config:
 | `plugins.entries.dirtside.settings.owners` | List of trusted `platform:user_id` identities with authority over every device; default `[]`, at most 64 unique entries. Copy the exact Sender string from status. |
 | `terminal.cwd` | Leave unset. Core expands a configured `~` on the gateway, and Dirtside does not translate that path. |
 
-Device, in `<hermes home>/dirtside/device.json` (written by `pair`, mode 0600): the gateway URL, the device identity, its token and signing key, the gateway's public key, and the policy block with `deny_patterns`, `max_timeout_s`, `max_output_bytes`, `max_parallel` and `env_passthrough`. Old four-key policy files still load with an empty passthrough list; saving adds it. Edit the policy for your machine or use the names-only `policy` command, then restart `serve`.
+Device, in the selected state directory's `device.json` (written by `pair`, mode 0600): the gateway URL, the device identity, its token and signing key, the gateway's public key, and the policy block with `deny_patterns`, `max_timeout_s`, `max_output_bytes`, `max_parallel` and `env_passthrough`. Old four-key policy files still load with an empty passthrough list; saving adds it. Edit the policy for your machine or use the names-only `policy` command, then restart `serve`.
 
 ## Project layout
 
@@ -372,17 +487,19 @@ dirtside/                 one package, both halves
   environment.py          core's BaseEnvironment with a pipe as the handle
   provider.py             the conversation environment and target resolution
   backend.py              public workdir middleware and lazy core-local handoff
-  access.py               current sender identity and device owner authority
+  access.py               sender authority and shared gateway configuration warning
   auth.py                 auth provider and nine scoped token-route paths
   commands.py             /dirtside
-  prompt.py               the target facts for the system prompt
+  shortcuts.py            /land and /orbit, delegating to the same handler
+  prompt.py               the frozen system-prompt target section
+  awareness.py            fresh, quoted target facts in each authorized user turn
   cli.py                  hermes dirtside pair, serve, status, policy, install-service
   agent/                  the device half: config, loop, executor, policy, log
 dashboard/plugin_api.py   the routes, under /api/plugins/dirtside/
 desktop/plugin.js         Desktop pane and status chip, plain ESM, no build
 tools/                    fake device, owned rig, size budgets, matrix runner
 scripts/                  two_machine_matrix.sh
-tests/                    935 tests: units, conformance, real core, network; benchmark helpers
+tests/                    1012 tests: units, conformance, real core, network; benchmark helpers
 docs/ARCHITECTURE.md      the design, its reasons, the alternatives that lost
 openspec/                 the change record behind each build step
 ```
@@ -400,7 +517,7 @@ openspec/                 the change record behind each build step
 
 ## Status
 
-The suite collects 935 tests. Catalog-review checks use core `84a0301` and `8d7061f` on macOS; CI runs Ubuntu and macOS against the pinned core. Native authenticated CLI slash dispatch and one-shot turns, plus TUI slash/turn RPCs, run the device demo with temporary homes and a loopback model on both prepared cores. This is not a check of the owner's live install or rendered TUI. The dated measurements above and the live checks below describe the earlier published tree, not new internet or Desktop checks on this worktree.
+The suite collects 1012 tests. Catalog-review checks use core `84a0301` and `8d7061f` on macOS; CI runs Ubuntu and macOS against the pinned core. Native authenticated CLI slash dispatch and one-shot turns, plus TUI slash/turn RPCs, run the device demo with temporary homes and a loopback model on both prepared cores. This is not a check of the owner's live install or rendered TUI. The dated measurements above and the live checks below describe the earlier published tree, not new internet or Desktop checks on this worktree.
 
 Three private uses remain transitional: the lazy `token_auth.register_token_route` fallback keeps released cores working until provider-bound, scoped route registration exists; lazy `LocalEnvironment` preserves core's local behavior and credential stripping until a public backend handoff exists; `EnvironmentConnectionError` preserves core's fail-closed rendering and needs documenting in the provider contract. The catalog validator still reports exactly those three sites; this is not a claim of catalog approval.
 

@@ -48,6 +48,7 @@ class LegacyContext:
     register_cli_command = register
     register_command = register
     register_system_prompt_section = register
+    register_hook = register
 
 
 class PublicContext(LegacyContext):
@@ -67,7 +68,9 @@ class PublicContext(LegacyContext):
 
 
 def register(ctx, root, monkeypatch):
-    monkeypatch.setattr(dirtside, "plugin_data_dir", lambda _: root)
+    # Cover the lazy storage import and the base tree's module alias.
+    monkeypatch.setattr(dirtside, "plugin_data_dir", lambda _: root, raising=False)
+    monkeypatch.setattr("plugins.plugin_storage.plugin_data_dir", lambda _: root)
     dirtside.register(ctx)
     return ctx.auth
 

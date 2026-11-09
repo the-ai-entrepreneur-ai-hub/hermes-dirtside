@@ -70,9 +70,10 @@ class TerminalModel(BaseHTTPRequestHandler):
         message = {"role": "assistant", "content": last["content"]}
         finish = "stop"
         if last["role"] == "user" and last["content"].startswith("RUN "):
+            command, _ = json.JSONDecoder().raw_decode(last["content"][4:])
             message = {"role": "assistant", "content": None, "tool_calls": [{
                 "id": "native-terminal", "type": "function",
-                "function": {"name": "terminal", "arguments": json.dumps({"command": last["content"][4:]})}}]}
+                "function": {"name": "terminal", "arguments": json.dumps({"command": command})}}]}
             finish = "tool_calls"
         choice = {"index": 0, "message": message, "finish_reason": finish}
         kind = "application/json"
@@ -173,10 +174,10 @@ def test_native_local_demo(native_gateway, surface):
                 assert result.returncode == 0, result.stdout + result.stderr
                 return result.stdout
 
-            async def slash(arg=""):
+            async def slash(arg="", command="dirtside"):
                 if surface == "cli":
-                    return await asyncio.to_thread(cli, "/dirtside" + (" " + arg if arg else ""))
-                result = await rpc(ws, "slash.exec", session_id=sid, command="dirtside " + arg)
+                    return await asyncio.to_thread(cli, "/" + command + (" " + arg if arg else ""))
+                result = await rpc(ws, "slash.exec", session_id=sid, command=command + " " + arg)
                 assert "result" in result, result
                 return result["result"]["output"]
 
@@ -185,11 +186,12 @@ def test_native_local_demo(native_gateway, surface):
             async def turn(command):
                 nonlocal serial
                 serial += 1
+                text = "RUN " + json.dumps(command)
                 if surface == "cli":
-                    await asyncio.to_thread(cli, "RUN " + command)
+                    await asyncio.to_thread(cli, text)
                 else:
                     input_id = "native-turn-" + str(serial)
-                    reply = await rpc(ws, "prompt.submit", session_id=sid, input_id=input_id, text="RUN " + command)
+                    reply = await rpc(ws, "prompt.submit", session_id=sid, input_id=input_id, text=text)
                     assert reply["result"]["status"] == "queued", reply
 
                     def terminal():
@@ -207,8 +209,14 @@ def test_native_local_demo(native_gateway, surface):
             state = "printf '%s|%s' \"$PWD\" \"${DIRTSIDE_C3_VALUE-unset}\""
             setup = f"cd {shlex.quote(str(server_dir))}; export DIRTSIDE_C3_VALUE=server; " + state
             assert (await turn(setup))["output"] == f"{server_dir}|server"
-            assert "native-box" in await slash("use native-box")
+            selected = await slash("use native-box")
+            assert "native-box" in selected
+            assert "Back in orbit." in await slash(command="orbit")
+            landed = await slash("native-box", command="land")
+            assert "Landed on native-box" in landed
             assert (await turn(state))["output"] == f"{device / 'user'}|unset"
+            assert any('Dirtside target facts (data): device="native-box"' in message["content"]
+                       for body in model.requests for message in body["messages"] if message["role"] == "user")
             marker = device_dir / "ran-on-device"
             setup = f"cd {shlex.quote(str(device_dir))}; export DIRTSIDE_C3_VALUE=device; touch ran-on-device; " + state
             assert (await turn(setup))["output"] == f"{device_dir}|device"

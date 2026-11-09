@@ -14,10 +14,10 @@ An installed and enabled plugin SHALL register its terminal backend, device auth
 - **THEN** startup discovers those registrations and plugin list and doctor recognize the installation
 
 ### Requirement: Tool conformance through the selected backend
-The selected device SHALL preserve the normal terminal and file tool results, including persistent cwd, exports, nonzero exit codes and lossless file content.
+The selected device SHALL preserve the normal terminal results, including persistent cwd, exports and nonzero exit codes. File-tool conformance covers paths unchanged by gateway-side resolution: core resolves file paths on the gateway; use the terminal for edits on a device.
 
 #### Scenario: Normal tools run on a paired subprocess device
-- **WHEN** the user chooses a paired online device and invokes terminal and file tools
+- **WHEN** the user chooses a paired online device and invokes terminal and file tools using paths unchanged by gateway-side resolution
 - **THEN** pwd, separate cd and export calls, exit 3, 1 MB output, a 100 KB write and read, patch and search agree with the local backend after nondeterministic metadata is excluded
 
 #### Scenario: The cached device becomes offline

@@ -108,9 +108,24 @@ class Runtime:
 
     def slash(self, args):
         from hermes_cli.plugin_command_dispatch import invoke_plugin_command
-        command = self.manager._plugin_commands["dirtside"]
-        assert command["argument_mode"] == "text" and command["args_hint"] == "<use|devices|pair|revoke>"
-        return invoke_plugin_command(command["handler"], args["raw_args"])
+        name = args.get("command", "dirtside")
+        command = self.manager._plugin_commands[name]
+        assert command["argument_mode"] == "text"
+        assert name != "dirtside" or command["args_hint"] == "<use|devices|pair|revoke>"
+        if "choice" not in args:
+            return invoke_plugin_command(command["handler"], args["raw_args"])
+        handler = command["handler"]
+        commands = handler if name == "dirtside" else handler.__self__.commands
+        original, questions = commands.ctx.ask_choice, []
+        def choose(question, choices):
+            questions.append([question, choices])
+            return args["choice"]
+        commands.ctx.ask_choice = choose
+        try:
+            reply = invoke_plugin_command(handler, args["raw_args"])
+            return dict(reply=reply, questions=questions)
+        finally:
+            commands.ctx.ask_choice = original
 
     def prompt(self, args):
         from agent.system_prompt import _frozen_plugin_prompt_sections
@@ -129,6 +144,13 @@ class Runtime:
         return dict(key=_resolve_container_task_id(task), identity=id(env) if env else None,
                     environment=type(env).__name__, cwd=env.cwd if env else None,
                     persistent=is_persistent_env(task))
+
+    def turn_facts(self, args):
+        return self.manager.invoke_hook(
+            "pre_llm_call", session_id=args["session"], task_id=args["session"], turn_id="rig-turn",
+            user_message="next", conversation_history=[{"role": "user", "content": "next"}],
+            is_first_turn=False, model="", platform=args.get("platform", "cli"),
+            parent_session_id="", sender_id=args.get("user_id", ""))
 
     def turn_end(self, args):
         from agent.chat_completion_helpers import cleanup_task_resources
@@ -230,7 +252,7 @@ class Runtime:
             handlers = {name: getattr(self, name) for name in (
                 "info", "target", "state", "turn_end", "reap", "terminal", "file",
                 "queue", "cancel", "interrupt", "network", "slash", "prompt", "fake_device", "reload", "generation",
-                "stream_attached")}
+                "stream_attached", "turn_facts")}
             return handlers[message["method"]](args)
         finally:
             set_interrupt(False)

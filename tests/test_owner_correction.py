@@ -69,7 +69,7 @@ def test_only_device_traffic_earns_ownership(tmp_path):
 
 
 @pytest.mark.parametrize("state", ["absent", "dead", "reused"])
-def test_no_live_owner_is_offline_everywhere(tmp_path, state):
+def test_no_live_owner_is_offline_everywhere(tmp_path, state, configured_backend):
     relay = Relay(Registry(tmp_path / "data.db"))
     relay._client = client = Client(relay)
     registry = relay.registry
