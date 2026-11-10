@@ -198,8 +198,8 @@ Same-owner re-pairing MUST preserve the existing device id and conversation sele
 - **WHEN** transport opts into a retained paired key
 - **THEN** it receives a separate revoked record, while default lookup, active device queries and revoked or expired pending codes remain closed
 
-### Requirement: One first-event revoke window
-Retained recognition SHALL require routes enabled and `revoked_at <= now < revoked_at + REVOKE_NOTICE_S`, with `REVOKE_NOTICE_S = 10`, under either registration API. Every qualifying request SHALL receive the stop inside it. Same-owner archival SHALL preserve the first revoke time. Failed, refused or unloaded routes SHALL remain closed.
+### Requirement: One revoke window per credential
+Retained recognition SHALL require enabled routes and `revoked_at <= now < revoked_at + REVOKE_NOTICE_S`, with `REVOKE_NOTICE_S = 10`, under either registration API. Requests with valid signed proof inside the window SHALL receive the stop. Failed, refused or unloaded routes SHALL remain closed. Archival SHALL preserve the time of the first revoke or replacement; re-pairing an already revoked name never starts a new window.
 
 #### Scenario: test_window_edges_on_every_route
 - **WHEN** revoke or replacement happens under either registration API
@@ -223,9 +223,9 @@ Retained recognition SHALL require routes enabled and `revoked_at <= now < revok
 - **THEN** valid proof receives the stop through event+9 and core rejects at event+10
 - **AND** the empty replay cache permits a captured message younger than 300 seconds to receive the stop
 
-#### Scenario: test_repair_never_reopens_first_revocation_window
+#### Scenario: Re-pairing never starts a new window
 - **WHEN** an already revoked name is paired again a day later by the same or a different owner
-- **THEN** the old credential keeps its first event time and stays unrecognized throughout and after the ten seconds following re-pairing
+- **THEN** the old credential keeps the time of its first revoke or replacement and re-pairing never starts a new window
 
 #### Scenario: test_registration_failure_still_closes_retained_bearer
 - **WHEN** the public registration API refuses a route
@@ -239,3 +239,11 @@ Retained recognition SHALL require routes enabled and `revoked_at <= now < revok
 - **WHEN** a real device is revoked between polls and its next poll reaches core
 - **THEN** it exits on the next poll inside the window, but keeps retrying core's own generic body after it until stopped by hand
 - **AND** pre-version replacement credentials remain unavailable and require manual shutdown
+
+### Requirement: Gateway clock controls the window
+The window SHALL follow the gateway's clock in whole seconds, so it lasts 9 to 10 seconds. Setting that clock back into the window SHALL reopen recognition, and setting it forward SHALL close it early.
+
+#### Scenario: Clock set back into the window
+- **WHEN** a retained bearer is checked at revoke+5, revoke+10, then the clock is set back to revoke+5 and revoke-1
+- **THEN** another plugin's token gate admits, refuses, admits and refuses it respectively
+- **AND** that plugin's own bearer passes at each step

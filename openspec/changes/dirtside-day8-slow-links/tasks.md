@@ -37,7 +37,7 @@
 - [x] 6.1 Cancel unknown reported running ids inside Relay.next after recovery without touching history or legacy behavior; verify known states, repeated reports and no registry writes.
 - [x] 6.2 Keep the ticking restart phase and add a silent sleep 600 with timeout=600; reproduce the failure and prove cessation within one poll interval plus 10 s through the real row.
 - [x] 6.3 Document next-poll cancellation and unreachable-gateway backstop, check README restart wording and set only the minimum relay budget.
-- [x] 6.4 Preserve revocation after immediate orphan replies by recognizing only core's exact structured 401; test the real middleware boundary and unchanged foreign-401 retries without loosening the existing five-second check.
+- [x] 6.4 Preserve revocation after immediate orphan replies: only HTTP 401 with exact `{"detail":"device revoked"}` stops the device; core's generic 401 and foreign 401s stay retryable. Test the real middleware boundary without loosening the existing five-second check.
 - [x] 6.5 Rerun all acceptance, keep 16 commits and append Correction 3 with file:line evidence, test names, budgets and exact check outputs.
 
 ## 7. Correction 4

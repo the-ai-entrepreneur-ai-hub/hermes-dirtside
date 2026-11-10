@@ -9,6 +9,8 @@ Authenticate personal devices without granting them dashboard sessions and compl
 ### Requirement: Pure device token recognition
 The auth provider SHALL recognize active tokens and unexpired pending codes without changing credentials, online state or requests, and SHALL NOT issue interactive sessions. A retained principal SHALL authorize nothing inside Dirtside.
 
+The window follows the gateway's clock in whole seconds, so it lasts 9 to 10 seconds. Setting that clock back into the window reopens it, and setting it forward closes it early.
+
 #### Scenario: test_window_edges_on_every_route
 - **WHEN** a retained credential is checked with routes enabled under either registration API
 - **THEN** it is recognized from its first revoke or replacement through event+9, but not at event+10
@@ -34,9 +36,14 @@ The auth provider SHALL recognize active tokens and unexpired pending codes with
 - **WHEN** the gateway restarts with a fresh registry, relay and replay guard inside the window
 - **THEN** a captured message younger than 300 seconds can be replayed and receive the stop answer until event+10
 
-#### Scenario: test_repair_never_reopens_first_revocation_window
+#### Scenario: Re-pairing never starts a new window
 - **WHEN** an already revoked name is paired again a day later
-- **THEN** the old credential keeps its first revoke time and is never recognized again
+- **THEN** the old credential keeps its first revoke time and re-pairing never starts a new window
+
+#### Scenario: Pairing code on another plugin's token route
+- **WHEN** an unused, unexpired pairing code reaches another plugin's token route on a released core
+- **THEN** the gate admits it until it is used, revoked, replaced by a newer code for that name, or expired
+- **AND** the gate refuses it after any of those ends
 
 ### Requirement: Single-use signed pairing
 Pairing SHALL prove possession of the hello key, bind the authenticated code to completion in one transaction, rotate to a long-lived token and return the relay public key.

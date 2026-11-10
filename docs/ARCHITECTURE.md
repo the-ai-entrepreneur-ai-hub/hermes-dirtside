@@ -163,7 +163,7 @@ The relay's Ed25519 seed is a 0600 file next to the database, `relay.key`, the s
 
 An idempotent transaction adds `owner` to old device rows with default `local`, preserves existing devices, tokens, targets and requests, and records the minting sender on pending rows so completion and re-pairing keep that authority.
 
-Revoked paired rows retain their keys and hashed tokens. Before same-owner re-pairing overwrites a paired row, the transaction copies its old key, token hash and identity into `retired_credentials`. `COALESCE(revoked_at, ?)` preserves its first revoke time or stamps the replacement time if still active. Pairing an already revoked name never reopens the old credential's window. The replacement keeps the conversation's id, while the old credential resolves only to `Revoked`, never `Device`. This survives gateway restart. No raw token or private signing key is stored there. Credentials replaced before this version were not retained, so those old processes still need stopping by hand.
+Revoked paired rows retain their keys and hashed tokens. Before same-owner re-pairing overwrites a paired row, the transaction copies its old key, token hash and identity into `retired_credentials`. `COALESCE(revoked_at, ?)` preserves its first revoke time or stamps the replacement time if still active. Pairing an already revoked name never starts a new window for the old credential. The replacement keeps the conversation's id, while the old credential resolves only to `Revoked`, never `Device`. This survives gateway restart. No raw token or private signing key is stored there. Credentials replaced before this version were not retained, so those old processes still need stopping by hand.
 
 ```python
 class Registry:
@@ -353,7 +353,11 @@ The names-only `hermes dirtside policy` command shows, replaces or clears passth
 
 Retained recognition requires `routes.enabled and revoked_at <= now < revoked_at + REVOKE_NOTICE_S`, with the single constant `REVOKE_NOTICE_S = 10`. The persisted time is the credential's first revoke or replacement. Every qualifying signed request inside the window receives the stop answer, including retries after a lost answer and after a parked poll has received one.
 
-A retained principal authorizes nothing inside Dirtside, including management, local IPC and dashboard sessions. On released cores, its token gate still accepts that principal on other plugins' registered token routes during the ten-second window, as it did for an active device bearer without its private key. Dirtside's own registration cannot prove confinement on another plugin's routes.
+The window follows the gateway's clock in whole seconds, so it lasts 9 to 10 seconds. Setting that clock back into the window reopens it, and setting it forward closes it early.
+
+When routes are enabled, handlers answer a retained credential with valid proof whenever a request reaches them; only the recognizer applies the ten-second window, and this answer grants no other authority. Both prepared cores keep their token gate in front of the registered paths, including loopback without dashboard sign-in.
+
+A retained principal authorizes nothing inside Dirtside, including management, local IPC and dashboard sessions. On released cores, its token gate still accepts that principal on other plugins' registered token routes during the ten-second window, as it did for an active device bearer without its private key. A pairing code also passes those gates until it is used, revoked, replaced by a newer code for that name, or expired, for up to ten minutes; `/dirtside pair` prints it to chat. The local IPC secret also passes those gates; the gateway OS user, including server-target commands, can read `local.secret`. Dirtside's own registration cannot prove confinement on another plugin's routes.
 
 Session verification and revocation return `None`, leaving interactive dashboard sessions to their own provider.
 
@@ -371,7 +375,7 @@ Pairing under the gate works because the pairing code is itself a bearer the rec
 
 Both prepared cores lack the public method, so only its absence uses one lazy `hermes_cli.dashboard_auth.token_auth.register_token_route` fallback, whose import is disclosed by the catalog validator pending the corrected provider/scoped seam.
 
-Device and local handlers independently refuse each other's credentials and dashboard session credentials in either mode.
+Device and local handlers independently refuse each other's credentials and dashboard session credentials under either registration API.
 
 ## A11. Routes
 
@@ -419,9 +423,12 @@ An inaccessible explicit target fails without server execution. An implicit defa
 | Chunks arrive in order; duplicates and late chunks are dropped; late posts get 410 | `test_feed_dedupe`, `test_late_result_410` |
 | Revoke cancels that device's live requests and stops its polls | `test_revoke_cancels_running` |
 | Revocation needs no parked poll; every qualifying request inside the ten-second window gets the stop | `test_offline_revoked_agent_stops_without_parked_poll`, `test_real_poll_loop_stops_between_polls_only_inside_window`, `test_real_agent_upload_stops_without_an_open_poll` |
-| Only valid fresh key proof receives the explicit stop answer on a signed route | `test_revoked_key_gets_explicit_rejection_on_every_route`, invalid and replay controls in `test_revoke_exit.py` |
-| Re-pairing retains the old stop signal without affecting the replacement | `test_repair_keeps_retired_key_separate_from_new_device` |
-| A pairing code works once, under the gate, and expires | `test_pairing_code_lifecycle` |
+| Setting the gateway clock back reopens recognition only inside the old credential's window | `test_gateway_clock_setback_reopens_only_inside_window` |
+| Only valid fresh key proof receives the explicit stop answer on a signed route | `test_revoked_key_gets_explicit_rejection_on_every_route`, `test_ungated_router_answers_retained_proof_without_other_authority`, invalid and replay controls in `test_revoke_exit.py` |
+| Re-pairing keeps the old credential's original window without affecting the replacement | `test_repair_keeps_retired_key_separate_from_new_device`, `test_different_owner_http_pair_starts_displaced_window`, `test_same_owner_repair_inside_window_keeps_original_end`, `test_repair_never_reopens_first_revocation_window` |
+| A pairing code works once, under the gate, and expires; released foreign token gates admit it only while live and unused | `test_pairing_code_lifecycle`, `test_foreign_gate_admits_only_live_unused_pairing_code` |
+| A previous-schema database gains retained storage without reviving long-revoked authority | `test_previous_schema_migrates_without_reviving_old_bearer` |
+| Disposing successfully enabled routes closes retained recognition at once | `test_dispose_enabled_routes_closes_retained_window` |
 | Multibyte output survives chunk boundaries | `test_multibyte_chunks` |
 | Approvals stay on and the environment survives a turn | `test_provider_flags`: `skip_container_guards is False`, `_persistent is True` |
 | The deny list refuses what it says | `test_policy_table` |
@@ -715,7 +722,7 @@ Successful pairing reads the old active id under the pairing lock and cancels it
 
 Only exact HTTP 401 `{"detail":"device revoked"}` shuts the agent down successfully; unknown credentials, generic core unauthenticated errors and transient failures retain retry/backoff.
 
-Pair/hello, poll, chunk and result share one ten-second recognition window from the credential's first revoke or replacement. An online device receives the stop on its next valid signed request and exits. A device offline or backing off beyond the window receives core's generic rejection and keeps retrying until stopped by hand. Pairing an already revoked name never starts another window. Credentials replaced before this version were not retained and need manual shutdown.
+Pair/hello, poll, chunk and result share the ten-second window from the credential's first revoke or replacement, measured on the gateway's clock (A10). An online device receives the stop on its next valid signed request inside it and exits. A device offline or backing off beyond the window receives core's generic rejection and keeps retrying until stopped by hand. Pairing an already revoked name never starts a new window. Credentials replaced before this version were not retained and need manual shutdown.
 
 Requests without valid signatures, ordinary 300-second freshness, unused nonces and matching sender/kind never receive the explicit stop answer. A different gate or proxy can replace the signal with a generic rejection; that remains retryable, not proof of revocation.
 

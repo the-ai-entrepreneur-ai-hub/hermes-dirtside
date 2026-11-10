@@ -85,7 +85,7 @@ After recovering dispatches under its condition, the owner SHALL include each re
 
 #### Scenario: Revocation authenticates a fresh poll without a parked request
 
-- **WHEN** a revoked device's valid signed poll reaches retained-key verification inside 10 seconds from its first revoke or replacement
+- **WHEN** a revoked device's valid signed poll reaches retained-key verification inside the ten-second window from its first revoke or replacement, measured on the gateway's clock in whole seconds
 - **THEN** the gateway returns exact {"detail":"device revoked"} and HTTP 401, and the agent stops successfully
 - **AND** the ordinary signature, 300-second freshness, nonce, sender and kind checks run first
 - **AND** every qualifying retry inside the window receives the answer, including after a parked poll has received one
@@ -99,6 +99,6 @@ After recovering dispatches under its condition, the owner SHALL include each re
 #### Scenario: Late device needs manual shutdown
 - **WHEN** a device is offline or backing off beyond the window, or its credential was replaced before this version retained it
 - **THEN** generic rejection keeps it retrying until manually stopped
-- **AND** pairing an already revoked name never reopens its old credential's window
+- **AND** pairing an already revoked name never starts a new window for its old credential
 - **AND** during the window other plugins' released core token gates still accept the bearer, but it authorizes nothing inside Dirtside
 - **AND** invalid proof never receives the explicit stop answer; bad retained proof and unknown bearers have different generic bodies

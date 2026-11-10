@@ -11,7 +11,7 @@ from hermes_cli.dashboard_auth.registry import (
 from nacl.signing import SigningKey
 from network_support import SessionTokenProvider, mounted
 from test_review_token_routes import LegacyContext, PublicContext, register
-from test_routes import hello
+from test_routes import API, headers, hello
 
 from dirtside.auth import DEVICE_PATHS, LOCAL_PATHS
 from dirtside.protocol import canonical, parse_hello, sign
@@ -66,6 +66,15 @@ def envelope(key, kind, sender, body, timestamp=None):
         payload = {name: value for name, value in wire.items() if name != "sig"} | {"ts": timestamp}
         wire = payload | {"sig": base64.b64encode(key.sign(canonical(payload)).signature).decode()}
     return wire
+
+
+def active_poll(web, relay, device, token, key):
+    cancel = "r_" + "cd" * 12
+    relay.cancels[device.id].add(cancel)
+    response = web.post(API + "/device/poll", headers=headers(token),
+                        json=envelope(key, "poll", device.id, {"running": []}))
+    assert response.status_code == 200, response.text
+    assert response.json()["body"]["cancel"] == [cancel] and device.id in relay.last_seen
 
 
 def retire(registry, device, root, clock, replaced):
