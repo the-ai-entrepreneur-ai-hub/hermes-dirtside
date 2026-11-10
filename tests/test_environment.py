@@ -16,7 +16,7 @@ from tools.file_operations import ShellFileOperations
 from tools.interrupt import set_interrupt
 
 from dirtside.environment import DirtsideEnvironment
-from dirtside.model import MAX_OUTPUT_BYTES, PART_MAX, Policy
+from dirtside.model import MAX_OUTPUT_BYTES, PART_MAX, TERMINAL, Policy
 from dirtside.provider import DirtsideProvider
 from dirtside.protocol import ProtocolError, sign
 from dirtside.registry import Registry
@@ -173,7 +173,13 @@ def test_concurrent_commands_keep_their_policy_identity(tmp_path):
         for command, result in zip(commands, results):
             assert result["returncode"] == (126 if "forbidden" in command else 0)
         assert not list(tmp_path.glob("forbidden-*"))
-        rows = relay.registry.recent(12)
+        deadline = time.monotonic() + 5
+        while True:
+            rows = relay.registry.recent(12)
+            if len(rows) == 12 and all(row.state in TERMINAL for row in rows):
+                break
+            assert time.monotonic() < deadline, "Command history did not finalize all twelve rows within 5s"
+            threading.Event().wait(0.01)
         assert {row.preview for row in rows} == set(commands)
         assert all(row.exit_code == (126 if "forbidden" in row.preview else 0) for row in rows)
 
