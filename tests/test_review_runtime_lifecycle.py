@@ -18,9 +18,9 @@ from dirtside.auth import DirtsideDeviceAuth
 from dirtside.protocol import sign
 from dirtside.registry import Registry
 from dirtside.relay import Relay
-from test_registry import request
+from test_registry import paired, request
 from test_review_name_safety import pair_as
-from test_review_token_routes import PublicContext, register
+from test_review_token_routes import LegacyContext, PublicContext, register
 from test_routes import API, headers, hello
 
 
@@ -36,13 +36,42 @@ def test_upgrade_from_unmarked_provider_starts_fresh_runtime(tmp_path, monkeypat
     register_global_provider(old)
     try:
         current = register(PublicContext(), tmp_path, monkeypatch)
-        assert current.routes.enabled and current.runtime_version == 1
+        assert current.routes.enabled and current.runtime_version == 2
         assert current.registry.path == old.registry.path
         assert current.relay is not old.relay
         assert current.environment_provider._relay is current.relay
         assert callable(current.tool_execution)
     finally:
         restore_registration("dirtside", old, previous)
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_reload_refreshes_v1_lookup_and_keeps_v2_runtime(tmp_path, monkeypatch, version):
+    old = register(LegacyContext(), tmp_path, monkeypatch)
+    device, token, key = paired(old.registry, tmp_path, now=int(time.time()))
+    with mounted(tmp_path, relay=old.relay, provider=old) as (app, *_), TestClient(app) as web:
+        def poll():
+            return web.post(API + "/device/poll", headers=headers(token),
+                            json=sign(key, "poll", device.id, {"running": ["r_" + "ab" * 12]}))
+        assert web.post(API + "/device/poll", json={}).status_code == 401
+        assert poll().status_code == 200
+        original = old.registry
+        if version == 1:
+            class PriorRegistry:
+                path = original.path
+                def __getattr__(self, name):
+                    return getattr(original, name)
+                def credential_for(self, token, now):
+                    return original.credential_for(token, now)
+            old.registry = PriorRegistry()
+        old.runtime_version = version
+        current = register(LegacyContext(), tmp_path, monkeypatch)
+        register_global_provider(current)
+        old.routes.dispose()
+        assert poll().status_code == 200
+        assert current.routes.enabled and current.runtime_version == 2
+        assert (current.registry is original) is (version == 2)
+        assert (current.relay is old.relay) is (version == 2)
 
 
 def test_unloaded_owner_relay_uses_client_not_retired_queue(tmp_path, monkeypatch):

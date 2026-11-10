@@ -41,7 +41,10 @@ class Device:                              # paired, not revoked, not expired; n
 @dataclass(frozen=True)
 class Pending:                             # a minted pairing code, until the device completes pairing
     name: str; expires_at: int
-Credential = Pending | Device              # what a bearer token resolves to
+@dataclass(frozen=True)
+class Revoked:                             # retained paired key, never active authority
+    id: DeviceId; name: str; pubkey: bytes; revoked_at: int
+Credential = Pending | Device | Revoked     # retained lookup: signed transport and token recognizer
 
 @dataclass(frozen=True)
 class Server: ...
@@ -97,16 +100,16 @@ Dependency direction is top to bottom. No module imports one below it except thr
 |---|---|---|---|
 | `dirtside/backend.py` | explicit terminal-workdir context and lazy local handoff | stdlib, transitional core local environment | 22 |
 | `dirtside/access.py` | sender identity, command-source provenance, visibility, owner authorization and shared configuration warning | public session context, environment error, lazy public config reader and prompt.quoted | 103 |
-| `dirtside/model.py` | the types and constants above | stdlib | 111 |
+| `dirtside/model.py` | the types and constants above | stdlib | 118 |
 | `dirtside/protocol.py` | `Envelope`, canonical JSON, `sign`, `verify`, `ReplayGuard`, one `parse_*` per message kind, `PROTOCOL_VERSION = 1` | model, nacl | 147 |
 | `dirtside/readiness.py` | bounded pipe readiness without a descriptor-number ceiling | stdlib selectors | 8 |
-| `dirtside/registry.py` | the SQLite boundary, relay key and private local secret | model, sqlite3 | 216 |
+| `dirtside/registry.py` | the SQLite boundary, retained credentials, relay key and private local secret | model, sqlite3 | 225 |
 | `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), readiness, threading | 239 |
 | `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 124 |
 | `dirtside/client.py` | process-verified owner discovery, bounded disabled-route retry, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 198 |
 | `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, readiness, FastAPI, anyio | 152 |
 | `dirtside/provider.py` | dispatch-time conversation context, bounded cwd history and per-target snapshot delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, backend, environment, `gateway.session_context` | 164 |
-| `dirtside/auth.py` | device and local-secret recognition, fixed-path token registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 91 |
+| `dirtside/auth.py` | device and local-secret recognition, ten-second revoke window and exact route registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 96 |
 | `dirtside/shortcuts.py` | /land and /orbit adapters over Commands | commands | 20 |
 | `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`, `resolve_target`, session context) | 110 |
 | `dirtside/awareness.py` | per-turn bounded target facts or configuration warning, no liveness probe | prompt, provider, shared Access | 33 |
@@ -119,7 +122,7 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | `dirtside/agent/policy.py` | `evaluate(command, policy) -> Decision`, pure | model | 40 |
 | `dirtside/agent/executor.py` | `run(request, policy, send) -> Outcome`, process groups, chunking, cancel | model, readiness, subprocess | 115 |
 | `dirtside/agent/loop.py` | poll, backoff, dispatch, bounded parallelism, retrying posts | config, policy, executor, protocol, httpx | 150 |
-| `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 214 |
+| `dashboard/plugin_api.py` | device-traffic owner publication, signed device routes, authenticated revocation, pane forwarding and local route mounting | auth's protocol, relay, registry and local route instance | 227 |
 | `desktop/plugin.js` | pane, chip | `@hermes/plugin-sdk` | 280 |
 | `__init__.py` | lazy directory entry point | package registration | 50 |
 | `dirtside/__init__.py` | `register(ctx)` wiring | gateway modules | 58 |
@@ -143,6 +146,10 @@ CREATE TABLE devices (
   owner TEXT NOT NULL DEFAULT 'local'
 );                                   -- pubkey NULL and expires_at set = pending; pubkey set and expires_at NULL = paired
 CREATE UNIQUE INDEX devices_active_name ON devices(name) WHERE revoked_at IS NULL AND pubkey IS NOT NULL;
+CREATE TABLE retired_credentials (
+  token_hash BLOB PRIMARY KEY, id TEXT NOT NULL, name TEXT NOT NULL,
+  pubkey BLOB NOT NULL, revoked_at INTEGER NOT NULL
+);
 CREATE TABLE targets (session_key TEXT PRIMARY KEY, target TEXT NOT NULL, set_at INTEGER NOT NULL);
 CREATE TABLE session_defaults (session_key TEXT PRIMARY KEY, target TEXT NOT NULL);
 CREATE TABLE requests (
@@ -156,10 +163,13 @@ The relay's Ed25519 seed is a 0600 file next to the database, `relay.key`, the s
 
 An idempotent transaction adds `owner` to old device rows with default `local`, preserves existing devices, tokens, targets and requests, and records the minting sender on pending rows so completion and re-pairing keep that authority.
 
+Revoked paired rows retain their keys and hashed tokens. Before same-owner re-pairing overwrites a paired row, the transaction copies its old key, token hash and identity into `retired_credentials`. `COALESCE(revoked_at, ?)` preserves its first revoke time or stamps the replacement time if still active. Pairing an already revoked name never reopens the old credential's window. The replacement keeps the conversation's id, while the old credential resolves only to `Revoked`, never `Device`. This survives gateway restart. No raw token or private signing key is stored there. Credentials replaced before this version were not retained, so those old processes still need stopping by hand.
+
 ```python
 class Registry:
     def mint(self, name: str, now: int) -> str                        # pending row, token_hash = sha256(code); returns the code once
-    def credential_for(self, bearer: str, now: int) -> Credential | None   # constant-time compare; expired pending rows are None
+    def credential_for(self, bearer: str, now: int, *, include_revoked=False) -> Credential | None
+        # constant-time compare; active-only by default; signed transport and token recognizer opt into retained keys
     def complete_pairing(self, name: str, hello: DeviceHello, now: int) -> tuple[Device, str]
         # one transaction: revoke any paired device with this name, set pubkey and facts, rotate the token, clear expires_at; returns (device, bearer) once
     def active_device(self, name: str) -> Device | None
@@ -295,7 +305,9 @@ Wire bodies carry only what the other side uses:
 
 Both peers keep a `ReplayGuard` with a 300-second timestamp window and at most 4,096 remembered nonces. The gateway uses `GATEWAY_REPLAYS` only after signature verification, so an invalid signature cannot poison it. A retry uses a fresh signed envelope; chunk sequence deduplication and terminal-state checks still prevent duplicate output or completion. These caches are process-local and bounded, not durable replay history across restart or eviction.
 
-Order of operations in every device route, in this order and nowhere else: `registry.credential_for(bearer)` (401 if `None`) → streamed body bound for chunk/result (A10) → JSON parsing and `verify()` with that credential's key (400 on failure; a `Pending` credential is accepted only by the pair route, which verifies against the key inside the hello) → `relay.touch` for a `Device` credential only, so a stolen bearer without the signing key cannot keep a device online → `parse_<kind>()` → one relay or registry call → `410` when the relay reports terminal or unknown. JSON parsing, verification and body parsing run in existing worker threads, not on the dashboard event loop. The relay and everything below it never see a dict. Handlers never rely on `request.state.token_principal`, so the code path is the same with the dashboard gate on or off.
+Every device route uses `credential_for(..., include_revoked=True)` (401 if unknown), then applies the streamed chunk/result body bound (A10), parses JSON and verifies the credential's signature, 300-second freshness, nonce, sender and route kind. Active malformed messages retain their generic 400; invalid retained proof gets generic 401 and never receives the explicit stop answer. Inside the window that generic body differs from core's rejection of an unknown bearer. A `Pending` credential works only on pairing and verifies against the hello key. A paired credential is looked up again after proof, covering revocation or rotation during verification. A `Revoked` credential receives exact `401 {"detail":"device revoked"}` before body parsing, liveness, owner publication or relay work.
+
+After a gateway restart inside the ten-second window the replay cache is empty, so a captured message younger than 300 seconds can be replayed and receive the stop answer. An active request parses its body and makes one relay or registry call; terminal or unknown work returns 410. JSON parsing, verification and body parsing stay in existing worker threads. Handlers never trust the outer principal as execution authority.
 
 ## A9. Device agent
 
@@ -321,7 +333,7 @@ def handle_exec(req: WireExec) -> None:
     post_until_2xx("result", outcome_body(req.id, outcome))
 ```
 
-`post_until_2xx` retries with the same backoff and stops on 2xx or 410. A 410 means the gateway already closed the request (cancelled, lost, or finished), so the device has nothing left to say.
+`post_until_2xx` retries with the same backoff and stops on 2xx, 410 or exact explicit revocation. A 410 ends that request; exact `401 {"detail":"device revoked"}` shuts down the whole agent and cancels running work. Generic 401 responses still retry.
 
 `executor.run` evaluates policy first. A `Refused` becomes `Outcome(REFUSED, 126, ...)` without spawning. Otherwise it spawns `bash -l -c` or `bash -c`, `cwd=req.cwd`, `start_new_session=True`, writes the stdin payload from a separate thread and closes it (a child that fills the output pipe before it reads stdin would otherwise deadlock, which is why core has a writer thread too), reads stdout and stderr merged as bytes through `select`, flushes unsent output `FLUSH_MS` after its first byte, at `PART_MAX`, or at exit, whichever comes first (so a command that ends inside 200 ms makes one post), from the same thread and one post at a time (so `seq` arrives in order by construction), carries the final tail inside the result, stops reading about 300 ms after bash exits with the pipe idle (the same rule as core's drain in `tools/environments/base_output.py`, so a backgrounded grandchild such as `sleep 30 &` cannot hold the request open), enforces the backstop `min(req.timeout_s + 1, policy.max_timeout_s)` with SIGTERM then SIGKILL after 3 seconds, caps output at `policy.max_output_bytes` (default `MAX_OUTPUT_BYTES`) and reports `truncated`. Chunk retries share that capped duration. The gateway owns the requested timeout; the device's extra second lets core cancel first without exceeding device policy (A16.4). A 410 on a chunk or result for a running request kills that request's process group: the gateway no longer wants it. The group is killed only on timeout, cancel, revoke or 410, never after a natural exit: a grandchild such as `uvicorn &` or a `spawn_via_env` job must survive on the device exactly as it survives locally. Only HTTP 401 with the exact body {"detail":"device revoked"} stops the agent; generic core rejection, unknown credentials and foreign 401 responses still retry.
 
@@ -337,7 +349,11 @@ The names-only `hermes dirtside policy` command shows, replaces or clears passth
 
 ## A10. Authentication
 
-`DirtsideDeviceAuth(DashboardAuthProvider)` is token-only and noninteractive, and its side-effect-free recognizer returns `dirtside` scope for valid device or pending credentials and `dirtside-local` for the local secret.
+`DirtsideDeviceAuth(DashboardAuthProvider)` is token-only and noninteractive. Recognition never changes credentials, online state or work. It returns `dirtside` scope for active or valid pending credentials and `dirtside-local` only for the local secret. Revoked or expired pending codes remain unrecognized.
+
+Retained recognition requires `routes.enabled and revoked_at <= now < revoked_at + REVOKE_NOTICE_S`, with the single constant `REVOKE_NOTICE_S = 10`. The persisted time is the credential's first revoke or replacement. Every qualifying signed request inside the window receives the stop answer, including retries after a lost answer and after a parked poll has received one.
+
+A retained principal authorizes nothing inside Dirtside, including management, local IPC and dashboard sessions. On released cores, its token gate still accepts that principal on other plugins' registered token routes during the ten-second window, as it did for an active device bearer without its private key. Dirtside's own registration cannot prove confinement on another plugin's routes.
 
 Session verification and revocation return `None`, leaving interactive dashboard sessions to their own provider.
 
@@ -402,6 +418,9 @@ An inaccessible explicit target fails without server execution. An implicit defa
 | A device that vanishes loses its queued and running requests within grace | `test_lost_covers_queued` |
 | Chunks arrive in order; duplicates and late chunks are dropped; late posts get 410 | `test_feed_dedupe`, `test_late_result_410` |
 | Revoke cancels that device's live requests and stops its polls | `test_revoke_cancels_running` |
+| Revocation needs no parked poll; every qualifying request inside the ten-second window gets the stop | `test_offline_revoked_agent_stops_without_parked_poll`, `test_real_poll_loop_stops_between_polls_only_inside_window`, `test_real_agent_upload_stops_without_an_open_poll` |
+| Only valid fresh key proof receives the explicit stop answer on a signed route | `test_revoked_key_gets_explicit_rejection_on_every_route`, invalid and replay controls in `test_revoke_exit.py` |
+| Re-pairing retains the old stop signal without affecting the replacement | `test_repair_keeps_retired_key_separate_from_new_device` |
 | A pairing code works once, under the gate, and expires | `test_pairing_code_lifecycle` |
 | Multibyte output survives chunk boundaries | `test_multibyte_chunks` |
 | Approvals stay on and the environment survives a turn | `test_provider_flags`: `skip_container_guards is False`, `_persistent is True` |
@@ -674,7 +693,7 @@ The frozen target section and every authorized turn's fact line are shared model
 
 ### A16.9 Correction 2 lifecycle and defaults
 
-Only a previous provider with runtime_version 1 and the same registry path can supply compatible runtime references; unmarked catalog-pin providers start a fresh runtime without reading missing C1 fields.
+Only a previous provider with runtime_version 2 and the same registry path can supply compatible runtime references. Version 1 and unmarked providers start a fresh Registry and Relay, avoiding reuse of the old credential lookup API.
 
 The relay's existing route gate also governs local ownership: while retired it uses Client rather than old local queues, and its parked polls return without dispatching more work.
 
@@ -696,9 +715,11 @@ Successful pairing reads the old active id under the pairing lock and cancels it
 
 Only exact HTTP 401 `{"detail":"device revoked"}` shuts the agent down successfully; unknown credentials, generic core unauthenticated errors and transient failures retain retry/backoff.
 
-Revoked tokens remain invalid rather than gaining an auth principal just to report revocation, so an agent receiving only a generic pre-route rejection needs owner stop/re-pair and may continue its existing bounded local work until then.
+Pair/hello, poll, chunk and result share one ten-second recognition window from the credential's first revoke or replacement. An online device receives the stop on its next valid signed request and exits. A device offline or backing off beyond the window receives core's generic rejection and keeps retrying until stopped by hand. Pairing an already revoked name never starts another window. Credentials replaced before this version were not retained and need manual shutdown.
 
-Explicit-revocation tests still require automatic shutdown; thread and subprocess tests deliberately replacing the signal with generic 401 require retry followed by owner-initiated shutdown, retaining existing interrupt and cancellation bounds.
+Requests without valid signatures, ordinary 300-second freshness, unused nonces and matching sender/kind never receive the explicit stop answer. A different gate or proxy can replace the signal with a generic rejection; that remains retryable, not proof of revocation.
+
+Explicit-revocation tests still require automatic shutdown. The day-8 generic-rejection test now uses an unknown bearer and core's own unchanged response, not a masking helper. The other proxy-fault thread and subprocess tests still use that shared helper and require retry followed by owner-initiated shutdown, retaining existing interrupt and cancellation bounds.
 
 Restart after code updates to replace already-mounted method bodies; a full disable/re-enable is not an in-flight-work continuity promise.
 

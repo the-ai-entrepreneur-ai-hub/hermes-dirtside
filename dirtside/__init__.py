@@ -20,7 +20,7 @@ def register(ctx):
     path, access = plugin_data_dir("dirtside") / "data.db", Access(ctx)
     default = ctx.get_config("default_target", "server") or "server"
     previous = get_provider("dirtside")
-    compatible = getattr(previous, "runtime_version", None) == 1 and previous.registry.path == path
+    compatible = getattr(previous, "runtime_version", None) == 2 and previous.registry.path == path
     if compatible:
         registry, relay, provider, tool_execution = (
             previous.registry, previous.relay, previous.environment_provider, previous.tool_execution)
@@ -39,7 +39,7 @@ def register(ctx):
         auth.model, auth.protocol = previous.model, previous.protocol
         auth.local = type(previous.local)(registry, relay, lambda: auth.routes.enabled)
     auth.environment_provider, auth.tool_execution = provider, tool_execution
-    auth.runtime_version = 1
+    auth.runtime_version = 2
     if ctx.register_dashboard_auth_provider(auth) is not None:
         auth.routes = register_device_routes(ctx)
     relay._routes_enabled = lambda: auth.routes.enabled

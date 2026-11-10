@@ -1,6 +1,7 @@
 """A replacement owner cancels silent orphaned work through the next poll."""
 import threading
 import time
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -146,6 +147,7 @@ def test_agent_retries_generic_core_rejection(tmp_path):
 def check_agent_retries(reg, tmp_path, url, retried):
     device, cfg = setup_agent(reg, tmp_path, url)
     reg.revoke(device.name, int(time.time()))
+    cfg = replace(cfg, token="unknown-device-bearer")
     response = httpx.post(url + API + "/device/poll", headers=headers(cfg.token),
                           json=sign(cfg.key, "poll", device.id, {"running": []}), trust_env=False)
     assert response.status_code == 401

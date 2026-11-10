@@ -13,7 +13,7 @@
   <a href="https://github.com/the-ai-entrepreneur-ai-hub/hermes-dirtside/actions/workflows/check.yml"><img alt="checks" src="https://img.shields.io/github/actions/workflow/status/the-ai-entrepreneur-ai-hub/hermes-dirtside/check.yml?branch=main&label=checks&style=flat-square&labelColor=0B0F14&logo=githubactions&logoColor=white"></a>
   <a href="https://www.python.org/"><img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-57606A?style=flat-square&labelColor=0B0F14&logo=python&logoColor=white"></a>
   <a href="https://github.com/NousResearch/hermes-agent"><img alt="Hermes 0.22.7 or newer" src="https://img.shields.io/badge/hermes-%3E%3D0.22.7-57606A?style=flat-square&labelColor=0B0F14"></a>
-  <img alt="1012 tests passing" src="https://img.shields.io/badge/tests-1012_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
+  <img alt="1286 tests passing" src="https://img.shields.io/badge/tests-1286_passing-1F883D?style=flat-square&labelColor=0B0F14&logo=pytest&logoColor=white">
   <img alt="macOS and Linux" src="https://img.shields.io/badge/platforms-macOS%2C_Linux-57606A?style=flat-square&labelColor=0B0F14">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-57606A?style=flat-square&labelColor=0B0F14"></a>
 </p>
@@ -189,8 +189,9 @@ and environment.
 On 2026-11-08 the owner's real aarch64 Termux userland in Docker passed signed
 pairing, terminal shebang/Python/PREFIX commands, exit 7, cancel with exit 130
 and revoke, using Python 3.14.10 and PyNaCl 1.6.2. Unit checks cover detection,
-pairing OS and the names-only environment merge. The owner's final-tree
-`bash scripts/termux_check.sh` rerun also passed. No physical phone, mobile-data link or
+pairing OS and the names-only environment merge. The owner's later
+`bash scripts/termux_check.sh` rerun also passed, before this revoke-window change.
+No physical phone, mobile-data link or
 Termux:API has been tested.
 The container script explicitly loads termux-exec because its image lacks
 Android's getprop; the real app normally exports it already.
@@ -234,7 +235,11 @@ hermes dirtside install-service             # write and load it
 hermes dirtside install-service --remove    # undo
 ```
 
-macOS gets a launchd agent, Linux a systemd user unit. Both restart the agent after a crash. Only an explicit `401 {"detail":"device revoked"}` stops `serve` successfully; generic core authentication failures and unknown credentials retry with backoff. Released cores can reject revoked tokens before that signal reaches the plugin, so stop or re-pair that agent yourself. Read the unit before installing it; service login and reboot recovery were not exercised in the checks below.
+macOS gets a launchd agent, Linux a systemd user unit. Both restart the agent after a crash. Only an explicit `401 {"detail":"device revoked"}` stops `serve` successfully; generic core authentication failures and unknown credentials retry with backoff.
+
+For 10 seconds after a revoke or a same-owner replacement, the gateway still recognizes the old credential to tell that device to stop. An online device gets the answer on its next signed request and exits. A device offline or backing off past the window gets core's generic rejection and keeps retrying until stopped by hand. Pairing an already revoked name never reopens its old credential's window. Credentials replaced before this version were not retained: stop those old processes by hand.
+
+Read the unit before installing it. Service login and reboot recovery were not exercised in the checks below.
 
 ## How it works
 
@@ -294,7 +299,11 @@ gateway-shaped path, while plain-text reads and searches can expand it on the de
 | Browser and every other non-terminal tool | Their ordinary Hermes backends. Dirtside does not touch them. |
 | Device policy, process groups, the device activity log | The device, as the device user. |
 
-Online means contact within 45 seconds. A request on a device that stops reporting is marked lost after 45 seconds plus a 5 second grace period: the tool returns exit 255 with the partial output kept, and says why. Revocation cancels waiting tool calls at once. An explicit revoked signal stops device work; generic authentication rejection only retries, so stop the agent yourself if that signal cannot reach it. After a gateway restart, the next successful poll also stops orphaned work. An unreachable or generically rejected device may keep running its current command until its own deadline.
+Online means contact within 45 seconds. A request on a device that stops reporting is marked lost after 45 seconds plus a 5 second grace period: the tool returns exit 255 with the partial output kept, and says why. Revocation cancels waiting tool calls at once. During the 10-second window, every valid signed request gets the stop answer, including chunk and result uploads and retries after a lost answer. No parked poll is required.
+
+Requests without valid proof never receive the explicit stop answer. Inside the window, a retained bearer with bad proof gets a different generic body from an unknown bearer. After a gateway restart inside the window, the replay cache is empty. A captured message younger than 300 seconds can be replayed and receive the stop answer.
+
+After a gateway restart, the next successful active-device poll also stops orphaned work. An unreachable device, or one receiving only generic authentication errors, may keep running its current command until its own deadline.
 
 ## Chat commands
 
@@ -315,7 +324,7 @@ A device belongs to the sender who minted its pairing code. Identity is the exac
 
 With `owners` empty (the default), any admitted sender with a known identity may pair a new name and owns it. With a nonempty list, only `local` and listed owners may pair new names. The list accepts at most 64 unique identities. Reload the plugin or restart the gateway after changing it; a worker-only change cannot widen the serving owner's permissions.
 
-This includes an unused configured default name; the name alone grants no trust. Re-pairing reuses an id only for the same owner. A different owner gets a new id, immediately cancels the previous device's live gateway requests, and leaves old conversation selections revoked instead of redirecting them. A privileged sender explicitly selecting an unprivileged owner's device sees that owner in the confirmation.
+This includes an unused configured default name; the name alone grants no trust. Re-pairing reuses an id only for the same owner. The old key and token hash remain separate retired credentials without revoking the replacement. The old credential gets one 10-second stop window at its first revoke or replacement. Pairing an already revoked name never starts another. A different owner gets a new id, immediately cancels the previous device's live gateway requests, and leaves old conversation selections revoked instead of redirecting them. A privileged sender explicitly selecting an unprivileged owner's device sees that owner in the confirmation.
 
 Core's canonical platform `local` is the host only with trusted CLI, TUI, Desktop or ACP policy provenance and an empty user or exactly the current process's `uid:<n>`. A policy-free surface `local`, as used by native slash commands, additionally requires core's actual non-relay command source; a relay payload's `local` label or matching chat/session ids grant no host authority. Other uid or arbitrary raw subjects are not the host. Core maps all dashboard and Webapp sign-ins, including forwarded logins, to the gateway host owner, so they act as `local` on POSIX gateways. Windows gateways' `sid:` subjects are not recognized as the host yet. Legacy empty-user host provenance and cron stay unchanged, and old pairings migrate to `local`. Messaging users named `local` or the host uid do not gain host authority. Missing identity fails closed. The prepared cores' direct ACP adapter omits the required public provenance: canonical ACP context is supported, but ambiguous direct-ACP device access remains denied until core binds it.
 
@@ -382,7 +391,7 @@ The pane lists paired devices with an online dot, OS, home, last seen and a revo
 | The laptop lid closes mid-command | Online means contact within 45 s. The request becomes lost after a further 5 s, returns exit 255 with the partial output, and says the device stopped reporting. |
 | A poll response is lost on the way to the device | The device's next poll lists the ids it is running. Anything the gateway handed out that never started is queued again, once, and only if it had produced no output. |
 | Someone replays a captured message | Every message carries a timestamp and a nonce. Both ends reject timestamps outside 300 s and nonces seen in their 4,096-entry, 300 s cache. |
-| A device token leaks | It is useless without the device's private key; pairing pins the public key. `/dirtside revoke` cancels live gateway requests immediately. If core returns only generic authentication errors, stop the agent yourself to terminate its remaining local work. |
+| A device token leaks | Dirtside requires its private key for signed device traffic. On released cores, an active bearer passes other plugins' token gates without the key. The old bearer still passes those gates for 10 seconds from its first revoke or replacement. It authorizes nothing inside Dirtside. Revoke cancels live gateway requests immediately; stop the agent by hand if it receives only generic rejection. |
 | A model command inherits device-agent credentials | Children get the minimal environment plus device-owned `env_passthrough`, not the agent's provider keys by default; this is not filesystem isolation, and explicit passthrough can expose secrets. |
 | Another admitted sender shares the conversation | Discovery and management are owner-filtered, and terminal/file dispatch checks each sender again; a cached target does not grant access. The trusted gateway host and configured owners retain authority. |
 | A participant can run arbitrary commands on the server target | Server-target execution is gateway-user execution, not device-owner isolation. It can read `local.secret` and call the local API as `local`, including another owner's devices. Restrict gateway execution through core's approvals and allowlists; Dirtside cannot isolate senders sharing that OS account. |
@@ -488,7 +497,7 @@ dirtside/                 one package, both halves
   provider.py             the conversation environment and target resolution
   backend.py              public workdir middleware and lazy core-local handoff
   access.py               sender authority and shared gateway configuration warning
-  auth.py                 auth provider and nine scoped token-route paths
+  auth.py                 auth provider and nine exact token-route paths
   commands.py             /dirtside
   shortcuts.py            /land and /orbit, delegating to the same handler
   prompt.py               the frozen system-prompt target section
@@ -499,7 +508,7 @@ dashboard/plugin_api.py   the routes, under /api/plugins/dirtside/
 desktop/plugin.js         Desktop pane and status chip, plain ESM, no build
 tools/                    fake device, owned rig, size budgets, matrix runner
 scripts/                  two_machine_matrix.sh
-tests/                    1012 tests: units, conformance, real core, network; benchmark helpers
+tests/                    1286 tests: units, conformance, real core, network; benchmark helpers
 docs/ARCHITECTURE.md      the design, its reasons, the alternatives that lost
 openspec/                 the change record behind each build step
 ```
@@ -517,7 +526,7 @@ openspec/                 the change record behind each build step
 
 ## Status
 
-The suite collects 1012 tests. Catalog-review checks use core `84a0301` and `8d7061f` on macOS; CI runs Ubuntu and macOS against the pinned core. Native authenticated CLI slash dispatch and one-shot turns, plus TUI slash/turn RPCs, run the device demo with temporary homes and a loopback model on both prepared cores. This is not a check of the owner's live install or rendered TUI. The dated measurements above and the live checks below describe the earlier published tree, not new internet or Desktop checks on this worktree.
+The suite collects 1286 tests. Catalog-review checks use core `84a0301` and `8d7061f` on macOS; CI runs Ubuntu and macOS against the pinned core. Native authenticated CLI slash dispatch and one-shot turns, plus TUI slash/turn RPCs, run the device demo with temporary homes and a loopback model on both prepared cores. This is not a check of the owner's live install or rendered TUI. The dated measurements above and the live checks below describe the earlier published tree, not new internet or Desktop checks on this worktree.
 
 Three private uses remain transitional: the lazy `token_auth.register_token_route` fallback keeps released cores working until provider-bound, scoped route registration exists; lazy `LocalEnvironment` preserves core's local behavior and credential stripping until a public backend handoff exists; `EnvironmentConnectionError` preserves core's fail-closed rendering and needs documenting in the provider contract. The catalog validator still reports exactly those three sites; this is not a claim of catalog approval.
 

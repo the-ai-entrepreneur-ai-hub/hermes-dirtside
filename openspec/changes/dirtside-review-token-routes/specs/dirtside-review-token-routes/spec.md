@@ -46,14 +46,14 @@ Without the method, registration MUST use the single lazy transitional function 
 - **THEN** the instance stays disabled with one bounded log line
 
 ### Requirement: Independent credential checks
-Handlers MUST reject device tokens on local routes and the local secret on device routes in both registration modes.
+Handlers MUST reject device tokens on local routes and the local secret on device routes under either registration API.
 
 #### Scenario: test_cross_credentials
 - **WHEN** credentials cross route classes with the dashboard gate on or off
 - **THEN** the request is refused before device or local work
 
 ### Requirement: Live registration rebinding
-An already-mounted router MUST use the currently registered provider and its registry for each request, and MUST preserve live device work through successful rediscovery.
+An already-mounted router MUST use the currently registered provider and its registry for each request, and MUST preserve live device work through compatible successful rediscovery.
 
 #### Scenario: test_force_rediscovery_keeps_device_and_local_calls_working
 - **WHEN** real discover_and_load(force=True) runs during device work in either transport
@@ -68,11 +68,15 @@ An already-mounted router MUST use the currently registered provider and its reg
 - **THEN** only current credentials work before refusal and all routes close after refusal with either outer gate mode
 
 ### Requirement: Versioned runtime continuity
-Registration MUST reuse only a compatible explicitly marked runtime. Cached retired environments MUST reach the current serving owner or fail quickly, never queue into a relay no device polls.
+Registration MUST reuse only a same-path runtime explicitly marked version 2. Version 1 MUST build a fresh Registry and Relay. Cached retired environments MUST reach the current serving owner or fail quickly, never queue into a relay no device polls.
 
 #### Scenario: test_upgrade_from_unmarked_provider_starts_fresh_runtime
 - **WHEN** the previous provider has the catalog-pin shape without C1 runtime fields
 - **THEN** registration succeeds with a fresh compatible runtime
+
+#### Scenario: test_reload_refreshes_v1_lookup_and_keeps_v2_runtime
+- **WHEN** the previous provider has runtime_version 1 with the old credential lookup API, or version 2 on the same path
+- **THEN** version 1 receives a fresh registry and relay, version 2 keeps both, and a paired device authenticates through the real core gate
 
 #### Scenario: test_unloaded_owner_relay_uses_client_not_retired_queue
 - **WHEN** an owner runtime's token-route registrations are disposed
@@ -97,7 +101,7 @@ Mounted handlers MUST interpret terminal states by their serialized values acros
 The agent MUST stop permanently only for exact HTTP 401 detail=device revoked. Generic core authentication failures, unknown credentials and transient failures MUST retry using existing backoff.
 
 #### Scenario: test_agent_retries_generic_core_rejection
-- **WHEN** core rejects a request before the plugin route with the generic unauthenticated body
+- **WHEN** an unknown bearer makes core itself return its unchanged generic unauthenticated body
 - **THEN** polling retries while the agent stays alive until its owner stops it
 
 #### Scenario: test_foreign_poll_401_keeps_execution_alive_and_polls_again
@@ -146,3 +150,92 @@ The client MUST limit retries to /exec and /stream HTTP 401 with raw JSON detail
 #### Scenario: test_real_local_route_recovers_without_duplicate_execution
 - **WHEN** a real signed device command encounters the exact refusal before /exec or /stream
 - **THEN** recovery produces one device marker append, one history row and the complete outcome
+
+### Requirement: Proof-first revocation on every signed route
+A retained paired credential MUST receive exact HTTP 401 detail=device revoked inside its ten-second window only after valid signature, 300-second freshness, nonce, sender and route-kind checks. No open poll is required. Default registry authority MUST remain active-only. Rejected traffic MUST NOT publish ownership or update liveness or work.
+
+#### Scenario: test_revoked_key_gets_explicit_rejection_on_every_route
+- **WHEN** the revoked key validly signs pairing, polling, chunk or result traffic inside the window with either dashboard gate mode
+- **THEN** each qualifying contact receives the exact stop response without relay work or owner publication
+
+#### Scenario: test_invalid_requests_never_get_explicit_stop_answer
+- **WHEN** the signature, identity, timestamp, kind, bearer or message is invalid or unsigned
+- **THEN** rejection remains generic and never receives the explicit stop answer
+- **AND** bad retained proof and an unknown bearer have different generic bodies inside the window
+
+#### Scenario: test_pre_revoke_signed_request_cannot_be_replayed
+- **WHEN** a previously accepted signed request is replayed after revocation
+- **THEN** it receives generic rejection, while a freshly signed request receives the exact stop response
+
+#### Scenario: test_revoked_key_survives_gateway_restart
+- **WHEN** the gateway restarts after revocation without the old live relay
+- **THEN** valid proof receives the stop inside the persisted ten-second window
+
+#### Scenario: test_revoke_between_lookup_and_verification_does_not_dispatch
+- **WHEN** revocation persists after credential capture but before signed verification completes
+- **THEN** valid proof receives the exact stop even in the revoke second, without liveness, owner publication or dispatch
+
+#### Scenario: test_offline_revoked_agent_stops_without_parked_poll
+- **WHEN** an agent was offline at revocation and reconnects inside the ten-second window
+- **THEN** qualifying signed contact learns revocation and the real subprocess exits successfully within five seconds
+
+#### Scenario: test_real_agent_upload_stops_without_an_open_poll
+- **WHEN** real execution uploads a qualifying chunk or result inside the ten-second window while no poll is open
+- **THEN** the upload receives the exact stop response, the agent shuts down and its running process group stops
+
+### Requirement: Retired credential isolation across re-pairing
+Same-owner re-pairing MUST preserve the existing device id and conversation selection while retaining the old paired key and token hash separately. Old proof MUST NOT gain active authority or affect the replacement.
+
+#### Scenario: test_repair_keeps_retired_key_separate_from_new_device
+- **WHEN** the same owner re-pairs an active or revoked identity
+- **THEN** every old qualifying proof inside the first ten seconds receives the stop, the new key executes normally and the old key cannot use the new bearer
+
+#### Scenario: test_retired_bearer_never_grants_local_or_dashboard_authority
+- **WHEN** a revoked or replaced bearer crosses into local IPC, pairing management, device revocation or a gated dashboard route
+- **THEN** the same request without a bearer is refused, the retained bearer is also refused and no work or management side effect occurs
+
+#### Scenario: test_retired_lookup_is_not_active_authority
+- **WHEN** transport opts into a retained paired key
+- **THEN** it receives a separate revoked record, while default lookup, active device queries and revoked or expired pending codes remain closed
+
+### Requirement: One first-event revoke window
+Retained recognition SHALL require routes enabled and `revoked_at <= now < revoked_at + REVOKE_NOTICE_S`, with `REVOKE_NOTICE_S = 10`, under either registration API. Every qualifying request SHALL receive the stop inside it. Same-owner archival SHALL preserve the first revoke time. Failed, refused or unloaded routes SHALL remain closed.
+
+#### Scenario: test_window_edges_on_every_route
+- **WHEN** revoke or replacement happens under either registration API
+- **THEN** all four signed routes give the stop at event+0 and event+9 and core gives its own generic rejection at event+10
+- **AND** the foreign route accepts its own provider and active Dirtside bearer, accepts a retained bearer only inside the window and refuses bearer-free calls
+
+#### Scenario: test_independent_device_clock_gets_notice
+- **WHEN** the device signs in the revoke second or its timestamp is 60 seconds behind or ahead
+- **THEN** valid 300-second-fresh proof receives the stop inside the window without an artificial retry
+
+#### Scenario: test_retries_each_get_notice_inside_window
+- **WHEN** several fresh signed requests use one retained bearer inside the window
+- **THEN** each receives the explicit stop answer
+
+#### Scenario: test_parked_poll_does_not_consume_later_answers
+- **WHEN** a parked poll has received an answer that the device might not have received
+- **THEN** subsequent qualifying requests still each receive the stop inside the window
+
+#### Scenario: test_restart_keeps_window_and_resets_replay_guard
+- **WHEN** fresh registry, relay and replay guard restart inside the window
+- **THEN** valid proof receives the stop through event+9 and core rejects at event+10
+- **AND** the empty replay cache permits a captured message younger than 300 seconds to receive the stop
+
+#### Scenario: test_repair_never_reopens_first_revocation_window
+- **WHEN** an already revoked name is paired again a day later by the same or a different owner
+- **THEN** the old credential keeps its first event time and stays unrecognized throughout and after the ten seconds following re-pairing
+
+#### Scenario: test_registration_failure_still_closes_retained_bearer
+- **WHEN** the public registration API refuses a route
+- **THEN** the instance recognizes no retained bearer even inside the window while the foreign provider's positive control still succeeds
+
+#### Scenario: test_invalid_proof_never_gets_stop_inside_or_after_window
+- **WHEN** proof has a bad signature, sender, kind, stale timestamp, reused nonce or no signature
+- **THEN** it never receives the explicit stop answer inside or outside the window
+
+#### Scenario: test_real_poll_loop_stops_between_polls_only_inside_window
+- **WHEN** a real device is revoked between polls and its next poll reaches core
+- **THEN** it exits on the next poll inside the window, but keeps retrying core's own generic body after it until stopped by hand
+- **AND** pre-version replacement credentials remain unavailable and require manual shutdown

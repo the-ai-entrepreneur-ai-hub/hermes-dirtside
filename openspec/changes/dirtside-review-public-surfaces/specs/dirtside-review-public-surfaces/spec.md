@@ -98,12 +98,31 @@ An autouse guard MUST measure descriptors before and after each test on Linux an
 - **WHEN** an owned adapter agent exits before repeated stop calls
 - **THEN** its stdin and log close without depending on process liveness
 
-### Requirement: Explicit revocation test precondition
-Automatic revocation shutdown checks MUST observe an admitted authenticated poll before requiring the explicit signal; generic core rejection MUST retain retry behavior.
+### Requirement: Authenticated revocation without a parked poll
+Automatic revocation shutdown MUST work without an admitted poll inside 10 seconds from the credential's first revoke or replacement while routes are enabled. Every qualifying request MUST receive the stop, including after a lost answer or parked poll. Generic core rejection MUST retain retry behavior; a device offline or backing off past the window needs manual shutdown.
 
 #### Scenario: test_parallel_limit_keeps_poll_cancellation_live
 - **WHEN** two commands run, a queued command starts after cancellation, and revocation interrupts an admitted poll
 - **THEN** parallelism and cancellation remain live, every process group stops, the agent exits within the unchanged five-second bound, and retained stdout pipes close
+
+#### Scenario: test_offline_revoked_agent_stops_without_parked_poll
+- **WHEN** the real agent reconnects inside the ten-second window after being revoked while offline
+- **THEN** qualifying proof receives the stop and the subprocess exits successfully without a parked poll
+
+#### Scenario: test_real_agent_upload_stops_without_an_open_poll
+- **WHEN** a qualifying chunk or result upload reaches a recognizable revoked credential
+- **THEN** fresh key proof receives explicit revocation and shuts down real execution
+
+#### Scenario: First-event window and proof limits
+- **WHEN** a name is paired after it was already revoked
+- **THEN** its old credential keeps its original event time and never gets another window
+- **AND** pre-version replacement credentials were not retained and need manual shutdown
+- **AND** inside the window the bearer authorizes nothing inside Dirtside but still passes other plugins' released core token gates
+- **AND** invalid proof never receives the explicit stop answer; bad retained proof and unknown bearers have different generic bodies
+
+#### Scenario: test_restart_keeps_window_and_resets_replay_guard
+- **WHEN** the gateway restarts inside the window
+- **THEN** its empty replay cache permits a captured message younger than 300 seconds to receive the stop answer
 
 ### Requirement: Correction 6 verification evidence
 Correction 6 MUST retain red/green evidence, analysis of all available supplied Linux counts with unavailable records disclosed, both full prepared-core macOS suites with zero descriptor-guard failures, all requested static/admission/matrix/benchmark/citation checks and three serial changed-file rounds including helpers.

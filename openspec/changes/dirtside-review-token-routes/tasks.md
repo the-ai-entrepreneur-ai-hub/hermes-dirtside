@@ -35,3 +35,14 @@
 
 - [x] C4.1 Prove exact disabled-route /exec and /stream loss on C3, add bounded same-id retry with strict refusal controls, and wait for actual stream attachment in the real reload test.
 - [x] C4.2 Run 20 fresh serial client reload cases per prepared core under measured CPU load, in addition to the whole-file correction repeats.
+
+## Revoke exit
+
+- [x] R1 Add signed route, invalid/replay, offline subprocess, real upload and re-pair regressions; preserve red evidence before the gateway fix.
+- [x] R2 Separate retained proof from active authority, archive rotated paired credentials, recheck persisted state and preserve the unchanged agent stop rule and stable same-owner choice.
+- [x] R3 Document one ten-second rule and reconcile the earlier parked-poll and generic-401 assumptions.
+- [x] R4 Prove the real-core foreign-route exposure, bound recognition to the first ten seconds under either registration API and keep refusal closed.
+- [x] R5 Prove independent device clocks, repeated answers, restart, first-event replacement and invalid-proof controls, with bearer-free isolation checks.
+- [x] R6 Require runtime version 2, refreshing old version 1 lookups while preserving compatible same-path version 2 state.
+
+Recognition lasts 10 seconds from the credential's first revoke or replacement while routes are enabled. Every qualifying signed request gets the stop inside it. Pairing an already revoked name never reopens the old credential's window. Devices offline or backing off past it keep retrying until manually stopped. The bearer passes other plugins' released core token gates during the window but authorizes nothing inside Dirtside. Invalid proof never receives the explicit stop answer; bad retained proof and unknown bearers have different generic bodies. A restart empties the replay cache, so a captured message younger than 300 seconds can receive the stop inside the window. Pre-version replaced credentials need manual shutdown.

@@ -25,7 +25,14 @@ class Pending:
     name: str
     expires_at: int
 
-Credential = Pending | Device
+@dataclass(frozen=True)
+class Revoked:
+    id: DeviceId
+    name: str
+    pubkey: bytes
+    revoked_at: int
+
+Credential = Pending | Device | Revoked
 
 @dataclass(frozen=True)
 class Server:

@@ -56,7 +56,11 @@ Keep the matrix's existing ticking gateway-restart checks unchanged. Add a secon
 
 Tests cover unknown ids with and without terminal history, known live states, legacy and empty reports, repeated cancels, deduplication and no registry writes. Exercise the real two-phase row before and after the relay fix. Document next-poll cancellation and retain the device deadline only as the unreachable-gateway backstop. Raise only the relay's needed line budget.
 
-Full acceptance exposed a revocation race: immediate orphan replies can leave no parked poll when the credential is removed. A fresh poll is then refused by core's token middleware with exactly {"error":"unauthenticated","detail":"Unauthorized"}, rather than the plugin's {"detail":"device revoked"}. The agent must recognize that exact core response as final credential rejection while preserving all existing foreign-401 retry checks. Keep the existing five-second revocation assertion unchanged. Add exact-body and real middleware regressions; do not change core, middleware registration or authentication permissions.
+Full acceptance exposed a revocation race: immediate orphan replies can leave no parked poll when the credential is removed. Generic core {"error":"unauthenticated","detail":"Unauthorized"} is not proof of revocation and remains retryable. Retained paired credentials permit proof-first verification on polls and uploads. Recognition lasts 10 seconds from the credential's first revoke or replacement while routes are enabled. Every qualifying signed request inside it gets the stop. Missing that window while offline or backing off means generic retries until manual stop. The day-8 control uses an unknown bearer and core's real response, not a rewritten response.
+
+Pairing an already revoked name never reopens the old credential's window. Pre-version replaced credentials were not retained, so old processes need manual shutdown. A retained principal authorizes nothing inside Dirtside, but during the ten seconds still passes other plugins' released core token gates, as active bearers already do. Keep the exact-body rule, five-second assertions and core middleware unchanged.
+
+Invalid proof never receives the explicit stop answer. Inside the window a bad retained proof has a different generic body from an unknown bearer. Restart empties the replay cache: a captured message younger than 300 seconds can be replayed and receive the stop answer inside the persisted window.
 
 ### Change only lost exit codes
 

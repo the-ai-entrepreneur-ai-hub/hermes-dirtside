@@ -39,3 +39,11 @@ Carry live runtime state only from an explicitly compatible versioned provider. 
 ## Correction 4
 
 Preserve client execution and stream attachment through the short disposed/new-disabled registration window. Retry only its exact pre-handler 401 within three seconds, retaining request id and owner; observe real stream attachment before reloading.
+
+## Revoke exit
+
+Retain paired credentials for proof-first revocation on every signed route, even when no poll is open. Keep active registry authority separate and preserve same-owner ids by archiving old keys and token hashes with their first revoke time, or replacement time if active. Pairing an already revoked name never reopens its old credential's window. Keep the agent's exact-body rule and real signed HTTP, subprocess, upload, invalid/replay, restart and replacement checks.
+
+Recognize retained credentials only with routes enabled and for 10 seconds from their first revoke or replacement, under either registration API. Every qualifying signed request inside the window receives the stop, including retries after a lost answer or parked poll. Devices offline or backing off beyond the window keep retrying until manually stopped. A retained principal authorizes nothing inside Dirtside, but inside those ten seconds still passes other plugins' released core token gates, as active bearers already do.
+
+Invalid proof never receives the explicit stop answer; bad retained proof and unknown bearers have different generic bodies inside the window. Restart empties the replay cache, so a captured message younger than 300 seconds can be replayed and receive the stop. Credentials replaced before this version were not retained and need manual shutdown. Use core's own generic rejection for the late-device control. Runtime version 2 refreshes Registry and Relay when the previous provider is version 1, and preserves a same-path version 2 runtime.

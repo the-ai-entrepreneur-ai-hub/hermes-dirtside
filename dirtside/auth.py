@@ -11,6 +11,7 @@ from .client import process_started
 
 DEVICE_PATHS = tuple(f"/api/plugins/dirtside/device/{kind}" for kind in ("pair", "poll", "chunk", "result"))
 LOCAL_PATHS = tuple(f"/api/plugins/dirtside/local/{kind}" for kind in ("exec", "stream", "kill", "devices", "requests"))
+REVOKE_NOTICE_S = 10
 
 class TokenRoutes:
     def __init__(self):
@@ -46,7 +47,11 @@ class DirtsideDeviceAuth(DashboardAuthProvider):
     def verify_token(self, *, token):
         if hmac.compare_digest(token.encode(), self.registry.local_secret.encode()):
             return TokenPrincipal("local", self.name, ("dirtside-local",))
-        credential = self.registry.credential_for(token, int(time.time()))
+        now = int(time.time())
+        credential = self.registry.credential_for(token, now, include_revoked=True)
+        if isinstance(credential, self.model.Revoked) and not (
+                self.routes.enabled and credential.revoked_at <= now < credential.revoked_at + REVOKE_NOTICE_S):
+            return None
         return TokenPrincipal(credential.name, self.name, ("dirtside",)) if credential else None
 
     def start_login(self, *, redirect_uri):

@@ -10,9 +10,10 @@ import stat
 import threading
 import time
 from contextlib import contextmanager
+from itertools import chain
 from pathlib import Path
 
-from .model import PAIR_TTL_S, Device, Pending, RequestRow, RequestState
+from .model import PAIR_TTL_S, Device, Pending, RequestRow, RequestState, Revoked
 _COLUMNS = "id,name,pubkey,os,arch,home,temp_dir,agent_version,owner"
 _ACTIVE = "revoked_at IS NULL AND pubkey IS NOT NULL AND expires_at IS NULL"
 _TARGETS = "CREATE TABLE IF NOT EXISTS targets (session_key TEXT PRIMARY KEY, target TEXT NOT NULL, set_at INTEGER NOT NULL)"
@@ -24,6 +25,9 @@ CREATE TABLE IF NOT EXISTS devices (
  owner TEXT NOT NULL DEFAULT 'local');
 CREATE UNIQUE INDEX IF NOT EXISTS devices_active_name ON devices(name)
  WHERE revoked_at IS NULL AND pubkey IS NOT NULL;
+CREATE TABLE IF NOT EXISTS retired_credentials (
+ token_hash BLOB PRIMARY KEY, id TEXT NOT NULL, name TEXT NOT NULL,
+ pubkey BLOB NOT NULL, revoked_at INTEGER NOT NULL);
 {_TARGETS};
 CREATE TABLE IF NOT EXISTS session_defaults (session_key TEXT PRIMARY KEY, target TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS requests (
@@ -98,15 +102,18 @@ class Registry:
                          (secrets.token_hex(16), name, _hash(code), now, now + PAIR_TTL_S, owner))
         return code
 
-    def credential_for(self, bearer, now):
+    def credential_for(self, bearer, now, *, include_revoked=False):
         if type(bearer) is not str:
             return None
         digest = _hash(bearer)
         with self._tx() as conn:
-            rows = conn.execute("SELECT * FROM devices WHERE revoked_at IS NULL "
-                                "AND (expires_at IS NULL OR expires_at>?)", (now,))
-            for row in rows:
+            rows = conn.execute("SELECT * FROM devices WHERE (revoked_at IS NULL OR (? AND pubkey IS NOT NULL)) "
+                                "AND (expires_at IS NULL OR expires_at>?)", (include_revoked, now))
+            retired = conn.execute("SELECT * FROM retired_credentials WHERE ?", (include_revoked,))
+            for row in chain(rows, retired):
                 if hmac.compare_digest(digest, row["token_hash"]):
+                    if row["revoked_at"] is not None:
+                        return Revoked(row["id"], row["name"], row["pubkey"], row["revoked_at"])
                     return _device(row) if row["pubkey"] is not None else Pending(row["name"], row["expires_at"])
         return None
 
@@ -127,6 +134,8 @@ class Registry:
             if previous and not reuse:
                 conn.execute("UPDATE devices SET revoked_at=? WHERE id=? AND revoked_at IS NULL", (now, previous["id"]))
             if reuse:
+                conn.execute("INSERT OR IGNORE INTO retired_credentials "
+                             "SELECT token_hash,id,name,pubkey,COALESCE(revoked_at, ?) FROM devices WHERE id=?", (now, identity))
                 conn.execute("DELETE FROM devices WHERE id=?", (row["id"],))
             facts = (hello.pubkey, hello.os, hello.arch, hello.home, hello.temp_dir, hello.agent_version)
             conn.execute("UPDATE devices SET pubkey=?,os=?,arch=?,home=?,temp_dir=?,agent_version=?,"

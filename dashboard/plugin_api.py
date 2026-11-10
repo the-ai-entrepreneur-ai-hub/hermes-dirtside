@@ -98,7 +98,7 @@ async def output_body(request, limit):
         data.extend(part)
     return data
 
-def verified(data, credential, kind, parser):
+def verified(data, credential, kind, parser, token):
     data = json.loads(data)
     key = (base64.b64decode(data["body"]["pubkey"], validate=True)
            if isinstance(credential, runtime().model.Pending) else credential.pubkey)
@@ -107,16 +107,29 @@ def verified(data, credential, kind, parser):
     if env.kind != kind or env.sender != sender:
         raise ValueError("message identity mismatch")
     if isinstance(credential, runtime().model.Device):
+        credential = runtime().registry.credential_for(token, int(time.time()), include_revoked=True)
+    if credential is None:
+        raise HTTPException(401, "unknown device credential")
+    if isinstance(credential, runtime().model.Revoked):
+        raise PermissionError("device revoked")
+    if isinstance(credential, runtime().model.Device):
         runtime().relay.touch(credential.id, credential.pubkey)
     return credential, parser(env.body), env.body.get("id")
 
 async def accepted(request, kind, parser):
-    credential = await asyncio.to_thread(runtime().registry.credential_for, bearer(request), int(time.time()))
-    if credential is None or (kind == "hello") != isinstance(credential, runtime().model.Pending):
+    credential = await asyncio.to_thread(runtime().registry.credential_for, bearer(request), int(time.time()),
+                                         include_revoked=True)
+    retired = isinstance(credential, runtime().model.Revoked)
+    if credential is None or (not retired and (kind == "hello") != isinstance(credential, runtime().model.Pending)):
         raise HTTPException(401, "unknown device credential")
     data = (await output_body(request, CHUNK_BODY_BYTES if kind == "chunk" else RESULT_BODY_BYTES)
             if kind in {"chunk", "result"} else await request.body())
-    accepted = await asyncio.to_thread(verified, data, credential, kind, parser)
+    try:
+        accepted = await asyncio.to_thread(verified, data, credential, kind, parser, bearer(request))
+    except (ValueError, TypeError, KeyError, UnicodeError):
+        if retired:
+            raise HTTPException(401, "unknown device credential") from None
+        raise
     await asyncio.to_thread(record_owner, request)
     return accepted
 
