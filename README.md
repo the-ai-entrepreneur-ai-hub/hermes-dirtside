@@ -33,6 +33,7 @@
 </p>
 
 <p align="center">
+  <a href="https://x.com/ai_in_it/status/2119869526053409034">Demo video</a> |
   <a href="#why-dirtside">Why</a> |
   <a href="#sixty-seconds-with-it">Sixty seconds</a> |
   <a href="#quick-start">Quick start</a> |
@@ -63,6 +64,8 @@ File-tool limit: core resolves file paths on the gateway; use the terminal for e
 Dirtside is a terminal environment provider, the backend seam Hermes exposes for exactly this. One small package serves both ends: the gateway half registers the provider, the signed routes and the chat commands; the device half is a foreground command that polls your gateway, verifies each script, runs it in a process group under your user and streams signed output back. Nothing is sandboxed. It is your machine.
 
 ## Sixty seconds with it
+
+[Watch a demo video of the plugin.](https://x.com/ai_in_it/status/2119869526053409034)
 
 ```text
 you      /dirtside pair macbook
@@ -527,7 +530,9 @@ openspec/                 the change record behind each build step
 
 ## Status
 
-The suite collects 1315 tests. Catalog-review checks use core `84a0301` and `8d7061f` on macOS; CI runs Ubuntu and macOS against the pinned core. Native authenticated CLI slash dispatch and one-shot turns, plus TUI slash/turn RPCs, run the device demo with temporary homes and a loopback model on both prepared cores. This is not a check of the owner's live install or rendered TUI. The dated measurements above and the live checks below describe the earlier published tree, not new internet or Desktop checks on this worktree.
+The suite collects 1315 tests. Catalog-review checks use core `84a0301` and `8d7061f` on macOS; CI runs Ubuntu and macOS against the pinned core. Native authenticated CLI slash dispatch and one-shot turns, plus TUI slash/turn RPCs, run the device demo with temporary homes and a loopback model on both prepared cores. This is not a check of the owner's live install or rendered TUI. The 2026-11-06 measurements above and the undated live checks in the last paragraph of this section describe the earlier published tree, not new internet or Desktop checks on this tree. Dated checks say which day they ran.
+
+On 2026-11-10 the owner checked commit `9266c57` live. The gateway was Hermes on a Mac, reached through a public HTTPS tunnel, with the plugin installed from this repository at that commit. Its existing database gained `retired_credentials` on first start. The device was a Windows PC (WSL2) with no Hermes installed, set up with `pip install` from the same commit into a fresh virtual environment, then `dirtside-agent pair` and `dirtside-agent serve`. From the Hermes CLI on the gateway host, `/land` sent a model turn's command to the PC and `/orbit` sent the next one to the Mac. Revoking the connected device made its process exit by itself. The device list no longer showed it, and the next command was refused as no longer paired. Revoked while its process was stopped and started again 5 seconds later, the device received the explicit answer and exited with status 0. Started 19 seconds after a revoke, it kept retrying on core's generic rejection until stopped by hand, which is the documented limit. These are the owner's results, not reproduced by the suite.
 
 Three private uses remain transitional: the lazy `token_auth.register_token_route` fallback keeps released cores working until provider-bound, scoped route registration exists; lazy `LocalEnvironment` preserves core's local behavior and credential stripping until a public backend handoff exists; `EnvironmentConnectionError` preserves core's fail-closed rendering and needs documenting in the provider contract. The catalog validator still reports exactly those three sites; this is not a claim of catalog approval.
 
