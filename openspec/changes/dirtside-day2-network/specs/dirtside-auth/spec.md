@@ -12,9 +12,9 @@ The auth provider SHALL recognize active tokens and unexpired pending codes with
 A revoked or replaced credential's ten-second window follows the gateway's clock in whole seconds, so it lasts 9 to 10 seconds. Setting that clock back into the window reopens it, and setting it forward closes it early.
 
 #### Scenario: test_window_edges_on_every_route
-- **WHEN** a retained credential is checked with routes enabled under either registration API
+- **WHEN** a retained credential is checked with routes enabled through the public method
 - **THEN** it is recognized from its first revoke or replacement through event+9, but not at event+10
-- **AND** released core token gates still accept it on other plugins' token routes during those 10 seconds, without authority inside Dirtside
+- **AND** foreign bound routes refuse it, legacy unbound routes skip Dirtside while it has a bound policy, and it has no active authority inside Dirtside
 - **AND** an offline or backed-off device missing the window retries generic rejection until manually stopped
 - **AND** credentials replaced before this version were not retained and their old processes need manual shutdown
 
@@ -41,9 +41,9 @@ A revoked or replaced credential's ten-second window follows the gateway's clock
 - **THEN** the old credential keeps its first revoke time and re-pairing never starts a new window
 
 #### Scenario: Pairing code on another plugin's token route
-- **WHEN** an unused, unexpired pairing code reaches another plugin's token route on a released core
-- **THEN** the gate admits it until it is used, revoked, replaced by a newer code for that name, or expired
-- **AND** the gate refuses it after any of those ends
+- **WHEN** a pairing code reaches a foreign bound route or legacy unbound token route while Dirtside has a bound policy
+- **THEN** core refuses it before and after use, revocation, replacement or expiry, while the foreign provider's own bearer passes
+- **AND** a live unused code completes signed pairing on Dirtside's own route
 
 ### Requirement: Single-use signed pairing
 Pairing SHALL prove possession of the hello key, bind the authenticated code to completion in one transaction, rotate to a long-lived token and return the relay public key.

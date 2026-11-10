@@ -3,7 +3,6 @@ import hashlib
 import sqlite3
 import time
 from contextlib import closing
-from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +10,7 @@ from hermes_cli.dashboard_auth.base import TokenPrincipal, assert_protocol_compl
 from hermes_cli.dashboard_auth.token_auth import is_token_route
 from nacl.signing import SigningKey
 from notice_support import Clock, active_poll, envelope, gateway
+from route_support import plugin_context
 
 from dirtside.auth import DEVICE_PATHS, DirtsideDeviceAuth, register_device_routes
 from dirtside.model import Device, Pending, Revoked
@@ -43,21 +43,24 @@ def test_recognizer_has_no_side_effects(tmp_path):
     code = reg.mint("pending", now)
     relay = Relay(reg)
     provider = DirtsideDeviceAuth(reg, relay)
-    provider.routes = register_device_routes(SimpleNamespace(on_unload=lambda callback: None))
-    changes = reg._connection().total_changes
-    for _ in range(2):
+    with plugin_context() as ctx:
+        assert ctx.register_dashboard_auth_provider(provider) is not None
+        provider.routes = register_device_routes(ctx)
+        assert provider.routes.enabled
+        changes = reg._connection().total_changes
+        for _ in range(2):
+            assert provider.verify_token(token=token) == TokenPrincipal(device.name, "dirtside", ("dirtside",))
+            assert provider.verify_token(token=code) == TokenPrincipal("pending", "dirtside", ("dirtside",))
+            assert provider.verify_token(token="unknown") is None
+        assert reg._connection().total_changes == changes
+        assert not relay.last_seen and not relay.handles and reg.recent(10) == []
+        reg.revoke(device.name, now)
         assert provider.verify_token(token=token) == TokenPrincipal(device.name, "dirtside", ("dirtside",))
-        assert provider.verify_token(token=code) == TokenPrincipal("pending", "dirtside", ("dirtside",))
-        assert provider.verify_token(token="unknown") is None
-    assert reg._connection().total_changes == changes
-    assert not relay.last_seen and not relay.handles and reg.recent(10) == []
-    reg.revoke(device.name, now)
-    assert provider.verify_token(token=token) == TokenPrincipal(device.name, "dirtside", ("dirtside",))
-    assert reg.credential_for(token, now) is None and not relay.last_seen
-    reg.revoke("pending", now)
-    assert provider.verify_token(token=code) is None
-    expired = reg.mint("expired", now - 601)
-    assert provider.verify_token(token=expired) is None
+        assert reg.credential_for(token, now) is None and not relay.last_seen
+        reg.revoke("pending", now)
+        assert provider.verify_token(token=code) is None
+        expired = reg.mint("expired", now - 601)
+        assert provider.verify_token(token=expired) is None
 
 
 def test_retired_lookup_is_not_active_authority(tmp_path):
@@ -92,9 +95,11 @@ def test_core_auth_protocol_and_routes(tmp_path):
         provider.complete_login(code="", state="", code_verifier="", redirect_uri="")
     with pytest.raises(NotImplementedError):
         provider.refresh_session(refresh_token="")
-    provider.routes = register_device_routes(SimpleNamespace(on_unload=lambda callback: None))
-    assert all(is_token_route(path) for path in DEVICE_PATHS)
-    assert not is_token_route("/api/plugins/dirtside/devices")
+    with plugin_context() as ctx:
+        assert ctx.register_dashboard_auth_provider(provider) is not None
+        provider.routes = register_device_routes(ctx)
+        assert provider.routes.enabled and all(is_token_route(path) for path in DEVICE_PATHS)
+        assert not is_token_route("/api/plugins/dirtside/devices")
 
 
 def test_previous_schema_migrates_without_reviving_old_bearer(tmp_path, monkeypatch):

@@ -185,6 +185,9 @@ def handle(args):
         message = ("Pairing failed. Check the URL and mint a fresh pairing code." if args.dirtside_action == "pair" else "Service installation failed."
                    if args.dirtside_action == "install-service" else "Cannot load device configuration. Pair this device first.")
         print(f"Dirtside: {message} ({failure_detail(exc, getattr(args, 'code', ''))})")
+        if args.dirtside_action == "pair" and isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in {401, 403}:
+            print("If the gateway lacks ctx.register_dashboard_token_route, "
+                  "upgrade Hermes to open Dirtside routes.")
         if isinstance(exc, ValueError) and str(exc).startswith("env_passthrough"):
             print(str(exc))
         if args.dirtside_action == "pair" and "Invalid Host header" in failure_detail(exc, args.code):

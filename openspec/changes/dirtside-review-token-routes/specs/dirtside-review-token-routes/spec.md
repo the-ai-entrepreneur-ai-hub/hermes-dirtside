@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Provider-bound routes
-When available, the public seam MUST register all fixed paths for dirtside with exact scopes and retain disposable registrations.
+The public method MUST register all fixed paths for dirtside with exact scopes and retain disposable registrations. The seam-only change supersedes this record's earlier fallback assumptions.
 
 #### Scenario: test_public_token_registration
-- **WHEN** ctx exposes the proposed method
+- **WHEN** the real core context exposes the public method
 - **THEN** device paths require dirtside, local paths require dirtside-local and fallback is never called
 
 #### Scenario: test_auth_registration_refusal_never_registers_routes
@@ -30,23 +30,23 @@ A raising or None-returning seam MUST disable every device and local route, roll
 - **WHEN** one instance succeeds and another instance for the same home refuses
 - **THEN** the refused instance stays disabled without disabling the successful one
 
-#### Scenario: test_present_noncallable_seam_is_not_legacy
+#### Scenario: Noncallable public method
 - **WHEN** the token-route attribute is present but not callable
-- **THEN** registration fails closed without calling the legacy fallback
+- **THEN** registration fails closed without private route registration
 
-### Requirement: Released-core fallback
-Without the method, registration MUST use the single lazy transitional function and keep full device flow working.
+### Requirement: Missing-method closure
+Without a callable public method, the plugin MUST load with every device and local handler closed, a bounded cause warning and no private route registration.
 
-#### Scenario: test_legacy_token_registration
-- **WHEN** either released checkout loads Dirtside
-- **THEN** fallback registration and real pairing, polling and execution work
+#### Scenario: Older Hermes
+- **WHEN** Hermes lacks the public method
+- **THEN** every device and local handler stays closed and pairing and status explain the missing method
 
-#### Scenario: test_legacy_registration_failure
-- **WHEN** the released-core fallback fails after a partial registration
-- **THEN** the instance stays disabled with one bounded log line
+#### Scenario: Real-method positive control
+- **WHEN** the same plugin registers on the method core
+- **THEN** its own device and local credentials reach their correctly scoped paths
 
 ### Requirement: Independent credential checks
-Handlers MUST reject device tokens on local routes and the local secret on device routes under either registration API.
+The bound gate MUST reject device tokens on local routes and the local secret on device routes with 403 insufficient scope; handlers MUST retain their independent credential checks.
 
 #### Scenario: test_cross_credentials
 - **WHEN** credentials cross route classes with the dashboard gate on or off
@@ -199,12 +199,12 @@ Same-owner re-pairing MUST preserve the existing device id and conversation sele
 - **THEN** it receives a separate revoked record, while default lookup, active device queries and revoked or expired pending codes remain closed
 
 ### Requirement: One revoke window per credential
-Retained recognition SHALL require enabled routes and `revoked_at <= now < revoked_at + REVOKE_NOTICE_S`, with `REVOKE_NOTICE_S = 10`, under either registration API. Requests with valid signed proof inside the window SHALL receive the stop. Failed, refused or unloaded routes SHALL remain closed. Archival SHALL preserve the time of the first revoke or replacement; re-pairing an already revoked name never starts a new window.
+Retained recognition SHALL require enabled routes and `revoked_at <= now < revoked_at + REVOKE_NOTICE_S`, with `REVOKE_NOTICE_S = 10`, through the public method. Requests with valid signed proof inside the window SHALL receive the stop. Failed, refused or unloaded routes SHALL remain closed. Archival SHALL preserve the time of the first revoke or replacement; re-pairing an already revoked name never starts a new window.
 
 #### Scenario: test_window_edges_on_every_route
-- **WHEN** revoke or replacement happens under either registration API
+- **WHEN** revoke or replacement happens through the public method
 - **THEN** all four signed routes give the stop at event+0 and event+9 and core gives its own generic rejection at event+10
-- **AND** the foreign route accepts its own provider and active Dirtside bearer, accepts a retained bearer only inside the window and refuses bearer-free calls
+- **AND** foreign bound routes and legacy unbound routes refuse Dirtside credentials while Dirtside has a bound policy; the foreign provider's own bearer passes and the Dirtside credential reaches its appropriate own route
 
 #### Scenario: test_independent_device_clock_gets_notice
 - **WHEN** the device signs in the revoke second or its timestamp is 60 seconds behind or ahead
@@ -245,5 +245,5 @@ The window SHALL follow the gateway's clock in whole seconds, so it lasts 9 to 1
 
 #### Scenario: Clock set back into the window
 - **WHEN** a retained bearer is checked at revoke+5, revoke+10, then the clock is set back to revoke+5 and revoke-1
-- **THEN** another plugin's token gate admits, refuses, admits and refuses it respectively
+- **THEN** Dirtside's signed route gives the stop, core rejection, stop and core rejection respectively, with foreign routes refusing throughout while a Dirtside policy remains bound
 - **AND** that plugin's own bearer passes at each step

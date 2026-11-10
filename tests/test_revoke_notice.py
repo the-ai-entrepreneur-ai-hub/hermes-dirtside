@@ -1,4 +1,4 @@
-"""One ten-second window from the first revoke or replacement, under either registration API."""
+"""One ten-second window from first revoke or replacement through the real bound gate."""
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
@@ -7,14 +7,13 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from hermes_cli.dashboard_auth.registry import register_global_provider
 from nacl.signing import SigningKey
 from network_support import DESKTOP_TOKEN, listening, until
-from notice_support import Clock, FOREIGN, FOREIGN_TOKEN, active_poll, envelope, gateway, retire
+from notice_support import Clock, active_poll, envelope, foreign_rejected, gateway, retire
+from route_support import record_routes, register
 from test_network import setup_agent
 from test_registry import paired
 from test_revoke_exit import body_for, device_path, explicit, generic, invalid_wire
-from test_review_token_routes import PublicContext, register
 from test_routes import API, headers, hello
 
 from dirtside.agent.loop import _Agent
@@ -26,30 +25,31 @@ def core_generic(response):
     assert response.json() == {"error": "unauthenticated", "detail": "Unauthorized"}
 
 
-@pytest.mark.parametrize("public", [False, True])
 @pytest.mark.parametrize("replaced", [False, True])
 @pytest.mark.parametrize("kind", ["hello", "poll", "chunk", "result"])
 @pytest.mark.parametrize("edge", [0, 9, 10])
-def test_window_edges_on_every_route(tmp_path, monkeypatch, public, replaced, kind, edge):
+def test_window_edges_on_every_route(tmp_path, monkeypatch, replaced, kind, edge):
     clock = Clock(monkeypatch)
-    with gateway(tmp_path, monkeypatch, public) as (app, reg, relay, _, provider), TestClient(app) as web:
+    with gateway(tmp_path, monkeypatch) as (app, reg, relay, _, provider), TestClient(app, client=("127.0.0.1", 10)) as web:
         device, token, key = paired(reg, tmp_path, now=clock.now - 1)
         assert provider.verify_token(token=token) is not None
-        assert web.get(FOREIGN, headers=headers(token)).status_code == 200
+        active_poll(web, relay, device, token, key)
+        seen = dict(relay.last_seen)
+        foreign_rejected(web, token)
         retire(reg, device, tmp_path, clock, replaced)
         clock.advance(min(edge, 9))
         body = body_for(kind, key, tmp_path, device.name)
         explicit(web.post(device_path(kind), headers=headers(token),
                           json=envelope(key, kind, device.id, body)))
-        assert web.get(FOREIGN, headers=headers(token)).status_code == 200
+        foreign_rejected(web, token)
         if edge == 10:
             clock.advance()
             core_generic(web.post(device_path(kind), headers=headers(token),
                                   json=envelope(key, kind, device.id, body)))
             assert provider.verify_token(token=token) is None
-            assert web.get(FOREIGN, headers=headers(token)).status_code == 401
-            assert web.get(FOREIGN, headers=headers(FOREIGN_TOKEN)).status_code == 200
-        assert not relay.last_seen and not relay.handles
+            foreign_rejected(web, token)
+        assert web.get(API + "/local/devices", headers=headers(reg.local_secret)).status_code == 200
+        assert relay.last_seen == seen and not relay.handles
 
 
 @pytest.mark.parametrize("replaced", [False, True])
@@ -104,12 +104,11 @@ def test_parked_poll_does_not_consume_later_answers(tmp_path, monkeypatch):
                           json=envelope(key, "poll", device.id, {})))
 
 
-@pytest.mark.parametrize("public", [False, True])
 @pytest.mark.parametrize("replaced", [False, True])
 @pytest.mark.parametrize("kind", ["hello", "poll", "chunk", "result"])
-def test_restart_keeps_window_and_resets_replay_guard(tmp_path, monkeypatch, public, replaced, kind):
+def test_restart_keeps_window_and_resets_replay_guard(tmp_path, monkeypatch, replaced, kind):
     clock = Clock(monkeypatch)
-    with gateway(tmp_path, monkeypatch, public) as (app, reg, _, _, provider), TestClient(app) as web:
+    with gateway(tmp_path, monkeypatch) as (app, reg, _, _, provider), TestClient(app) as web:
         device, token, key = paired(reg, tmp_path, now=clock.now - 1)
         assert provider.verify_token(token=token) is not None
         wire = envelope(key, kind, device.id, body_for(kind, key, tmp_path, device.name), clock.now - 60)
@@ -117,7 +116,7 @@ def test_restart_keeps_window_and_resets_replay_guard(tmp_path, monkeypatch, pub
         explicit(web.post(device_path(kind), headers=headers(token), json=wire))
         generic(web.post(device_path(kind), headers=headers(token), json=wire))
     clock.advance()
-    with gateway(tmp_path, monkeypatch, public) as (app, current, relay, module, _), TestClient(app) as web:
+    with gateway(tmp_path, monkeypatch) as (app, current, relay, module, _), TestClient(app) as web:
         assert current is not reg and not relay._revoked
         monkeypatch.setattr(module.wire, "GATEWAY_REPLAYS", ReplayGuard())
         explicit(web.post(device_path(kind), headers=headers(token), json=wire))
@@ -130,21 +129,23 @@ def test_restart_keeps_window_and_resets_replay_guard(tmp_path, monkeypatch, pub
         assert not relay.last_seen
 
 
-@pytest.mark.parametrize("public", [False, True])
 @pytest.mark.parametrize("different_owner", [False, True])
-def test_repair_never_reopens_first_revocation_window(tmp_path, monkeypatch, public, different_owner):
+def test_repair_never_reopens_first_revocation_window(tmp_path, monkeypatch, different_owner):
     clock = Clock(monkeypatch)
-    with gateway(tmp_path, monkeypatch, public) as (app, reg, _, _, provider), TestClient(app) as web:
-        device, token, _ = paired(reg, tmp_path, now=clock.now - 1)
+    with gateway(tmp_path, monkeypatch) as (app, reg, relay, _, provider), TestClient(app, client=("127.0.0.1", 10)) as web:
+        device, token, old_key = paired(reg, tmp_path, now=clock.now - 1)
         assert provider.verify_token(token=token) is not None
+        active_poll(web, relay, device, token, old_key)
         event = clock.now
         reg.revoke(device.name, event)
         clock.advance(9)
         assert provider.verify_token(token=token) is not None
+        explicit(web.post(device_path("poll"), headers=headers(token), json=envelope(old_key, "poll", device.id, {})))
         for now in (event + 10, event + 11, event + 301, event + 86399):
             clock.now = now
             assert provider.verify_token(token=token) is None
-            assert web.get(FOREIGN, headers=headers(token)).status_code == 401
+            foreign_rejected(web, token)
+            assert web.get(API + "/local/devices", headers=headers(reg.local_secret)).status_code == 200
         clock.now = event + 86400
         key = SigningKey.generate()
         owner = "telegram:bob" if different_owner else device.owner
@@ -153,28 +154,36 @@ def test_repair_never_reopens_first_revocation_window(tmp_path, monkeypatch, pub
                                               clock.now, code=code)
         assert (new.id != device.id) is different_owner
         assert provider.verify_token(token=new_token) is not None
-        assert web.get(FOREIGN, headers=headers(new_token)).status_code == 200
+        active_poll(web, relay, new, new_token, key)
+        foreign_rejected(web, new_token)
         assert reg.credential_for(token, clock.now, include_revoked=True).revoked_at == event
         for offset in range(12):
             clock.now = event + 86400 + offset
             assert provider.verify_token(token=token) is None
-            assert web.get(FOREIGN, headers=headers(token)).status_code == 401
-            assert web.get(FOREIGN, headers=headers(FOREIGN_TOKEN)).status_code == 200
+            foreign_rejected(web, token)
+            active_poll(web, relay, new, new_token, key)
 
 
 @pytest.mark.parametrize("refusal", ["raise", "none"])
 def test_registration_failure_still_closes_retained_bearer(tmp_path, monkeypatch, refusal):
     clock = Clock(monkeypatch)
     with gateway(tmp_path, monkeypatch) as (app, reg, _, _, good), TestClient(app) as web:
-        device, token, _ = paired(reg, tmp_path, now=clock.now - 1)
+        device, token, key = paired(reg, tmp_path, now=clock.now - 1)
         reg.revoke(device.name, clock.now)
         assert good.verify_token(token=token) is not None
-        assert web.get(FOREIGN, headers=headers(token)).status_code == 200
-        bad = register(PublicContext(3, refusal), tmp_path, monkeypatch)
-        register_global_provider(bad)
-        assert not bad.routes.enabled and bad.verify_token(token=token) is None
-        assert web.get(FOREIGN, headers=headers(token)).status_code == 401
-        assert web.get(FOREIGN, headers=headers(FOREIGN_TOKEN)).status_code == 200
+        explicit(web.post(device_path("poll"), headers=headers(token), json=envelope(key, "poll", device.id, {})))
+        foreign_rejected(web, token)
+        ctx = good.relay.access.ctx
+        ctx._manager.unload()
+        with monkeypatch.context() as failing:
+            record_routes(ctx, failing, 3, refusal)
+            bad = register(ctx, tmp_path, failing)
+            assert not bad.routes.enabled and bad.verify_token(token=token) is None
+            foreign_rejected(web, token)
+        ctx._manager.unload()
+        restored = register(ctx, tmp_path, monkeypatch)
+        assert restored.routes.enabled and restored.verify_token(token=token) is not None
+        explicit(web.post(device_path("poll"), headers=headers(token), json=envelope(key, "poll", device.id, {})))
 
 
 @pytest.mark.parametrize("replaced", [False, True])
@@ -195,17 +204,16 @@ def test_invalid_proof_never_gets_stop_inside_or_after_window(tmp_path, monkeypa
                           json=envelope(key, kind, device.id, body)))
         clock.advance(10)
         core_generic(web.post(device_path(kind), headers=headers(token), json=wire))
-        assert web.get(FOREIGN, headers=headers(FOREIGN_TOKEN)).status_code == 200
+        foreign_rejected(web, token)
 
 
-@pytest.mark.parametrize("public", [False, True])
 @pytest.mark.parametrize("delay", [0, 9, 10])
 @pytest.mark.parametrize("skew", [-60, 0, 60])
-def test_real_poll_loop_stops_between_polls_only_inside_window(tmp_path, monkeypatch, public, delay, skew):
+def test_real_poll_loop_stops_between_polls_only_inside_window(tmp_path, monkeypatch, delay, skew):
     clock = Clock(monkeypatch)
     monkeypatch.setattr("dirtside.agent.loop.sign", lambda key, kind, sender, body:
                         envelope(key, kind, sender, body, clock.now + skew))
-    with gateway(tmp_path, monkeypatch, public) as (app, reg, relay, _, _), listening(app) as url:
+    with gateway(tmp_path, monkeypatch) as (app, reg, relay, _, _), listening(app) as url:
         device, cfg = setup_agent(reg, tmp_path, url)
         relay.cancels[device.id].add("r_" + "ab" * 12)
         responses, events, stop = [], [], threading.Event()
@@ -239,11 +247,10 @@ def test_real_poll_loop_stops_between_polls_only_inside_window(tmp_path, monkeyp
             assert not thread.is_alive()
 
 
-@pytest.mark.parametrize("public", [False, True])
 @pytest.mark.parametrize("kind", ["hello", "poll", "chunk", "result"])
-def test_different_owner_http_pair_starts_displaced_window(tmp_path, monkeypatch, public, kind):
+def test_different_owner_http_pair_starts_displaced_window(tmp_path, monkeypatch, kind):
     clock = Clock(monkeypatch)
-    with gateway(tmp_path, monkeypatch, public) as (app, reg, relay, _, provider), TestClient(app) as web:
+    with gateway(tmp_path, monkeypatch) as (app, reg, relay, _, provider), TestClient(app) as web:
         old, token, key = paired(reg, tmp_path, now=clock.now - 1)
         active_poll(web, relay, old, token, key)
         event, replacement_key = clock.now, SigningKey.generate()
@@ -267,10 +274,9 @@ def test_different_owner_http_pair_starts_displaced_window(tmp_path, monkeypatch
             active_poll(web, relay, new, new_token, replacement_key)
 
 
-@pytest.mark.parametrize("public", [False, True])
-def test_same_owner_repair_inside_window_keeps_original_end(tmp_path, monkeypatch, public):
+def test_same_owner_repair_inside_window_keeps_original_end(tmp_path, monkeypatch):
     clock = Clock(monkeypatch)
-    with gateway(tmp_path, monkeypatch, public) as (app, reg, relay, _, provider), TestClient(app) as web:
+    with gateway(tmp_path, monkeypatch) as (app, reg, relay, _, provider), TestClient(app) as web:
         old, token, key = paired(reg, tmp_path, now=clock.now - 1)
         active_poll(web, relay, old, token, key)
         event = clock.now
@@ -296,74 +302,19 @@ def test_same_owner_repair_inside_window_keeps_original_end(tmp_path, monkeypatc
             active_poll(web, relay, new, new_token, replacement_key)
 
 
-@pytest.mark.parametrize("public", [False, True])
-def test_dispose_enabled_routes_closes_retained_window(tmp_path, monkeypatch, public):
+def test_dispose_enabled_routes_closes_retained_window(tmp_path, monkeypatch):
     clock = Clock(monkeypatch)
-    with gateway(tmp_path, monkeypatch, public) as (app, reg, _, _, provider), TestClient(app) as web:
-        device, token, _ = paired(reg, tmp_path, now=clock.now - 1)
+    with gateway(tmp_path, monkeypatch) as (app, reg, _, _, provider), TestClient(app) as web:
+        device, token, key = paired(reg, tmp_path, now=clock.now - 1)
         assert provider.routes.enabled
         reg.revoke(device.name, clock.now)
         clock.advance(3)
         assert provider.verify_token(token=token) is not None
-        assert web.get(FOREIGN, headers=headers(token)).status_code == 200
+        explicit(web.post(device_path("poll"), headers=headers(token), json=envelope(key, "poll", device.id, {})))
+        foreign_rejected(web, token)
         provider.routes.dispose()
         assert not provider.routes.enabled and provider.verify_token(token=token) is None
-        assert web.get(FOREIGN, headers=headers(token)).status_code == 401
-        assert web.get(FOREIGN, headers=headers(FOREIGN_TOKEN)).status_code == 200
-
-
-@pytest.mark.parametrize("public", [False, True])
-def test_gateway_clock_setback_reopens_only_inside_window(tmp_path, monkeypatch, public):
-    clock = Clock(monkeypatch)
-    with gateway(tmp_path, monkeypatch, public) as (app, reg, _, _, _), TestClient(app) as web:
-        device, token, _ = paired(reg, tmp_path, now=clock.now - 1)
-        assert web.get(FOREIGN, headers=headers(token)).status_code == 200
-        event = clock.now
-        reg.revoke(device.name, event)
-        for offset, status in ((5, 200), (10, 401), (5, 200), (-1, 401)):
-            clock.now = event + offset
-            assert web.get(FOREIGN, headers=headers(FOREIGN_TOKEN)).status_code == 200
-            assert web.get(FOREIGN, headers=headers(token)).status_code == status
-
-
-@pytest.mark.parametrize("public", [False, True])
-def test_foreign_gate_admits_only_live_unused_pairing_code(tmp_path, monkeypatch, public):
-    clock = Clock(monkeypatch)
-    with gateway(tmp_path, monkeypatch, public) as (app, reg, relay, _, provider), TestClient(app) as web:
-        key = SigningKey.generate()
-        code = reg.mint("pairing", clock.now)
-        assert web.get(FOREIGN).status_code == 401
-        assert provider.verify_token(token=code) is not None
-        assert web.get(FOREIGN, headers=headers(code)).status_code == 200
-        response = web.post(device_path("hello"), headers=headers(code),
-                            json=envelope(key, "hello", "pairing", hello(key, tmp_path, "pairing")))
-        assert response.status_code == 200
-        assert provider.verify_token(token=code) is None
-        assert web.get(FOREIGN, headers=headers(code)).status_code == 401
-        active_poll(web, relay, reg.active_device("pairing"), response.json()["token"], key)
-        key = SigningKey.generate()
-        code = reg.mint("pairing", clock.now)
-        assert web.get(FOREIGN, headers=headers(code)).status_code == 200
-        response = web.post(device_path("hello"), headers=headers(code),
-                            json=envelope(key, "hello", "pairing", hello(key, tmp_path, "pairing")))
-        assert response.status_code == 200
-        assert provider.verify_token(token=code) is None
-        assert web.get(FOREIGN, headers=headers(code)).status_code == 401
-        active_poll(web, relay, reg.active_device("pairing"), response.json()["token"], key)
-        stale = reg.mint("stale", clock.now)
-        fresh = reg.mint("stale", clock.now)
-        assert web.get(FOREIGN, headers=headers(stale)).status_code == 401
-        assert web.get(FOREIGN, headers=headers(fresh)).status_code == 200
-        reg.revoke("stale", clock.now)
-        assert web.get(FOREIGN, headers=headers(fresh)).status_code == 401
-        assert web.get(FOREIGN, headers=headers(reg.local_secret)).status_code == 200
-        expires = reg.mint("expiring", clock.now)
-        clock.advance(599)
-        assert web.get(FOREIGN, headers=headers(expires)).status_code == 200
-        clock.advance()
-        assert provider.verify_token(token=expires) is None
-        assert web.get(FOREIGN, headers=headers(expires)).status_code == 401
-        assert web.get(FOREIGN, headers=headers(FOREIGN_TOKEN)).status_code == 200
+        foreign_rejected(web, token)
 
 
 @pytest.mark.parametrize("kind", ["hello", "poll", "chunk", "result"])

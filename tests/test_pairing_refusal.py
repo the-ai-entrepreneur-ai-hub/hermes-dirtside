@@ -16,10 +16,13 @@ from test_routes import API, headers, hello
 @pytest.mark.parametrize("status,body,expected", [
     (400, {"detail": "invalid message"}, "invalid message"),
     (401, {"detail": "unknown device credential"}, "unknown device credential"),
+    (403, {"detail": "expired pairing code"}, "expired pairing code"),
     (400, "<html>private-code</html>", "Bad Request"),
     (400, {"detail": ["private-code"]}, "Bad Request"),
     (400, {"detail": "\x1b[31mrejected private-code\n" + "x" * 2000}, "rejected [redacted]"),
     (400, {"detail": "rejected pri\x1bvate-code"}, "rejected [redacted]"),
+    (401, {"detail": "rejected pri\x1bvate-code\n" + "x" * 2000}, "rejected [redacted]"),
+    (403, {"detail": "rejected private-code\n" + "x" * 2000}, "rejected [redacted]"),
 ])
 def test_pairing_refusal_is_bounded_and_redacted(tmp_path, monkeypatch, capsys, status, body, expected):
     original = httpx.Client
@@ -35,7 +38,13 @@ def test_pairing_refusal_is_bounded_and_redacted(tmp_path, monkeypatch, capsys, 
     output = capsys.readouterr().out
     assert f"HTTP {status}" in output and expected in output
     assert "private-code" not in output and "\x1b" not in output
-    assert len(output) < 700 and output.count("\n") == 1
+    assert len(output) < 700 and output.count("\n") == 1 + (status in {401, 403})
+    lines = output.splitlines()
+    assert lines[0].startswith("Dirtside: Pairing failed. Check the URL and mint a fresh pairing code. ")
+    assert lines[1:] == ([
+        "If the gateway lacks ctx.register_dashboard_token_route, upgrade Hermes to open Dirtside routes."
+    ] if status in {401, 403} else [])
+    assert all(len(line) < 700 and "private-code" not in line and "\x1b" not in line for line in lines)
     assert not (tmp_path / "dirtside/device.json").exists()
 
 

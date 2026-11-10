@@ -5,19 +5,17 @@ from contextlib import contextmanager
 
 from fastapi.testclient import TestClient
 from hermes_cli.dashboard_auth import TokenPrincipal, token_auth
-from hermes_cli.dashboard_auth.registry import (
-    register_global_provider, restore_registration, snapshot_registration,
-)
 from nacl.signing import SigningKey
 from network_support import SessionTokenProvider, mounted
-from test_review_token_routes import LegacyContext, PublicContext, register
+from route_support import plugin_context, register
 from test_routes import API, headers, hello
 
-from dirtside.auth import DEVICE_PATHS, LOCAL_PATHS
 from dirtside.protocol import canonical, parse_hello, sign
 
-FOREIGN = "/api/notice-foreign/action"
+FOREIGN = "/api/plugins/notice-foreign/action"
 FOREIGN_TOKEN = "foreign-notice-test-token"
+UNBOUND = "/api/notice-unbound/action"
+UNBOUND_TOKEN = "unbound-notice-test-token"
 
 
 class ForeignTokenProvider(SessionTokenProvider):
@@ -25,7 +23,7 @@ class ForeignTokenProvider(SessionTokenProvider):
     supports_token = True
 
     def verify_token(self, *, token):
-        return TokenPrincipal("foreign", self.name, ()) if self.verify_session(access_token=token) else None
+        return TokenPrincipal("foreign", self.name, ("foreign",)) if self.verify_session(access_token=token) else None
 
 
 class Clock:
@@ -38,26 +36,34 @@ class Clock:
 
 
 @contextmanager
-def gateway(root, monkeypatch, public=False):
-    ctx = PublicContext() if public else LegacyContext()
-    provider = register(ctx, root, monkeypatch)
-    if public:
-        # The fake seam records bindings; the released core gate stays unbound.
-        for path in DEVICE_PATHS + LOCAL_PATHS:
-            token_auth.register_token_route(path)
-    with mounted(root, gate=True, relay=provider.relay, provider=provider) as (app, registry, relay, module):
-        foreign = ForeignTokenProvider(token=FOREIGN_TOKEN)
-        previous = snapshot_registration(foreign.name)
-        register_global_provider(foreign)
-        token_auth.register_token_route(FOREIGN)
-        app.get(FOREIGN)(lambda: {"provider": "foreign"})
-        try:
-            with TestClient(app) as web:
-                assert web.get(FOREIGN).status_code == 401
-                assert web.get(FOREIGN, headers={"Authorization": "Bearer " + FOREIGN_TOKEN}).status_code == 200
-            yield app, registry, relay, module, provider
-        finally:
-            restore_registration(foreign.name, foreign, previous)
+def gateway(root, monkeypatch):
+    with plugin_context() as ctx:
+        provider = register(ctx, root, monkeypatch)
+        with mounted(root, gate=True, relay=provider.relay, provider=provider) as (app, registry, relay, module):
+            with plugin_context("notice-foreign") as foreign_ctx:
+                foreign = ForeignTokenProvider(token=FOREIGN_TOKEN)
+                assert foreign_ctx.register_dashboard_auth_provider(foreign) is not None
+                assert foreign_ctx.register_dashboard_token_route(
+                    FOREIGN, provider=foreign.name, required_scopes=("foreign",)) is not None
+                unbound = ForeignTokenProvider(token=UNBOUND_TOKEN)
+                unbound.name = "notice-unbound"
+                assert foreign_ctx.register_dashboard_auth_provider(unbound) is not None
+                token_auth.register_token_route(UNBOUND)
+                for path in (FOREIGN, UNBOUND):
+                    app.get(path)(lambda: {"provider": "foreign"})
+                with TestClient(app) as web:
+                    for path, token in ((FOREIGN, FOREIGN_TOKEN), (UNBOUND, UNBOUND_TOKEN)):
+                        assert web.get(path).status_code == 401
+                        assert web.get(path, headers={"Authorization": "Bearer " + token}).status_code == 200
+                yield app, registry, relay, module, provider
+
+
+def foreign_rejected(web, token):
+    for path, own in ((FOREIGN, FOREIGN_TOKEN), (UNBOUND, UNBOUND_TOKEN)):
+        response = web.get(path, headers=headers(token))
+        assert response.status_code == 401, response.text
+        assert response.json() == {"error": "unauthenticated", "detail": "Unauthorized"}
+        assert web.get(path, headers=headers(own)).status_code == 200
 
 
 def envelope(key, kind, sender, body, timestamp=None):

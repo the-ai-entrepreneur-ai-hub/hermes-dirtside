@@ -1,5 +1,7 @@
 # Tasks
 
+Historical record through acceptance on 2026-11-10. Current support and verification follow dirtside-seam-only-registration; earlier checked items do not claim new verification.
+
 ## 1. Core context and regression evidence
 
 - [x] 1.1 Reproduce the 38 release fixture failures, replace the fabricated context with the real common `SessionContext` constructor, and pass the unchanged assertions on all three cores.
@@ -39,7 +41,7 @@
 
 ## Verification record
 
-The checked items record source work and targeted checks, not final acceptance. Before every freeze, run ruff, measured size budgets, collect-only/count checks, `OPENSPEC_TELEMETRY=0 openspec validate --all --strict`, documentation citations, clean-export validation with exactly three private imports and `plugins doctor . --ci` on every core. Then save the source manifest and reconstructable cumulative checkpoints. The final short verification runs one full `"$HERMES_SRC/venv/bin/python" -m pytest -q` on the latest core and `tests/test_actor_targets.py` plus any other test file changed in this last pass once on each core. CI covers the pinned core and 0.23.1 on both runners. No new local pinned/release full suites, matrix, repeats or benchmark are required in this pass. If a later gate changes source, save the replacement manifest before further verification and identify it in the report. No verification report is bundled in this change.
+These checked tasks record the previous actor implementation through 2026-11-10, including its earlier three-core evidence and then-existing CI. They are historical, not seam-only verification. The seam-only change supersedes the old short verification plan, CI jobs and private-route inventory.
 
 ## 7. Exact empty-route exception and refusal classification
 

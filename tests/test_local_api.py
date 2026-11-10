@@ -52,7 +52,9 @@ def test_owner_uses_server_not_forwarded_host_and_rewrites_port(local_api, monke
         "Host": "external.invalid", "X-Forwarded-Host": "other.invalid"})
     assert response.status_code == 200
     assert not path.exists() and relay._owner_pid is None
-    assert client.post("/api/plugins/dirtside/device/poll", headers=headers(registry.local_secret)).status_code == 401
+    rejected = client.post("/api/plugins/dirtside/device/poll", headers=headers(registry.local_secret))
+    assert rejected.status_code == 403
+    assert rejected.json() == {"error": "insufficient_scope", "detail": "Forbidden"}
     assert not path.exists() and relay._owner_pid is None
     device, token, key = paired(registry, registry.path.parent)
     body = dict(id="r_" + "a" * 24, seq=0, data="")
@@ -79,12 +81,19 @@ def test_owner_uses_server_not_forwarded_host_and_rewrites_port(local_api, monke
 
 def test_local_secret_is_not_a_device_credential(local_api, tmp_path):
     client, registry, relay, _ = local_api
-    device, token, _ = paired(registry, tmp_path)
-    for value in ("", token, "wrong"):
+    device, token, key = paired(registry, tmp_path)
+    for value in ("", "wrong"):
         assert client.get(PREFIX + "/devices", headers=headers(value)).status_code == 401
-    assert client.post("/api/plugins/dirtside/device/poll", headers=headers(registry.local_secret),
-                       content=b"{").status_code == 401
+    for response in (client.get(PREFIX + "/devices", headers=headers(token)),
+                     client.post("/api/plugins/dirtside/device/poll", headers=headers(registry.local_secret),
+                                 content=b"{")):
+        assert response.status_code == 403
+        assert response.json() == {"error": "insufficient_scope", "detail": "Forbidden"}
     assert not relay.is_online(device.id)
+    assert client.get(PREFIX + "/devices", headers=headers(registry.local_secret)).status_code == 200
+    relay.cancels[device.id].add("r_" + "ab" * 12)
+    assert client.post("/api/plugins/dirtside/device/poll", headers=headers(token),
+                       json=sign(key, "poll", device.id, {"running": []})).status_code == 200
 
 @pytest.mark.parametrize("peer", ["10.0.0.1", "::ffff:10.0.0.1", "testclient"])
 def test_non_loopback_cannot_use_a_valid_secret(local_api, peer):

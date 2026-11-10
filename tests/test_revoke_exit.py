@@ -211,12 +211,11 @@ def test_revoke_between_lookup_and_verification_does_not_dispatch(routes, tmp_pa
         handle.stdout.close()
 
 
-@pytest.mark.parametrize("public", [False, True])
 @pytest.mark.parametrize("replaced", [False, True])
-def test_retired_bearer_never_grants_local_or_dashboard_authority(tmp_path, monkeypatch, public, replaced, clock):
-    with gateway(tmp_path, monkeypatch, public) as (app, registry, _, _, _):
+def test_retired_bearer_never_grants_local_or_dashboard_authority(tmp_path, monkeypatch, replaced, clock):
+    with gateway(tmp_path, monkeypatch) as (app, registry, _, _, _):
         with TestClient(app, client=("127.0.0.1", 10)) as client:
-            device, token, _ = paired(registry, tmp_path, now=int(time.time()))
+            device, token, key = paired(registry, tmp_path, now=int(time.time()))
             other, _, _ = paired(registry, tmp_path, name="other", now=int(time.time()))
             assert client.get(API + "/local/devices", headers=headers(registry.local_secret)).status_code == 200
             assert client.get(API + "/devices", headers=headers(DESKTOP_TOKEN)).status_code == 200
@@ -231,7 +230,16 @@ def test_retired_bearer_never_grants_local_or_dashboard_authority(tmp_path, monk
                                  ("POST", "/devices/other/revoke"), ("POST", "/local/devices")):
                 payload = {"device_id": other.id} if path == "/local/devices" else {"name": "other"}
                 generic(client.request(method, API + path, json=payload))
-                generic(client.request(method, API + path, headers=headers(token), json=payload))
+                response = client.request(method, API + path, headers=headers(token), json=payload)
+                if path.startswith("/local/"):
+                    assert response.status_code == 403
+                    assert response.json() == {"error": "insufficient_scope", "detail": "Forbidden"}
+                else:
+                    generic(response)
+            explicit(client.post(device_path("poll"), headers=headers(token),
+                                 json=sign(key, "poll", device.id, {})))
+            assert client.get(API + "/local/devices", headers=headers(registry.local_secret)).status_code == 200
+            assert client.get(API + "/devices", headers=headers(DESKTOP_TOKEN)).status_code == 200
             assert registry.recent(10) == [] and registry.active_device("other") == other
 
 

@@ -25,10 +25,10 @@ Only HTTP 401 with exact body `{"detail":"device revoked"}` SHALL stop the agent
 
 #### Scenario: test_real_poll_loop_stops_between_polls_only_inside_window
 - **WHEN** a revoked or replaced device returns
-- **THEN** every qualifying signed request inside the ten-second window from the credential's first revoke or replacement, measured on the gateway's clock in whole seconds, receives the stop answer under either registration API
+- **THEN** every qualifying signed request inside the ten-second window from the credential's first revoke or replacement, measured on the gateway's clock in whole seconds, receives the stop answer through the public method
 - **AND** offline or backed-off devices missing the window retry until manually stopped; pre-version replacements were not retained
 - **AND** pairing an already revoked name never starts another window for its old credential
-- **AND** inside the window the bearer still passes other plugins' released core token gates but authorizes nothing inside Dirtside
+- **AND** foreign bound routes refuse it, legacy unbound routes skip Dirtside while it has a bound policy, and it has no active authority inside Dirtside
 
 #### Scenario: test_independent_device_clock_gets_notice
 - **WHEN** a device signs in the revoke second or its clock is 60 seconds behind or ahead

@@ -51,6 +51,7 @@ def install(home, backend="dirtside", user_home=None, token=None, public_url=Non
            and not k.startswith(("TERMINAL_", "HERMES_", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"))}
     env.update(HERMES_HOME=str(home), HOME=str(user_home), TMPDIR=str(home / "tmp"),
                HERMES_RUNTIME_DIR=str(home / "runtime"), TERMINAL_TEMP_DIR=str(home / "tmp"),
+               HERMES_SRC=str(CORE),
                PYTHONPATH=os.pathsep.join((str(CORE), str(ROOT), str(ROOT / "tools"))),
                PYTHONDONTWRITEBYTECODE="1", NO_PROXY="127.0.0.1,localhost",
                HERMES_DASHBOARD_SESSION_TOKEN=token or secrets.token_urlsafe(32))

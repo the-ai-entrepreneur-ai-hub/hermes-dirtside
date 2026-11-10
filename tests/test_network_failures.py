@@ -127,6 +127,7 @@ def test_subprocess_gateway_restart_rejects_old_work_and_reuses_pairing(tmp_path
                 try:
                     until(lambda: old_relay.tail(handle.req.id))
                     reg.mark_stale_lost(int(time.time()))
+                    old_module.auth.routes.dispose()
                     with mounted(tmp_path, relay=Relay(reg)) as (new_app, _, new_relay, new_module):
                         rejected, polls = [], []
 

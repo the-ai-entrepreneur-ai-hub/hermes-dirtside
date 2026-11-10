@@ -45,9 +45,11 @@ class Commands:
         except NoSingleSenderError as exc:
             return f"No device applies to a turn without a sender. {exc}"
         except EnvironmentConnectionError:
-            name = "an unpaired device"
-        else:
-            name = self.label(target.device) if isinstance(target, OnDevice) else "server"
+            target = None
+        if self.access.may_pair() and (reason := getattr(self.relay, "_routes_reason", lambda: "")()):
+            return reason
+        name = self.label(target.device) if isinstance(target, OnDevice) else (
+            "an unpaired device" if target is None else "server")
         online = ", ".join(d.name for d in self.visible() if self.relay.connection().is_online(d.id)) or "none"
         return f"This conversation targets {name}. Online devices: {online}. Sender: {self.access.identity() or 'unknown'}."
 
@@ -85,6 +87,8 @@ class Commands:
     def pair(self, name):
         if not self.access.may_pair() or not self.access.name_allowed(self.registry, name):
             return "Pairing is unavailable for this sender."
+        if reason := getattr(self.relay, "_routes_reason", lambda: "")():
+            return reason
         sender = self.access.identity()
         code = self.registry.mint(name, int(time.time()), owner=sender, privileged=self.access.privileged(sender))
         return (f"Pairing code {code} expires in 10 minutes. Without Hermes run: "

@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from hermes_cli.dashboard_auth import token_auth
 from network_support import mounted
+from dirtside.auth import DEVICE_PATHS, LOCAL_PATHS
 
 from dirtside.client import Client, OWNER_MISSING
 from dirtside.model import CHUNK_BYTES
@@ -56,6 +57,8 @@ def test_fixed_query_paths_do_not_grow_token_exemptions(tmp_path):
         with TestClient(app, client=("127.0.0.1", 12)) as client:
             auth = headers(registry.local_secret)
             before = set(token_auth._token_routes)
+            policies = dict(token_auth._token_route_policies)
+            assert set(policies) == set(DEVICE_PATHS + LOCAL_PATHS)
             for n in range(10):
                 req = request(device, n=n + 1)
                 assert client.post(PREFIX + "/exec", headers=auth, json=asdict(req)).status_code == 200
@@ -63,6 +66,7 @@ def test_fixed_query_paths_do_not_grow_token_exemptions(tmp_path):
                     "cancelled": True}
                 assert client.get(PREFIX + "/stream", params={"id": req.id}, headers=auth).status_code == 200
             assert token_auth._token_routes == before
+            assert token_auth._token_route_policies == policies
             for id in ("../bad", "r_" + "a" * 25, "", "r_" + "A" * 24):
                 assert client.get(PREFIX + "/stream", params={"id": id}, headers=auth).status_code == 400
                 assert client.post(PREFIX + "/kill", params={"id": id}, headers=auth, json={}).status_code == 400

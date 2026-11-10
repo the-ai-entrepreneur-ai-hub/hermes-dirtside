@@ -224,6 +224,43 @@ class Runtime:
         with relay._condition:
             return args["request_id"] in relay.handles and args["request_id"] not in relay._streams
 
+    def registration(self, args):
+        from hermes_cli.dashboard_auth import get_provider
+        from hermes_cli.plugins import PluginContext, PluginManager
+        from pathlib import Path
+        previous = self.auth
+        manifest = self.manager._plugins["dirtside"].manifest
+        if args["action"] == "profile":
+            import shutil
+            assert shutil.disk_usage(self.manager.home_path).free >= 8 * 1024 ** 3
+            profile = Path(self.manager.home_path) / "profiles/registration-control"
+            profile.mkdir(parents=True)
+            manager = PluginManager(scope_key=str(profile))
+            try:
+                manager._load_plugin(manifest)
+                loaded = manager._plugins["dirtside"]
+                assert loaded.enabled and not loaded.error, loaded.error
+                ctx = PluginContext(manifest, manager)
+                assert ctx.register_dashboard_auth_provider(previous) is None
+                assert ctx.register_dashboard_token_route(
+                    "/api/plugins/dirtside/device/pair", provider="dirtside", required_scopes=("dirtside",)) is None
+                assert get_provider("dirtside") is previous and previous.routes.enabled
+                assert not previous.routes.reason and all(handle.active for handle in previous.routes.registrations)
+            finally:
+                manager.unload()
+            assert get_provider("dirtside") is previous
+        elif args["action"] == "duplicate":
+            self.manager._load_plugin(manifest)
+            loaded = self.manager._plugins["dirtside"]
+            assert loaded.enabled and not loaded.error, loaded.error
+        else:
+            self.manager.discover_and_load(force=True)
+        self.auth = get_provider("dirtside")
+        return dict(enabled=self.auth.routes.enabled, reason=self.auth.routes.reason,
+                    replaced=self.auth is not previous, old_enabled=previous.routes.enabled,
+                    registrations=len(self.auth.routes.registrations),
+                    all_active=all(handle.active for handle in self.auth.routes.registrations))
+
     def actor_sequence(self, args):
         from actor_context import sequence
         return sequence(self, args)
@@ -260,7 +297,7 @@ class Runtime:
             handlers = {name: getattr(self, name) for name in (
                 "info", "target", "state", "turn_end", "reap", "terminal", "file",
                 "queue", "cancel", "interrupt", "network", "slash", "prompt", "fake_device", "reload", "generation",
-                "stream_attached", "turn_facts", "actor_sequence", "actor_loop")}
+                "stream_attached", "turn_facts", "actor_sequence", "actor_loop", "registration")}
             return handlers[message["method"]](args)
         finally:
             set_interrupt(False)

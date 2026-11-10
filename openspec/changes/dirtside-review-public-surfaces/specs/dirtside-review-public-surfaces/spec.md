@@ -1,11 +1,15 @@
+## Purpose
+
+Current runtime requirements use the method core and two read-only environment imports. The Correction 2, 3, 4 and 6 verification clauses preserve historical evidence through acceptance on 2026-11-10, not instructions to rerun earlier cores for this version. Current acceptance follows dirtside-seam-only-registration.
+
 ## ADDED Requirements
 
 ### Requirement: Exact transitional surface
-Core's private-import lint on a clean export MUST report exactly one token_auth fallback, one LocalEnvironment fallback and one EnvironmentConnectionError import.
+Core's private-import lint on a clean export MUST report exactly one read-only LocalEnvironment import and one EnvironmentConnectionError import, with no private token-route import.
 
 #### Scenario: test_private_imports_are_exact_transitional_set
-- **WHEN** either core validates the exported plugin tree
-- **THEN** only the three disclosed transitional sites are found
+- **WHEN** the method core validates the exported plugin tree
+- **THEN** only the two read-only environment sites are found and the install scan is safe with an allowed decision
 
 ### Requirement: Honest development layout
 Non-runtime modules importing core internals MUST live under tests and documented commands MUST remain runnable.
@@ -33,7 +37,7 @@ README MUST state what the frozen target section reveals and that server executi
 - **THEN** the temporary local secret permits local IPC and README points to core approvals and allowlists rather than claiming isolation
 
 ### Requirement: Correction 2 verification evidence
-Correction 2 MUST record behavioral red/green evidence, both full core suites, pinned fast, static checks, strict OpenSpec, both doctors and clean native validators with exactly three private import sites, matrix 8/8, strict benchmark and five serial repeats of the C1/C2 changed test-file union.
+The historical Correction 2 record MUST preserve its behavioral red/green evidence, earlier core suites, then-current three-site import inventory, matrix, benchmark and five correction-file rounds without claiming those outputs verify the seam-only source.
 
 #### Scenario: correction_2_final_gates
 - **WHEN** the final intended source is verified
@@ -47,8 +51,8 @@ Correction 3 MUST prove native CLI/TUI local identity red and green on both prep
 - **THEN** its bash loop is stopped by the test teardown and no descendant remains
 
 #### Scenario: correction_3_final_gates
-- **WHEN** the final intended source is checked
-- **THEN** the report includes exact red/green and final-gate outputs, both-core admission with three private sites, inventories since C2 and WP5, reconstructed C3 checkpoints and an explicit optional-optimization decision
+- **WHEN** the historical Correction 3 record is read
+- **THEN** its exact earlier outputs, then-current import inventory, inventories since C2 and WP5, reconstructed checkpoints and optional-optimization decision remain attributed to that source
 
 ### Requirement: Accurate correction 4 operator guidance
 README and architecture MUST disclose actual core login authority, unsupported Windows host subjects, safe pairing syntax and gateway-side file-path resolution. Core citations MUST NOT resemble repository-local file-and-line references.
@@ -58,8 +62,8 @@ README and architecture MUST disclose actual core login authority, unsupported W
 - **THEN** dashboard/Webapp/forwarded sign-ins act as host, Windows SID host support is absent, pairing uses the equals form and the file-path limit is stated
 
 #### Scenario: test_core_citations_do_not_look_repository_local
-- **WHEN** all repository markdown is checked and the unchanged owner citation checker runs
-- **THEN** core citations use explicit core filenames and prose line references, and the actual checker passes
+- **WHEN** repository markdown is read
+- **THEN** core citations use explicit core filenames and prose line references
 
 ### Requirement: Correction 4 verification evidence
 Correction 4 MUST retain red/green evidence, all prior final gates, five whole-file correction rounds and 20 serial loaded client reload cases on each prepared core, with no owned process left running.
@@ -117,7 +121,7 @@ Automatic revocation shutdown MUST work without an admitted poll during the ten-
 - **WHEN** a name is paired after it was already revoked
 - **THEN** its old credential keeps the time of its first revoke or replacement and re-pairing never starts a new window
 - **AND** pre-version replacement credentials were not retained and need manual shutdown
-- **AND** inside the window the bearer authorizes nothing inside Dirtside but still passes other plugins' released core token gates
+- **AND** foreign bound routes refuse the bearer, legacy unbound routes skip Dirtside while it has a bound policy, and it has no active authority inside Dirtside
 - **AND** invalid proof never receives the explicit stop answer; bad retained proof and unknown bearers have different generic bodies
 
 #### Scenario: test_restart_keeps_window_and_resets_replay_guard

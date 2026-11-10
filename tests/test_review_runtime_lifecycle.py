@@ -13,6 +13,7 @@ from hermes_cli.dashboard_auth.registry import (
 )
 from nacl.signing import SigningKey
 from network_support import mounted
+from route_support import plugin_context, register
 
 from dirtside.auth import DirtsideDeviceAuth
 from dirtside.protocol import sign
@@ -20,8 +21,37 @@ from dirtside.registry import Registry
 from dirtside.relay import Relay
 from test_registry import paired, request
 from test_review_name_safety import pair_as
-from test_review_token_routes import LegacyContext, PublicContext, register
 from test_routes import API, headers, hello
+
+
+@pytest.mark.parametrize("action", ["reload", "duplicate", "profile"])
+def test_real_loader_registration_keeps_launch_routes_and_status_working(tmp_path, action):
+    with Rig(tmp_path / "rig") as rig:
+        rig.pair().start_agent().choose()
+        before = rig.core.http("GET", "/devices").json()
+        assert rig.core.terminal("printf before")["output"] == "before"
+        result = rig.core.call("registration", action=action)
+        assert result["enabled"] and result["reason"] == "", result
+        assert result["registrations"] == 9 and result["all_active"], result
+        assert result["replaced"] is (action == "reload"), result
+        assert result["old_enabled"] is (action != "reload"), result
+        status = rig.core.call("slash", raw_args="")
+        assert "disabled" not in status and rig.name in status, status
+        assert rig.core.http("GET", "/devices").json()[0]["id"] == before[0]["id"]
+        secret = Path(rig.core.info["registry"]).with_name("local.secret").read_text()
+        assert rig.core.http("GET", "/local/devices", authenticated=False,
+                             headers=headers(secret)).status_code == 200
+        key = SigningKey(bytes.fromhex(rig.config["key"]))
+        poll = rig.core.http("POST", "/device/poll", authenticated=False,
+                             headers=headers(rig.config["token"]),
+                             json=sign(key, "poll", rig.config["device_id"], {"running": ["r_" + "ab" * 12]}))
+        assert poll.status_code == 200, poll.text
+        assert rig.core.terminal("printf after")["output"] == "after"
+        assert rig.agent.poll() is None
+        if action == "duplicate":
+            result = rig.core.call("reload")
+            assert result == {"replaced": True, "old_enabled": False, "enabled": True}
+            assert rig.core.terminal("printf reloaded")["output"] == "reloaded"
 
 
 @pytest.mark.parametrize("marker", [None, 0, "1"])
@@ -35,51 +65,54 @@ def test_upgrade_from_unmarked_provider_starts_fresh_runtime(tmp_path, monkeypat
     previous = snapshot_registration("dirtside")
     register_global_provider(old)
     try:
-        current = register(PublicContext(), tmp_path, monkeypatch)
-        assert current.routes.enabled and current.runtime_version == 2
-        assert current.registry.path == old.registry.path
-        assert current.relay is not old.relay
-        assert current.environment_provider._relay is current.relay
-        assert callable(current.tool_execution)
+        with plugin_context() as ctx:
+            current = register(ctx, tmp_path, monkeypatch)
+            assert current.routes.enabled and current.runtime_version == 2
+            assert current.registry.path == old.registry.path
+            assert current.relay is not old.relay
+            assert current.environment_provider._relay is current.relay
+            assert callable(current.tool_execution)
     finally:
         restore_registration("dirtside", old, previous)
 
 
 @pytest.mark.parametrize("version", [1, 2])
 def test_reload_refreshes_v1_lookup_and_keeps_v2_runtime(tmp_path, monkeypatch, version):
-    old = register(LegacyContext(), tmp_path, monkeypatch)
-    device, token, key = paired(old.registry, tmp_path, now=int(time.time()))
-    with mounted(tmp_path, relay=old.relay, provider=old) as (app, *_), TestClient(app) as web:
-        def poll():
-            return web.post(API + "/device/poll", headers=headers(token),
-                            json=sign(key, "poll", device.id, {"running": ["r_" + "ab" * 12]}))
-        assert web.post(API + "/device/poll", json={}).status_code == 401
-        assert poll().status_code == 200
-        original = old.registry
-        if version == 1:
-            class PriorRegistry:
-                path = original.path
-                def __getattr__(self, name):
-                    return getattr(original, name)
-                def credential_for(self, token, now):
-                    return original.credential_for(token, now)
-            old.registry = PriorRegistry()
-        old.runtime_version = version
-        current = register(LegacyContext(), tmp_path, monkeypatch)
-        register_global_provider(current)
-        old.routes.dispose()
-        assert poll().status_code == 200
-        assert current.routes.enabled and current.runtime_version == 2
-        assert (current.registry is original) is (version == 2)
-        assert (current.relay is old.relay) is (version == 2)
+    with plugin_context() as ctx:
+        old = register(ctx, tmp_path, monkeypatch)
+        device, token, key = paired(old.registry, tmp_path, now=int(time.time()))
+        with mounted(tmp_path, relay=old.relay, provider=old) as (app, *_), TestClient(app) as web:
+            def poll():
+                return web.post(API + "/device/poll", headers=headers(token),
+                                json=sign(key, "poll", device.id, {"running": ["r_" + "ab" * 12]}))
+            assert web.post(API + "/device/poll", json={}).status_code == 401
+            assert poll().status_code == 200
+            original = old.registry
+            if version == 1:
+                class PriorRegistry:
+                    path = original.path
+                    def __getattr__(self, name):
+                        return getattr(original, name)
+                    def credential_for(self, token, now):
+                        return original.credential_for(token, now)
+                old.registry = PriorRegistry()
+            old.runtime_version = version
+            ctx._manager.unload()
+            current = register(ctx, tmp_path, monkeypatch)
+            old.routes.dispose()
+            assert poll().status_code == 200
+            assert current.routes.enabled and current.runtime_version == 2
+            assert (current.registry is original) is (version == 2)
+            assert (current.relay is old.relay) is (version == 2)
 
 
 def test_unloaded_owner_relay_uses_client_not_retired_queue(tmp_path, monkeypatch):
-    provider = register(PublicContext(), tmp_path, monkeypatch)
-    provider.relay._owner_pid = os.getpid()
-    assert provider.relay.connection() is provider.relay
-    provider.routes.dispose()
-    assert provider.relay.connection() is provider.relay._client
+    with plugin_context() as ctx:
+        provider = register(ctx, tmp_path, monkeypatch)
+        provider.relay._owner_pid = os.getpid()
+        assert provider.relay.connection() is provider.relay
+        provider.routes.dispose()
+        assert provider.relay.connection() is provider.relay._client
 
 
 @pytest.mark.parametrize("transport", ["in-process", "client"])
@@ -95,7 +128,8 @@ def test_cached_conversation_survives_disable_enable(tmp_path, transport):
         rejected = rig.core.http("POST", "/device/poll", authenticated=False,
                                  headers=headers(rig.config["token"]), json={})
         assert rejected.status_code == 401
-        assert rejected.json() == {"error": "unauthenticated", "detail": "Unauthorized"}
+        assert rejected.json() == {"error": "session_expired", "detail": "Unauthorized",
+                                   "reason": "invalid_or_expired_session", "login_url": "/login"}
         activity = rig.device_home / "dirtside" / "agent.log"
         until(lambda: any('"event": "poll-error"' in line or '"event": "revoked"' in line
                           for line in activity.read_text().splitlines()

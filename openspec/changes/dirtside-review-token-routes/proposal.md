@@ -2,7 +2,7 @@
 
 ## Why
 
-Use the requested public seam when core offers it and fail closed if registration is refused.
+Use only the public context method and fail closed if it is missing or registration cannot succeed. The seam-only change supersedes the original fallback design.
 
 Review point, verbatim (2026-11-08):
 
@@ -12,8 +12,8 @@ Review point, verbatim (2026-11-08):
 
 - Add tests/test_review_token_routes.py with exact seam calls, forbidden fallback, unload disposal, mid-registration failure and None refusal.
 - Run the new file against pristine 0ae9359, keeping the red log.
-- Implement lazy fallback, instance-owned fail-closed gate, rollback and unload; pass ctx from registration.
-- Test device/local cross-credentials with seam and fallback, gate on and off; run released-core real flows.
+- Register only through the public method, with an instance-owned fail-closed gate, rollback and unload; pass ctx from registration.
+- Test device/local cross-credentials through the real bound gate, with gate-on and gate-off controls.
 - Run package and fast suites, record green output and exact budget changes, then save WP4 checkpoints.
 
 ## Capabilities
@@ -44,6 +44,6 @@ Preserve client execution and stream attachment through the short disposed/new-d
 
 Retain paired credentials for proof-first revocation on every signed route, even when no poll is open. Keep active registry authority separate and preserve same-owner ids by archiving old keys and token hashes with their first revoke time, or replacement time if active. Pairing an already revoked name never starts a new window for its old credential. Keep the agent's exact-body rule and real signed HTTP, subprocess, upload, invalid/replay, restart and replacement checks.
 
-Recognize retained credentials only with routes enabled and inside the ten-second window from the credential's first revoke or replacement, under either registration API. The window follows the gateway's clock in whole seconds, so it lasts 9 to 10 seconds. Setting that clock back into the window reopens it, and setting it forward closes it early. Every qualifying signed request inside the window receives the stop, including retries after a lost answer or parked poll. Devices offline or backing off beyond the window keep retrying until manually stopped. A retained principal authorizes nothing inside Dirtside, but inside those ten seconds still passes other plugins' released core token gates, as active bearers already do.
+Recognize retained credentials only with routes enabled and inside the ten-second window from the credential's first revoke or replacement. The window follows the gateway's clock in whole seconds, so it lasts 9 to 10 seconds. Setting that clock back into the window reopens it, and setting it forward closes it early. Every qualifying signed request inside the window receives the stop, including retries after a lost answer or parked poll. Devices offline or backing off beyond the window keep retrying until manually stopped. A retained principal authorizes nothing inside Dirtside or on foreign bound routes. Legacy unbound routes skip Dirtside while it has a bound policy. A longer window is possible on the bound gate and is outside this change.
 
 Invalid proof never receives the explicit stop answer; bad retained proof and unknown bearers have different generic bodies inside the window. Restart empties the replay cache, so a captured message younger than 300 seconds can be replayed and receive the stop. Credentials replaced before this version were not retained and need manual shutdown. Use core's own generic rejection for the late-device control. Runtime version 2 refreshes Registry and Relay when the previous provider is version 1, and preserves a same-path version 2 runtime.

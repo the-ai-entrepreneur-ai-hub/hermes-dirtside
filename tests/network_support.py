@@ -6,9 +6,8 @@ import sys
 import tempfile
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import uvicorn
 from fastapi import FastAPI
@@ -20,6 +19,7 @@ from hermes_cli.dashboard_auth.registry import (
 from hermes_cli.dashboard_auth.token_auth import token_auth_middleware
 from hermes_cli.web_server_dashboard import _discover_dashboard_plugins, _mount_one_plugin_api
 from plugins.dashboard_auth.session_token import SessionTokenProvider
+from route_support import plugin_context
 
 from dirtside.auth import DirtsideDeviceAuth, register_device_routes
 from dirtside.registry import Registry
@@ -84,37 +84,40 @@ def mounted(root, gate=True, relay=None, provider=None):
     relay = relay or Relay(registry)
     providers = [provider or DirtsideDeviceAuth(registry, relay), SessionTokenProvider(token=DESKTOP_TOKEN)]
     previous = [(p, snapshot_registration(p.name)) for p in providers]
-    for registered in providers:
-        register_global_provider(registered)
-    if provider is None:
-        providers[0].routes = register_device_routes(SimpleNamespace(on_unload=lambda callback: None))
-    app = FastAPI()
-    app.state.auth_required = gate
-    app.state.dirtside_relay = relay
-    app.middleware("http")(gated_auth_middleware)
-    app.middleware("http")(token_auth_middleware)
-    # The review checkout can sit beside another plugin with the same name.
-    with tempfile.TemporaryDirectory(prefix="dirtside-discovery-") as isolated:
-        (Path(isolated) / "dirtside").symlink_to(ROOT, target_is_directory=True)
-        plugins = _discover_dashboard_plugins([(Path(isolated), "user")])
-        for plugin in plugins:
-            plugin["_dir"] = str(Path(plugin["_dir"]).resolve())
-    entry = next(p for p in plugins if p["name"] == "dirtside")
-    assert Path(entry["_dir"]) == ROOT / "dashboard"
-    assert _mount_one_plugin_api(app, entry, {"dirtside"}, set())
-    module = sys.modules["hermes_dashboard_plugin_dirtside"]
-    try:
-        yield app, registry, relay, module
-    finally:
-        for device in registry.devices():
-            relay.revoke(device.id)
-        module.POLL_POOL.shutdown(wait=True)
-        module.FEED_POOL.shutdown(wait=True)
-        routes = getattr(providers[0], "routes", None)
-        if routes is not None:
-            routes.dispose()
-        for provider, old in previous:
-            restore_registration(provider.name, provider, old)
+    with ExitStack() as owned:
+        for registered, old in previous:
+            owned.callback(restore_registration, registered.name, registered, old)
+        if provider is None:
+            ctx = owned.enter_context(plugin_context())
+            assert ctx.register_dashboard_auth_provider(providers[0]) is not None
+            providers[0].routes = register_device_routes(ctx)
+            assert providers[0].routes.enabled, providers[0].routes.reason
+        else:
+            register_global_provider(providers[0])
+        register_global_provider(providers[1])
+        app = FastAPI()
+        app.state.auth_required = gate
+        app.state.dirtside_relay = relay
+        app.middleware("http")(gated_auth_middleware)
+        app.middleware("http")(token_auth_middleware)
+        # The review checkout can sit beside another plugin with the same name.
+        with tempfile.TemporaryDirectory(prefix="dirtside-discovery-") as isolated:
+            (Path(isolated) / "dirtside").symlink_to(ROOT, target_is_directory=True)
+            plugins = _discover_dashboard_plugins([(Path(isolated), "user")])
+            for plugin in plugins:
+                plugin["_dir"] = str(Path(plugin["_dir"]).resolve())
+        entry = next(p for p in plugins if p["name"] == "dirtside")
+        assert Path(entry["_dir"]) == ROOT / "dashboard"
+        assert _mount_one_plugin_api(app, entry, {"dirtside"}, set())
+        module = sys.modules["hermes_dashboard_plugin_dirtside"]
+        try:
+            yield app, registry, relay, module
+        finally:
+            for device in registry.devices():
+                relay.revoke(device.id)
+            module.POLL_POOL.shutdown(wait=True)
+            module.FEED_POOL.shutdown(wait=True)
+            providers[0].routes.dispose()
 
 
 @contextmanager

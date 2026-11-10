@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 from core_rig import Core, Rig, until
 from fastapi.testclient import TestClient
-from hermes_cli.dashboard_auth.registry import register_global_provider
 from nacl.signing import SigningKey, VerifyKey
 from network_support import mounted
+from route_support import plugin_context, record_routes, register
 
 from dirtside.protocol import sign, verify
 from test_review_device_owners_core import as_user, owned_pair
-from test_review_token_routes import PublicContext, credentials, endpoints, register, request, stale_outer_routes
+from test_review_token_routes import credentials, endpoints, request, stale_outer_routes
 
 
 def device_and_local_calls(rig):
@@ -77,26 +77,25 @@ def test_disabled_then_reenabled_plugin_reuses_mounted_router(tmp_path):
 
 @pytest.mark.parametrize("gate", [False, True])
 def test_mounted_router_uses_replacement_registry_and_refuses_failed_instance(tmp_path, monkeypatch, gate):
-    stale_outer_routes()
-    first = register(PublicContext(), tmp_path / "first", monkeypatch)
-    old_creds, _ = credentials(first, tmp_path)
-    with mounted(tmp_path, gate=gate, relay=first.relay, provider=first) as (app, *_):
-        try:
+    with plugin_context() as ctx:
+        stale_outer_routes()
+        first = register(ctx, tmp_path / "first", monkeypatch)
+        old_creds, _ = credentials(first, tmp_path)
+        with mounted(tmp_path, gate=gate, relay=first.relay, provider=first) as (app, *_):
             with TestClient(app, client=("127.0.0.1", 10)) as web:
                 assert request(web, "GET", "/api/plugins/dirtside/local/devices", old_creds["local"]).status_code == 200
-                second = register(PublicContext(), tmp_path / "second", monkeypatch)
+                ctx._manager.unload()
+                second = register(ctx, tmp_path / "second", monkeypatch)
                 new_creds, _ = credentials(second, tmp_path)
-                register_global_provider(second)
                 first.routes.dispose()
                 assert request(web, "GET", "/api/plugins/dirtside/local/devices", new_creds["local"]).status_code == 200
                 assert request(web, "GET", "/api/plugins/dirtside/local/devices", old_creds["local"]).status_code == 401
-                bad = register(PublicContext(3, "none"), tmp_path / "bad", monkeypatch)
+                ctx._manager.unload()
+                record_routes(ctx, monkeypatch, 3, "none")
+                bad = register(ctx, tmp_path / "bad", monkeypatch)
                 bad_creds, _ = credentials(bad, tmp_path)
-                register_global_provider(bad)
                 for path, method, kind in endpoints():
                     assert request(web, method, path, bad_creds[kind]).status_code == 401
-        finally:
-            register_global_provider(first)
 
 
 def test_frozen_group_prompt_disclosure_matches_core(tmp_path):

@@ -21,6 +21,8 @@ def register(ctx):
     default = ctx.get_config("default_target", "server") or "server"
     previous = get_provider("dirtside")
     compatible = getattr(previous, "runtime_version", None) == 2 and previous.registry.path == path
+    if compatible and previous.routes.enabled:
+        return
     if compatible:
         registry, relay, provider, tool_execution = (
             previous.registry, previous.relay, previous.environment_provider, previous.tool_execution)
@@ -43,6 +45,7 @@ def register(ctx):
     if ctx.register_dashboard_auth_provider(auth) is not None:
         auth.routes = register_device_routes(ctx)
     relay._routes_enabled = lambda: auth.routes.enabled
+    relay._routes_reason = lambda: auth.routes.reason
     ctx.register_cli_command("dirtside", "Pair and run a personal device", setup_parser, handle)
     ctx.register_hook("pre_llm_call", TargetAwareness(registry, relay, default, access))
     commands = Commands(ctx, registry, relay, default, access)

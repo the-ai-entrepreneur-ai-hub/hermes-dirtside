@@ -1,5 +1,7 @@
 # Tasks
 
+Historical checks through acceptance on 2026-11-10. Their core pins, import counts and measurements belong to those earlier sources. Current acceptance follows dirtside-seam-only-registration.
+
 ## 1. Regression tests
 
 - [x] 1.1 Add tests/test_public_surfaces.py using core private_import_findings and a clean git-tracked/current intended export.

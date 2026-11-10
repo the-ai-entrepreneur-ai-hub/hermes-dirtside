@@ -1,9 +1,10 @@
-name: Day-1 gate
+name: Token-route gate
 on: [push, pull_request]
 permissions:
   contents: read
 jobs:
   gate:
+    name: Method core (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -24,8 +25,11 @@ jobs:
           HERMES_SRC="$RUNNER_TEMP/hermes-agent"
           git init "$HERMES_SRC"
           git -C "$HERMES_SRC" remote add origin https://github.com/NousResearch/hermes-agent
-          git -C "$HERMES_SRC" fetch --depth=1 origin 84a0301415edd6d1385207ec96e4d7f2b6c1fcd9
+          git -C "$HERMES_SRC" fetch --depth=1 origin 3b421578588243f920886e6fe79a6faa87ea026e
           git -C "$HERMES_SRC" checkout --detach FETCH_HEAD
+          curl -fL --retry 3 --output "$RUNNER_TEMP/token-routes.patch" \
+            https://github.com/the-ai-entrepreneur-ai-hub/hermes-agent/commit/7dce8c38e8c998c52c4c139df340a0bffecc77e6.patch
+          git -C "$HERMES_SRC" apply --exclude='website/*' "$RUNNER_TEMP/token-routes.patch"
           cd "$HERMES_SRC"
           UV_PROJECT_ENVIRONMENT=venv uv sync --frozen
           uv pip install --python venv/bin/python pynacl pytest ruff httpx
@@ -45,63 +49,5 @@ jobs:
           "$HERMES_SRC/venv/bin/python" tools/check_sizes.py
           openspec validate --all --strict
           "$HERMES_SRC/venv/bin/hermes" plugins doctor . --ci
+          "$HERMES_SRC/venv/bin/hermes" plugins validate .
           "$HERMES_SRC/venv/bin/python" tests/bench.py --loopback --report-only
-      - name: Report catalog admission and private import diagnostics
-        # The clean-export test above pins the allowed transitional private imports.
-        continue-on-error: true
-        env:
-          HERMES_HOME: ${{ runner.temp }}/ci-home
-          HERMES_RUNTIME_DIR: ${{ runner.temp }}/ci-runtime
-          TMPDIR: ${{ runner.temp }}/ci-tmp
-        run: '"$HERMES_SRC/venv/bin/hermes" plugins validate .'
-  release-0231:
-    name: Hermes 0.23.1 (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
-    env:
-      PYTHONDONTWRITEBYTECODE: "1"
-      OPENSPEC_TELEMETRY: "0"
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
-      - name: Prepare the 0.23.1 release checkout
-        run: |
-          set -eu
-          HERMES_SRC="$RUNNER_TEMP/hermes-agent"
-          git init "$HERMES_SRC"
-          git -C "$HERMES_SRC" remote add origin https://github.com/NousResearch/hermes-agent
-          git -C "$HERMES_SRC" fetch --depth=1 origin 3b421578588243f920886e6fe79a6faa87ea026e
-          git -C "$HERMES_SRC" checkout --detach FETCH_HEAD
-          cd "$HERMES_SRC"
-          UV_PROJECT_ENVIRONMENT=venv uv sync --frozen
-          uv pip install --python venv/bin/python pynacl pytest ruff httpx
-          printf 'HERMES_SRC=%s\n' "$HERMES_SRC" >> "$GITHUB_ENV"
-      - name: Install OpenSpec
-        run: npm i -g @fission-ai/openspec@1.16.0
-      - name: Run release acceptance checks
-        env:
-          HERMES_HOME: ${{ runner.temp }}/ci-home
-          HERMES_RUNTIME_DIR: ${{ runner.temp }}/ci-runtime
-          TMPDIR: ${{ runner.temp }}/ci-tmp
-        run: |
-          set -eu
-          mkdir -p "$HERMES_HOME" "$HERMES_RUNTIME_DIR" "$TMPDIR"
-          "$HERMES_SRC/venv/bin/python" -m pytest -q
-          "$HERMES_SRC/venv/bin/python" -m ruff check .
-          "$HERMES_SRC/venv/bin/python" tools/check_sizes.py
-          openspec validate --all --strict
-          "$HERMES_SRC/venv/bin/hermes" plugins doctor . --ci
-          "$HERMES_SRC/venv/bin/python" tests/bench.py --loopback --report-only
-      - name: Report release catalog admission and private import diagnostics
-        continue-on-error: true
-        env:
-          HERMES_HOME: ${{ runner.temp }}/ci-home
-          HERMES_RUNTIME_DIR: ${{ runner.temp }}/ci-runtime
-          TMPDIR: ${{ runner.temp }}/ci-tmp
-        run: '"$HERMES_SRC/venv/bin/hermes" plugins validate .'

@@ -11,11 +11,11 @@ import pytest
 from hermes_cli.plugin_validate_private_imports import (
     private_attribute_findings, private_import_findings,
 )
+from hermes_cli.plugin_isolation_audit import audit_plugin_dir
 from tools.plugin_guard import scan_plugin, should_allow_plugin_install
 
 ROOT = Path(__file__).resolve().parents[1]
 TRANSITIONAL = [
-    ("dirtside/auth.py", "hermes_cli.dashboard_auth.token_auth.register_token_route"),
     ("dirtside/backend.py", "tools.environments.local.LocalEnvironment"),
     ("dirtside/environment.py", "tools.environments.base.EnvironmentConnectionError"),
 ]
@@ -44,11 +44,13 @@ def test_private_imports_are_exact_transitional_set(clean_export):
              for location, target in (site.split(" ", 1) for site in findings)]
     assert sorted(sites) == TRANSITIONAL, "\n".join(findings)
     assert private_attribute_findings(clean_export) == []
+    assert "register_dashboard_token_route" in audit_plugin_dir(clean_export).ctx_methods
 
 
 def test_community_install_allows_clean_export(clean_export):
     scan = scan_plugin(clean_export, source="community/dirtside")
     assert scan.trust_level == "community"
+    assert scan.verdict == "safe"
     allowed, reason = should_allow_plugin_install(scan)
     findings = "\n".join(f"{f.severity} {f.file}:{f.line} {f.pattern_id}" for f in scan.findings)
     assert allowed is True, f"{reason}\n{findings}"
@@ -74,7 +76,7 @@ def test_development_entrypoints(clean_export, tmp_path):
 def test_review_documentation(clean_export):
     readme = (clean_export / "README.md").read_text()
     status = readme.split("## Status\n", 1)[1].split("## License", 1)[0]
-    for name in ("token_auth", "LocalEnvironment", "EnvironmentConnectionError"):
+    for name in ("register_dashboard_token_route", "LocalEnvironment", "EnvironmentConnectionError"):
         assert name in status
     for term in ("env_passthrough", "SSH_AUTH_SOCK", "WSL_INTEROP", "DISPLAY",
                  "policy --env-passthrough", "policy --clear-env-passthrough",

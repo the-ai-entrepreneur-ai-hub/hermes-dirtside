@@ -16,9 +16,12 @@ REVOKE_NOTICE_S = 10
 class TokenRoutes:
     def __init__(self):
         self.enabled, self.registrations = False, []
+        self.reason = "Dirtside device and local routes are disabled: dashboard authentication was not registered."
 
     def dispose(self):
         self.enabled = False
+        if not self.reason:
+            self.reason = "Dirtside device and local routes are disabled: registration was unloaded."
         while self.registrations:
             with suppress(Exception):
                 self.registrations.pop().dispose()
@@ -45,12 +48,14 @@ class DirtsideDeviceAuth(DashboardAuthProvider):
         return target.device.name if isinstance(target, OnDevice) else "server"
 
     def verify_token(self, *, token):
+        if not self.routes.enabled:
+            return None
         if hmac.compare_digest(token.encode(), self.registry.local_secret.encode()):
             return TokenPrincipal("local", self.name, ("dirtside-local",))
         now = int(time.time())
         credential = self.registry.credential_for(token, now, include_revoked=True)
         if isinstance(credential, self.model.Revoked) and not (
-                self.routes.enabled and credential.revoked_at <= now < credential.revoked_at + REVOKE_NOTICE_S):
+                credential.revoked_at <= now < credential.revoked_at + REVOKE_NOTICE_S):
             return None
         return TokenPrincipal(credential.name, self.name, ("dirtside",)) if credential else None
 
@@ -69,28 +74,24 @@ class DirtsideDeviceAuth(DashboardAuthProvider):
     def revoke_session(self, *, refresh_token):
         return None
 
-def _legacy_routes():
-    # Pending public token-route seam; retain released-core exact-path registration.
-    from hermes_cli.dashboard_auth.token_auth import register_token_route
-    for path in DEVICE_PATHS + LOCAL_PATHS:
-        register_token_route(path)
-
 def register_device_routes(ctx):
     routes = TokenRoutes()
+    routes.reason = "Dirtside device and local routes are disabled: token-route registration failed."
     try:
-        if hasattr(ctx, "register_dashboard_token_route"):
-            for path in DEVICE_PATHS + LOCAL_PATHS:
-                scope = "dirtside-local" if path in LOCAL_PATHS else "dirtside"
-                handle = ctx.register_dashboard_token_route(path, provider="dirtside", required_scopes=(scope,))
-                if handle is None:
-                    raise RuntimeError("token route refused")
-                routes.registrations.append(handle)
-        else:
-            _legacy_routes()
+        if not callable(getattr(ctx, "register_dashboard_token_route", None)):
+            routes.reason = ("Dirtside device and local routes are disabled: older Hermes lacks a callable "
+                             "ctx.register_dashboard_token_route.")
+            raise RuntimeError
+        for path in DEVICE_PATHS + LOCAL_PATHS:
+            scope = "dirtside-local" if path in LOCAL_PATHS else "dirtside"
+            handle = ctx.register_dashboard_token_route(path, provider="dirtside", required_scopes=(scope,))
+            if handle is None:
+                routes.reason = "Dirtside device and local routes are disabled: Hermes refused token-route registration."
+                raise RuntimeError
+            routes.registrations.append(handle)
         ctx.on_unload(routes.dispose)
-        routes.enabled = True
+        routes.enabled, routes.reason = True, ""
     except Exception:
         routes.dispose()
-        logging.getLogger(__name__).warning(
-            "Dirtside token-route registration refused; device and local routes are disabled.")
+        logging.getLogger(__name__).warning(routes.reason)
     return routes

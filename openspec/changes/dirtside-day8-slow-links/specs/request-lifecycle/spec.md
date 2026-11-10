@@ -100,5 +100,5 @@ After recovering dispatches under its condition, the owner SHALL include each re
 - **WHEN** a device is offline or backing off beyond the window, or its credential was replaced before this version retained it
 - **THEN** generic rejection keeps it retrying until manually stopped
 - **AND** pairing an already revoked name never starts a new window for its old credential
-- **AND** during the window other plugins' released core token gates still accept the bearer, but it authorizes nothing inside Dirtside
+- **AND** foreign bound routes refuse the bearer, legacy unbound routes skip Dirtside while it has a bound policy, and it has no active authority inside Dirtside
 - **AND** invalid proof never receives the explicit stop answer; bad retained proof and unknown bearers have different generic bodies
