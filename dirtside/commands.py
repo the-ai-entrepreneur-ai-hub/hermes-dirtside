@@ -3,7 +3,7 @@ import time
 from .access import Access
 
 from .model import OnDevice
-from .provider import get_session_env, resolve_target, session_identity
+from .provider import NoSingleSenderError, get_session_env, resolve_target, session_identity
 from .environment import EnvironmentConnectionError
 from .prompt import quoted
 
@@ -42,6 +42,8 @@ class Commands:
         try:
             target = resolve_target(session_identity(), get_session_env("HERMES_CRON_SESSION") == "1",
                                     self.default_target, self.registry, self.relay, require_contact=False, access=self.access)
+        except NoSingleSenderError as exc:
+            return f"No device applies to a turn without a sender. {exc}"
         except EnvironmentConnectionError:
             name = "an unpaired device"
         else:

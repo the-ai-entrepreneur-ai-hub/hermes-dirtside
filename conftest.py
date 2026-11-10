@@ -18,6 +18,9 @@ sys.path.append(str(ROOT / "tools"))
 sys.path.append(str(ROOT / "tests"))
 pytest_plugins = ["fd_guard"]
 os.environ.pop("DIRTSIDE_HOME", None)
+for name in tuple(os.environ):
+    if name.startswith("HERMES_SESSION_") or name == "HERMES_CRON_SESSION":
+        os.environ.pop(name)
 _test_home = tempfile.TemporaryDirectory(prefix="dirtside-tests-")
 TEST_HOME = Path(_test_home.name).resolve()
 for name in ("home", "tmp", "runtime"):

@@ -2,12 +2,17 @@
 import os
 import re
 from contextvars import ContextVar
+from importlib.util import find_spec
 
 from gateway.session_context import get_session_env
 
 from .environment import EnvironmentConnectionError
 
 _LOCAL = {"cli", "tui", "desktop", "acp"}
+try:
+    _HAS_ACTOR = find_spec("gateway.approval_actor") is not None
+except Exception:
+    _HAS_ACTOR = False
 _UNSET = object()
 
 
@@ -33,7 +38,11 @@ class Access:
         if self.ctx is None:
             return "local"  # Direct Python callers are host-owned, not chat entry points.
         platform = get_session_env("HERMES_SESSION_PLATFORM")
-        user = get_session_env("HERMES_SESSION_USER_ID")
+        route = get_session_env("HERMES_SESSION_USER_ID")
+        actor = get_session_env("HERMES_SESSION_ACTOR_ID", None) if _HAS_ACTOR else None
+        if actor == "" and route:
+            return ""
+        user = route if actor is None else actor
         surface, source = self.ctx.session_surface(), get_session_env("HERMES_SESSION_SOURCE")
         if (platform == "local" and self._canonical_local(surface)
                 and (not user or (os.name != "nt" and user == f"uid:{os.getuid()}"))):

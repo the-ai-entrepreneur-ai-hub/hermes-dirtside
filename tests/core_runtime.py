@@ -81,7 +81,7 @@ class Runtime:
         key = SigningKey.generate()
         registry, wire = self.auth.registry, self.auth.protocol
         name, root = args.get("name", "fake"), args["root"]
-        code = registry.mint(name, int(time.time()))
+        code = registry.mint(name, int(time.time()), owner=args.get("owner", "local"))
         hello = dict(pubkey=base64.b64encode(bytes(key.verify_key)).decode(), name=name,
                      os=sys.platform, arch="", home=root, temp_dir=root, agent_version="0.1.0")
         url = f"http://127.0.0.1:{self.port}/api/plugins/dirtside/device/"
@@ -224,6 +224,14 @@ class Runtime:
         with relay._condition:
             return args["request_id"] in relay.handles and args["request_id"] not in relay._streams
 
+    def actor_sequence(self, args):
+        from actor_context import sequence
+        return sequence(self, args)
+
+    def actor_loop(self, args):
+        from actor_loop import run
+        return run(self, args)
+
     def network(self, args):
         (self.blocked.set if args["blocked"] else self.blocked.clear)()
         return {}
@@ -252,7 +260,7 @@ class Runtime:
             handlers = {name: getattr(self, name) for name in (
                 "info", "target", "state", "turn_end", "reap", "terminal", "file",
                 "queue", "cancel", "interrupt", "network", "slash", "prompt", "fake_device", "reload", "generation",
-                "stream_attached", "turn_facts")}
+                "stream_attached", "turn_facts", "actor_sequence", "actor_loop")}
             return handlers[message["method"]](args)
         finally:
             set_interrupt(False)

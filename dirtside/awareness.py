@@ -14,13 +14,15 @@ class TargetAwareness(TargetPrompt):
             return None
 
     def line(self):
-        key = session_identity()
-        target = resolve_target(key, get_session_env("HERMES_CRON_SESSION") == "1",
-                                self.default_target, self.registry, self.relay,
+        key, cron = session_identity(), get_session_env("HERMES_CRON_SESSION") == "1"
+        target = resolve_target(key, cron, self.default_target, self.registry, self.relay,
                                 require_contact=False, access=self.access)
         if not isinstance(target, OnDevice):
+            chosen = self.registry.target(key) if key else None
+            default = (self.registry.default_for(key, self.default_target)
+                       if key and not cron and not chosen else "server")
             return ("Dirtside target: server. Commands run on the server."
-                    if key and self.registry.target(key) == "server" else None)
+                    if chosen == "server" or default != "server" else None)
         if backend_warning := self.access.backend_warning():
             return backend_warning.lstrip()
         d = target.device

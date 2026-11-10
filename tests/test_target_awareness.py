@@ -68,6 +68,55 @@ def test_next_turn_target_facts_and_authority(tmp_path):
         assert rig.core.call("turn_facts", session="chat") == server
 
 
+@pytest.mark.parametrize("after", ["fake", "server"])
+def test_non_owner_default_reports_server_after_owner_prompt(tmp_path, after):
+    from core_rig import Core
+    with Core(tmp_path / "gateway") as core:
+        device = tmp_path / "device"
+        device.mkdir()
+        core.call("fake_device", root=str(device), owner="telegram:owner")
+        assert core.call("reload", default_target="fake")["enabled"]
+        owner = dict(platform="telegram", user_id="owner")
+        foreign = dict(platform="telegram", user_id="other")
+        frozen = core.call("prompt", session="shared", **owner)
+        assert "fake" in str(frozen)
+        assert "fake" in str(core.call("turn_facts", session="shared", **owner))
+        assert core.call("turn_facts", session="cron", cron="1") == []
+        assert core.call("reload", default_target=after)["enabled"]
+        assert core.call("prompt", session="shared", **foreign) == frozen
+        facts = core.call("turn_facts", session="shared", **foreign)
+        assert facts == ["Dirtside target: server. Commands run on the server."]
+        assert "fake" not in str(facts) and str(device) not in str(facts)
+        if after == "server":
+            assert core.call("turn_facts", session="untouched", **foreign) == []
+        assert "fake" in str(core.call("turn_facts", session="shared", **owner))
+
+
+@pytest.mark.parametrize("platform", ["api_server", ""])
+def test_missing_sender_keeps_server_execution_under_device_default(tmp_path, platform):
+    from core_rig import Core
+    host, device = tmp_path / "host", tmp_path / "device"
+    host.mkdir()
+    device.mkdir()
+    (host / "proof").write_text("server-only")
+    (device / "proof").write_text("device-only")
+    with Core(tmp_path / "gateway", user_home=host) as core:
+        core.call("fake_device", root=str(device), owner="telegram:owner")
+        assert core.call("reload", default_target="fake")["enabled"]
+        owner = core.call("terminal", session="missing", platform="telegram", user_id="owner",
+                          args=dict(command="pwd; cat proof"))
+        assert str(device.resolve()) in owner["output"] and "device-only" in owner["output"]
+        before = core.http("GET", "/requests").json()
+        assert before
+        missing = dict(session="missing", platform=platform, user_id="", source="")
+        assert core.call("turn_facts", **missing) == ["Dirtside target: server. Commands run on the server."]
+        result = core.call("terminal", **missing, args=dict(command="pwd; cat proof; printf host > host-write"))
+        assert result["exit_code"] == 0 and str(host.resolve()) in result["output"]
+        assert "server-only" in result["output"] and "device-only" not in result["output"]
+        assert (host / "host-write").read_text() == "host" and not (device / "host-write").exists()
+        assert core.http("GET", "/requests").json() == before
+
+
 @pytest.mark.parametrize("symlinked", [False, True])
 def test_fact_line_matches_gateway_path_resolution(tmp_path, monkeypatch, symlinked, configured_backend):
     import dirtside.awareness as awareness

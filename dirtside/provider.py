@@ -10,6 +10,23 @@ from .backend import local_environment, terminal_workdir
 from .environment import DirtsideEnvironment, EnvironmentConnectionError, require_online
 from .model import OnDevice, Server, SessionKey
 
+# The plugin's sender-less surfaces that keep server fallback only with an empty route.
+_NON_MESSAGING = frozenset({
+    "", "api_server", "cli", "desktop", "gateway", "kanban", "local",
+    "msgraph_webhook", "tool", "tui", "webhook",
+})
+
+class NoSingleSenderError(EnvironmentConnectionError):
+    """A device cannot serve this turn without a sender."""
+
+def _require_single_sender(sender, is_cron):
+    route = get_session_env("HERMES_SESSION_USER_ID")
+    platform = get_session_env("HERMES_SESSION_PLATFORM").strip().lower()
+    if not is_cron and not sender and (route or platform not in _NON_MESSAGING):
+        retry = "Ask again in a new message, or run /dirtside use server."
+        raise NoSingleSenderError("Dirtside: this turn has no single sender. "
+                                  f"Nothing was run on the server. {retry}", retry_hint=retry)
+
 def session_identity():
     return SessionKey(get_session_env("HERMES_SESSION_KEY") or get_session_env("HERMES_SESSION_ID"))
 
@@ -26,11 +43,13 @@ def resolve_target(session_key, is_cron, default_target, registry, relay, *, req
     if device is None:
         return Server()
     access = access or Access()
-    if not chosen and device.owner != access.identity() and not access.privileged(device.owner):
+    sender = access.identity()
+    _require_single_sender(sender, is_cron)
+    if not chosen and device.owner != sender and not access.privileged(device.owner):
         return Server()
-    if not access.can(device):
+    if not access.can(device, sender):
         if chosen:
-            access.require(device)
+            access.require(device, sender)
         return Server()
     if require_contact:
         require_online(device, relay)

@@ -7,7 +7,7 @@ import pytest
 from gateway.config import Platform
 from gateway.relay.ws_transport import _event_from_wire
 from gateway.run import GatewayRunner
-from gateway.session import SessionSource
+from gateway.session import SessionContext, SessionSource
 from gateway.session_context import clear_session_vars
 from hermes_cli.plugin_command_dispatch import invoke_plugin_command
 from hermes_cli.plugin_session import session_surface
@@ -28,7 +28,7 @@ def context():
 
 @contextmanager
 def bound(source, session_id="canonical-session"):
-    ctx = SimpleNamespace(source=source, session_key="agent:main:local:route", session_id=session_id)
+    ctx = SessionContext(source, [], {}, session_key="agent:main:local:route", session_id=session_id)
     tokens = GatewayRunner._set_session_env(SimpleNamespace(adapters={}), ctx)
     try:
         yield
@@ -204,7 +204,7 @@ def test_relay_shortcuts_and_prompt_do_not_disclose_host_devices(tmp_path, monke
         access = commands.access
         turn = TargetAwareness(registry, relay, default, access)()
         frozen = TargetPrompt(registry, relay, default, access).current_target_section({})
-        assert not turn
+        assert turn == ("Dirtside target: server. Commands run on the server." if selection == "default" else None)
         assert all(value not in frozen for value in (device.name, device.os, device.home, "device=", "OS=", "home="))
         for argument in (device.name, ""):
             long = invoke_plugin_command(commands, "use " + argument, source=source)
