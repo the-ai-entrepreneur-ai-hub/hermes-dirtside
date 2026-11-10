@@ -99,7 +99,7 @@ An autouse guard MUST measure descriptors before and after each test on Linux an
 - **THEN** its stdin and log close without depending on process liveness
 
 ### Requirement: Authenticated revocation without a parked poll
-Automatic revocation shutdown MUST work without an admitted poll during the ten-second window from the credential's first revoke or replacement, with routes enabled. The window follows whole seconds on the gateway clock; a setback into it reopens recognition and a forward step closes it early. Every valid signed request inside it MUST receive the stop, including retries. Generic core rejection MUST retain retries; devices missing the window need manual shutdown.
+Automatic revocation shutdown MUST work without an admitted poll during the ten-second window from the credential's first revoke or replacement, with routes enabled. The window follows the gateway's clock in whole seconds. Setting that clock back into the window reopens it, and setting it forward closes it early. Every valid signed request inside it MUST receive the stop, including retries. Generic core rejection MUST retain retries; devices missing the window need manual shutdown.
 
 #### Scenario: test_parallel_limit_keeps_poll_cancellation_live
 - **WHEN** two commands run, a queued command starts after cancellation, and revocation interrupts an admitted poll

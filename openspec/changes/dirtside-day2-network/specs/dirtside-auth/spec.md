@@ -9,7 +9,7 @@ Authenticate personal devices without granting them dashboard sessions and compl
 ### Requirement: Pure device token recognition
 The auth provider SHALL recognize active tokens and unexpired pending codes without changing credentials, online state or requests, and SHALL NOT issue interactive sessions. A retained principal SHALL authorize nothing inside Dirtside.
 
-The window follows the gateway's clock in whole seconds, so it lasts 9 to 10 seconds. Setting that clock back into the window reopens it, and setting it forward closes it early.
+A revoked or replaced credential's ten-second window follows the gateway's clock in whole seconds, so it lasts 9 to 10 seconds. Setting that clock back into the window reopens it, and setting it forward closes it early.
 
 #### Scenario: test_window_edges_on_every_route
 - **WHEN** a retained credential is checked with routes enabled under either registration API

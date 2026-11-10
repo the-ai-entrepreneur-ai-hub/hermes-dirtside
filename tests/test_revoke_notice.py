@@ -350,6 +350,13 @@ def test_foreign_gate_admits_only_live_unused_pairing_code(tmp_path, monkeypatch
         assert provider.verify_token(token=code) is None
         assert web.get(FOREIGN, headers=headers(code)).status_code == 401
         active_poll(web, relay, reg.active_device("pairing"), response.json()["token"], key)
+        stale = reg.mint("stale", clock.now)
+        fresh = reg.mint("stale", clock.now)
+        assert web.get(FOREIGN, headers=headers(stale)).status_code == 401
+        assert web.get(FOREIGN, headers=headers(fresh)).status_code == 200
+        reg.revoke("stale", clock.now)
+        assert web.get(FOREIGN, headers=headers(fresh)).status_code == 401
+        assert web.get(FOREIGN, headers=headers(reg.local_secret)).status_code == 200
         expires = reg.mint("expiring", clock.now)
         clock.advance(599)
         assert web.get(FOREIGN, headers=headers(expires)).status_code == 200
