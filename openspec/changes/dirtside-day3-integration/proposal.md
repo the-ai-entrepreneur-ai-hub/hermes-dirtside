@@ -23,8 +23,8 @@ The existing suite proves the isolated transport, not a user installation select
 
 ### Modified Capabilities
 
-None. The earlier changes remain active and main specs have not been synchronized.
+None.
 
 ## Impact
 
-Changes are confined to this plugin's tests, device CLI, demonstrated execution defects and reliability tooling. No core edits, new dependencies, target-schema changes, desktop changes or changes to the other builder's files. The change stays active without archive or spec sync.
+Changes are confined to this plugin's tests, device CLI, execution fixes and reliability tooling. No core edits, new dependencies, target-schema changes or desktop changes are needed.

@@ -8,9 +8,9 @@ A phone needs a Hermes-free device agent and its native Termux execution environ
 
 Detect Termux, report Android (Termux), preserve a measured names-only system allowlist and document the real-phone check.
 
-The owner's real aarch64 Termux userland in Docker passed signed pairing,
+On 2026-11-08 the owner's aarch64 Termux userland in Docker passed signed pairing,
 terminal shebang/Python/PREFIX commands, exit 7, cancel with exit 130 and revoke
-on Python 3.14.10 and PyNaCl 1.6.2. The owner's final-tree rerun of
+on Python 3.14.10 and PyNaCl 1.6.2. The owner's rerun of
 `bash scripts/termux_check.sh` also passed. No physical phone, mobile network
 or Termux:API has been tested.
 
@@ -22,7 +22,7 @@ or Termux:API has been tested.
 
 ### Modified capabilities
 
-None. Existing changes stay unarchived.
+None.
 
 ## Impact
 

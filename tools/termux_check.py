@@ -1,9 +1,8 @@
-"""Owner-run real Termux test. Only this run's uniquely named container is touched."""
+"""Signed Termux lifecycle check using a uniquely named container."""
 import base64
 import json
 import os
 import secrets
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -123,8 +122,6 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--device":
         return device(*sys.argv[2:])
     os.environ.setdefault("DOCKER_CONFIG", str(Path.home() / ".docker"))
-    if shutil.disk_usage("/").free < 8 * 1024 ** 3:
-        raise SystemExit("Less than 8 GiB free; no container or home created.")
     name = "dirtside-termux-" + secrets.token_hex(6)
     created = False
     try:

@@ -1,6 +1,6 @@
 # Dirtside architecture
 
-Reference for Dirtside. Written 2026-11-05 against the contracts verified in `DIRTSIDE-PLAN.md` section 17, then revised against the implementation through the catalog review. The plan says what and when. Part A describes ownership and contracts; its original API sketches are historical where A16's implementation amendments supersede them. A3 records the enforced budgets. Part B explains the choices and alternatives.
+Reference for Dirtside. Written 2026-11-05, then revised against the implementation. Part A describes ownership and contracts; its original API sketches are historical where A16's implementation amendments supersede them. A3 records the enforced budgets. Part B explains the choices and alternatives.
 
 Two rules govern every choice below. Build the smallest thing that does the job, on top of what Hermes already provides. Put the domain in data structures, so the code has few branches and no scattered modes.
 
@@ -10,11 +10,11 @@ Two rules govern every choice below. Build the smallest thing that does the job,
 
 ## A1. Languages and stack
 
-Here, "method core" means Hermes 0.23.1 (`3b421578588243f920886e6fe79a6faa87ea026e`) with the single public commit of core PR #151760 (`7dce8c38e8c998c52c4c139df340a0bffecc77e6`) applied.
+Here, "method core" means Hermes 0.23.1 (`3b421578588243f920886e6fe79a6faa87ea026e`) with commit `7dce8c38e8c998c52c4c139df340a0bffecc77e6` applied. That commit is the change of core PR #151760 as first submitted on 2026-11-09. The pull request was rebased onto newer Hermes on 2026-11-11 with the same code, and its source repository keeps this commit.
 
 | Layer | Language and runtime | Why this and nothing else |
 |---|---|---|
-| Gateway plugin (provider, relay, registry, commands, auth) | Python, the interpreter Hermes runs on (3.11 assumed, confirm against Hermes' `pyproject.toml` on day 0) | plugins load in-process; no choice |
+| Gateway plugin (provider, relay, registry, commands, auth) | Python 3.11+, the interpreter Hermes runs on | plugins load in-process; no choice |
 | Device agent (`dirtside-agent serve` or `hermes dirtside serve`) | Python 3.11+, the same package, with or without Hermes | one codebase, one protocol module, nothing to drift |
 | Relay HTTP routes | FastAPI `APIRouter` in `dashboard/plugin_api.py` | the only route surface Hermes mounts for plugins |
 | Desktop half | JavaScript ES module, React through `jsx()` from `react/jsx-runtime`, `@hermes/plugin-sdk` | the loader takes uncompiled ESM only |
@@ -107,13 +107,13 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | `dirtside/readiness.py` | bounded pipe readiness without a descriptor-number ceiling | stdlib selectors | 8 |
 | `dirtside/registry.py` | the SQLite boundary, retained credentials, relay key and private local secret | model, sqlite3 | 225 |
 | `dirtside/relay.py` | one owner's live state, bounded pending local streams and the worker transport seam | model, registry, environment (handle), readiness, threading | 239 |
-| `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 124 |
-| `dirtside/client.py` | process-verified owner discovery, bounded disabled-route retry, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 198 |
+| `dirtside/environment.py` | `DirtsideEnvironment(BaseEnvironment)`, `RemoteProcessHandle`, dispatch through the relay's selected connection | model, `tools.environments.base` | 127 |
+| `dirtside/client.py` | process-verified owner discovery, bounded local 401 retry, local execution, stream-to-pipe copy, cancellation and live state reads | model, environment (handle and error), httpx, system ps | 197 |
 | `dirtside/local.py` | bounded loopback request parsing, fixed local routes and raw output framing | model, protocol, relay, registry, readiness, FastAPI, anyio | 152 |
 | `dirtside/provider.py` | dispatch-time conversation context, bounded cwd history and per-target snapshot delegates, `resolve_target()` | relay, registry, `agent.terminal_env_provider`, backend, environment, `gateway.session_context` | 183 |
 | `dirtside/auth.py` | device and local-secret recognition, ten-second revoke window and exact route registration | registry, local, client (process identity), `hermes_cli.dashboard_auth` | 97 |
 | `dirtside/shortcuts.py` | /land and /orbit adapters over Commands | commands | 20 |
-| `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`, `resolve_target`, session context) | 107 |
+| `dirtside/commands.py` | `/dirtside` handlers, text in and text out | relay, registry, provider (`session_identity`, `resolve_target`, session context) | 114 |
 | `dirtside/awareness.py` | per-turn bounded target facts, server fallback or configuration warning, no liveness probe | prompt, provider, shared Access | 35 |
 | `dirtside/prompt.py` | authorized frozen target facts or shared configuration warning | registry, provider (`session_identity`), shared Access | 38 |
 | `dirtside/agent/platform.py` | Termux detection and measured system environment names | stdlib | 24 |
@@ -130,8 +130,8 @@ Dependency direction is top to bottom. No module imports one below it except thr
 | `dirtside/__init__.py` | `register(ctx)` wiring | gateway modules | 61 |
 | `tests/bench.py` | in-process metrics and non-gating client latency rows; existing thresholds remain, with report-only in CI | bench_client, statistics | 92 |
 | `tools/fake_device.py` | a signed fake device, including the independently loaded core owner's result parser | agent/executor, relay | 82 |
-| `tools/termux_forward.py` | owner-run container loopback bridge over stdio | stdlib | 62 |
-| `tools/termux_check.py` | owner-run signed Termux lifecycle check and cleanup | core_rig, httpx, stdlib | 157 |
+| `tools/termux_forward.py` | container loopback bridge over stdio | stdlib | 62 |
+| `tools/termux_check.py` | signed Termux lifecycle check and cleanup | core_rig, httpx, stdlib | 154 |
 | `tools/check_sizes.py` | the size check | stdlib | 30 |
 
 Production core imports, in full: `agent.terminal_env_provider.TerminalEnvironmentProvider` (provider), `tools.environments.base.BaseEnvironment` (environment), `tools.environments.base.EnvironmentConnectionError` (environment), `tools.environments.local.LocalEnvironment` (lazy backend handoff), `gateway.session_context.get_session_env` (access and provider), `plugins.plugin_storage.plugin_data_dir` (package registration), `hermes_cli.dashboard_auth.DashboardAuthProvider` and `hermes_cli.dashboard_auth.TokenPrincipal` (auth), `hermes_cli.dashboard_auth.get_provider` (registration and dashboard routes), `hermes_cli.config.read_raw_config_readonly` (lazy gateway configuration warning), and `hermes_constants.get_hermes_home` (lazy optional device home lookup and legacy service installation). No production code monkeypatches Hermes. The separate test rig imports core's entry points to exercise them.
@@ -347,7 +347,7 @@ def handle_exec(req: WireExec) -> None:
 
 What the device enforces, stated plainly: the deny list, the timeout and output caps, the parallelism cap, and the kill switch. It does not confine where a command can dirtside. A folder allowlist cannot be enforced without a sandbox, and claiming one would be a false promise, so v1 does not have one.
 
-Each child gets only set `PATH`, `HOME`, `USER`, `LANG`, `LC_*`, `TERM`, `TMPDIR` and device-owned `env_passthrough` names, without changing the agent's environment or the version-1 wire. Termux additionally keeps the fixed, secret-free system names in `agent/platform.py`, derived from the owner's 2026-11-08 image and app-source probe, including `PREFIX` and `LD_PRELOAD` for termux-exec. Pairing reports `Android (Termux)` in the existing OS field. The full container check is owner-run; physical Android services are untested.
+Each child gets only set `PATH`, `HOME`, `USER`, `LANG`, `LC_*`, `TERM`, `TMPDIR` and device-owned `env_passthrough` names, without changing the agent's environment or the version-1 wire. Termux additionally keeps the fixed, secret-free system names in `agent/platform.py`, derived from the owner's 2026-11-08 image and app-source probe, including `PREFIX` and `LD_PRELOAD` for termux-exec. Pairing reports `Android (Termux)` in the existing OS field. A signed lifecycle check covers the container; physical Android services are untested.
 
 Old four-key policy files mean empty passthrough, while new lists require at most 64 unique ASCII environment names matching `[A-Za-z_][A-Za-z0-9_]{0,127}`.
 
@@ -355,7 +355,7 @@ The names-only `hermes dirtside policy` command shows, replaces or clears passth
 
 ## A10. Authentication
 
-`DirtsideDeviceAuth(DashboardAuthProvider)` is token-only and noninteractive. Recognition never changes credentials, online state or work. With routes enabled, it returns `dirtside` scope for active or valid pending credentials and `dirtside-local` only for the local secret. Revoked or expired pending codes remain unrecognized.
+`DirtsideDeviceAuth(DashboardAuthProvider)` is token-only and noninteractive. Recognition never changes credentials, online state or work. With routes enabled and all nine public registration handles active, it returns `dirtside` scope for active or valid pending credentials and `dirtside-local` only for the local secret. Revoked or expired pending codes remain unrecognized.
 
 Retained recognition requires `routes.enabled and revoked_at <= now < revoked_at + REVOKE_NOTICE_S`, with the single constant `REVOKE_NOTICE_S = 10`. The persisted time is the credential's first revoke or replacement. Every qualifying signed request inside the window receives the stop answer, including retries after a lost answer and after a parked poll has received one.
 
@@ -363,17 +363,19 @@ The window follows the gateway's clock in whole seconds, so it lasts 9 to 10 sec
 
 When routes are enabled, handlers answer a retained credential with valid proof whenever a request reaches them; only the recognizer applies the ten-second window, and this answer grants no other authority. The method core keeps its provider-bound gate in front of those paths, including loopback without dashboard sign-in.
 
-A retained principal authorizes nothing inside Dirtside, including management, local IPC and dashboard sessions. The method core calls only the bound route's current owning provider, requires a matching TokenPrincipal provider and launch home, and checks required scopes (core's `hermes_cli/dashboard_auth/token_auth.py`, `_authenticate_bound_token`, lines 116 to 160 at public PR commit `7dce8c38e8c998c52c4c139df340a0bffecc77e6`). A Dirtside credential cannot authorize a foreign provider's bound route. In that file, `authenticate_token`, lines 86 to 113, skips Dirtside on legacy unbound token routes while it has any bound policy. When Dirtside's routes are closed for any reason, its provider recognizes no Dirtside credential, so none can pass any other token route either. The ten-second window is unchanged. A longer window is possible on the bound gate and is outside this change. Anything running as the gateway OS user, including server-target commands, can still read `local.secret`.
+A retained principal authorizes nothing inside Dirtside, including management, local IPC and dashboard sessions. The method core calls only the bound route's current owning provider, requires a matching TokenPrincipal provider, launch home and required scopes (core's `hermes_cli/dashboard_auth/token_auth.py`, `_authenticate_bound_token`, lines 116 to 160 at public commit `7dce8c38e8c998c52c4c139df340a0bffecc77e6`). A Dirtside credential cannot authorize a foreign provider's bound route. In that file, `authenticate_token`, lines 86 to 113, skips Dirtside on legacy unbound token routes while it has any bound policy. When Dirtside's routes are closed for any reason, its provider recognizes no Dirtside credential, so none can pass any other token route either. The ten-second window is unchanged. A longer window is possible on the bound gate and is not part of this version. Anything running as the gateway OS user, including server-target commands, can still read `local.secret`.
 
 Session verification and revocation return `None`, leaving interactive dashboard sessions to their own provider.
 
-After auth-provider acceptance, all four device and five unique local paths use only `ctx.register_dashboard_token_route(path, provider="dirtside", required_scopes=(scope,))`, retaining every registration for unload. Core requires this plugin's active provider registration and a discovered dashboard mount (core's `hermes_cli/plugins_context.py`, `PluginContext.register_dashboard_token_route`, lines 586 to 640 at public PR commit `7dce8c38e8c998c52c4c139df340a0bffecc77e6`).
+After auth-provider registration succeeds, all four device and five unique local paths use only `ctx.register_dashboard_token_route(path, provider="dirtside", required_scopes=(scope,))`, retaining every registration for unload. Core requires this plugin's active provider registration and a discovered dashboard mount (core's `hermes_cli/plugins_context.py`, `PluginContext.register_dashboard_token_route`, lines 586 to 640 at public commit `7dce8c38e8c998c52c4c139df340a0bffecc77e6`).
 
-A missing or noncallable method, a None-returning refusal or a raising registration disables the instance and disposes partial registrations. One bounded warning names the cause without exception contents. Authorized pairing and ordinary status use the current cause; pairing mints no unusable code. The standalone pairing CLI gives a conditional method hint on authentication errors without an extra request.
+A missing or noncallable method, a None-returning refusal or a raising registration disables the instance and disposes partial registrations. One bounded warning names the cause without exception contents. Senders who may pair see that cause in pairing, status, device selection, device lists and terminal prechecks, without device-start advice; other senders retain their usual replies. The reply describes the process that handles the command. Pairing mints no unusable code. The standalone pairing CLI gives a conditional method hint on authentication errors without an extra request.
 
 Registering an already enabled compatible runtime again is a no-op. A real reload unloads it first, then registers new bindings; profile-scope loads use separate storage and do not replace launch authentication.
 
 The instance gate starts disabled, closes before disposal and guards handlers before parsing even if outer path flags survive or the dashboard gate is off.
+
+Recognition also stops when any public route handle becomes inactive, before a targeted unload removes the provider or calls the plugin's unload callback. Core's public `PluginRegistration.active` becomes false before the handle releases its registration (core's `hermes_cli/plugins_ledger.py`, `PluginRegistration.active` and `PluginRegistration.dispose`, lines 54 to 65 at public commit `7dce8c38e8c998c52c4c139df340a0bffecc77e6`).
 
 After recognizing the chunk or result credential, the route counts streamed body bytes before JSON parsing, independently of Content-Length. The chunk bound is `4 * ceil(PART_MAX / 3) + 1024`, or 2,797,228 bytes, for base64 plus the signed envelope. Results allow another 1,024 bytes for outcome fields and reason, totaling 2,798,252 bytes. An excess returns 413 with "output part too large"; the shared decoded-data parser refuses more than `PART_MAX` with that existing reason. After the bounded read, existing workers do JSON parsing, signature verification and body parsing without blocking the dashboard loop.
 
@@ -383,7 +385,7 @@ Pairing under the gate works because the pairing code is itself a bearer the rec
 
 This version needs Hermes with `ctx.register_dashboard_token_route`; on an older core its device, local and dashboard control routes stay closed, but chat `/dirtside revoke` still works.
 
-Device and local scopes cannot substitute for each other: the bound gate returns 503 when a provider raises `ProviderError`, 403 for insufficient scope and 401 for other rejection (core's `hermes_cli/dashboard_auth/token_auth.py`, `_authenticate_bound_token`, lines 116 to 160, and `token_auth_middleware`, lines 183 to 194 at public PR commit `7dce8c38e8c998c52c4c139df340a0bffecc77e6`). Dirtside's provider never raises `ProviderError`. Handlers retain their independent credential and proof checks. Dashboard session credentials grant no device or local authority.
+Device and local scopes cannot substitute for each other: the bound gate returns 503 when a provider raises `ProviderError`, 403 for insufficient scope and 401 for other rejection (core's `hermes_cli/dashboard_auth/token_auth.py`, `_authenticate_bound_token`, lines 116 to 160, and `token_auth_middleware`, lines 183 to 194 at public commit `7dce8c38e8c998c52c4c139df340a0bffecc77e6`). Dirtside's provider never raises `ProviderError`. Handlers retain their independent credential and proof checks. Dashboard session credentials grant no device or local authority.
 
 ## A11. Routes
 
@@ -447,7 +449,11 @@ An inaccessible explicit target fails without server execution. An implicit defa
 | Setting the gateway clock back reopens recognition only inside the old credential's window | `test_gateway_clock_setback_reopens_only_inside_window` |
 | Only valid fresh key proof receives the explicit stop answer on a signed route | `test_revoked_key_gets_explicit_rejection_on_every_route`, `test_ungated_router_answers_retained_proof_without_other_authority`, invalid and replay controls in `test_revoke_exit.py` |
 | Re-pairing keeps the old credential's original window without affecting the replacement | `test_repair_keeps_retired_key_separate_from_new_device`, `test_different_owner_http_pair_starts_displaced_window`, `test_same_owner_repair_inside_window_keeps_original_end`, `test_repair_never_reopens_first_revocation_window` |
-| A pairing code works once, under the gate, and expires; active bearers, pending codes, the local secret and in-window retained bearers cannot authorize foreign bound or legacy unbound routes while a Dirtside policy remains | `test_pairing_code_lifecycle`, `test_pairing_code_lifecycle_is_confined`, `test_credentials_stay_on_their_own_routes`, `test_legacy_exclusion_lasts_only_while_a_policy_is_bound` |
+| A pairing code works once, under the gate, and expires; Dirtside credentials cannot authorize foreign bound routes or legacy unbound routes, including after closure removes its last policy | `test_pairing_code_lifecycle`, `test_pairing_code_lifecycle_is_confined`, `test_credentials_stay_on_their_own_routes`, `test_legacy_route_stays_closed_after_disposal`, `test_closed_provider_rejects_credentials_on_legacy_route` |
+| Inactive public registrations reject all four credential kinds before targeted unload removes the provider | `test_targeted_unload_rejects_credentials_before_provider_removal` |
+| Dashboard sessions cannot bypass missing-method, refusal or unload closure | `test_closed_handlers_reject_dashboard_session` |
+| Senders who may pair get the closure reason for device selection, listing and terminal prechecks; a closed local owner can still revoke and cancel live work | `test_authorized_device_replies_explain_closure`, `test_refused_reload_keeps_owner_commands_local_and_truthful` |
+| Worker execution and stream calls during actual registration are replayed once with their request id; a worker terminal call there recovers through core's own retry; permanent closure and other refusals stay bounded and add no work, and a dropped connection is one attempt | `test_worker_call_inside_real_reload_is_replayed_once`, `test_worker_terminal_inside_real_reload_recovers_through_core_retry`, `test_worker_with_stale_closed_owner_stops_at_the_same_deadline`, `test_worker_terminal_with_stale_closed_owner_ends_with_core_retries`, `test_other_real_owner_refusals_are_not_replayed`, `test_dropped_connection_is_a_single_attempt` |
 | A previous-schema database gains retained storage without reviving long-revoked authority | `test_previous_schema_migrates_without_reviving_old_bearer` |
 | Disposing successfully enabled routes closes retained recognition at once | `test_dispose_enabled_routes_closes_retained_window` |
 | Multibyte output survives chunk boundaries | `test_multibyte_chunks` |
@@ -509,7 +515,7 @@ The floor for `pwd` is therefore one round trip plus about 10 ms of work. The po
 
 The original loopback measurement was CPU-bound: one signature per 64 KiB cost about 4 ms of signing and verification (R6). The internet flood instead exposed round-trip cost, addressed by the larger bounded parts in A16.6. A15.4 keeps more invasive throughput work deferred until another measured transfer needs it.
 
-Precedent for the transport, since the choice is the main thing a reviewer will question: GitHub's self-hosted runner receives jobs over an outbound HTTPS long poll held for 50 seconds ([GitHub docs](https://docs.github.com/en/enterprise-server@latest/actions/hosting-your-own-runners/about-self-hosted-runners)), the remote-control feature of a major coding assistant registers its local process over an outbound connection and polls a relay, and VS Code Remote Tunnels keep a persistent outbound connection to a tunnel service ([VS Code docs](https://code.visualstudio.com/docs/remote/tunnels)). One measured comparison puts the per-message latency difference between long polling and WebSockets under 0.3 ms at low event rates on a reused connection; the gap only opens when events arrive faster than one round trip, which a shell command cannot do ([comparison](https://daily.dev/posts/websocket-vs-sse-vs-long-polling-the-real-cost-of-1-000-events-wip1lzawd)). Cloudflare's tunnel daemon opens four outbound connections for availability, not for speed ([Cloudflare docs](https://developers.cloudflare.com/tunnel/configuration)); one device, one connection is enough here.
+Transport precedents: GitHub's self-hosted runner receives jobs over an outbound HTTPS long poll held for 50 seconds ([GitHub docs](https://docs.github.com/en/enterprise-server@latest/actions/hosting-your-own-runners/about-self-hosted-runners)), the remote-control feature of a major coding assistant registers its local process over an outbound connection and polls a relay, and VS Code Remote Tunnels keep a persistent outbound connection to a tunnel service ([VS Code docs](https://code.visualstudio.com/docs/remote/tunnels)). One measured comparison puts the per-message latency difference between long polling and WebSockets under 0.3 ms at low event rates on a reused connection; the gap only opens when events arrive faster than one round trip, which a shell command cannot do ([comparison](https://daily.dev/posts/websocket-vs-sse-vs-long-polling-the-real-cost-of-1-000-events-wip1lzawd)). Cloudflare's tunnel daemon opens four outbound connections for availability, not for speed ([Cloudflare docs](https://developers.cloudflare.com/tunnel/configuration)); one device, one connection is enough here.
 
 ### A15.2 Rules
 
@@ -557,13 +563,13 @@ The test that others will not write. Every case runs twice, once with direct rel
 - **Throughput above 8 MB/s.** The per-chunk signature is the bound (R6). The lever is to sign a running SHA-256 over the stream and verify once at the result, so chunks carry a hash chain instead of a signature, or to pipeline posts with a window of two. Add when `tests/bench.py` shows a real transfer waiting on CPU.
 - **A pre-warmed shell per session on the device.** Saves the 6 ms spawn per command. Not worth a second process model.
 
-## A16. Day-1 gate: what was built and what changed
+## A16. Initial execution path
 
 Historical implementation record, from 2026-11-05 through the previous version on 2026-11-10. Earlier core pins, checks and measured budgets below belong to those versions. Current authentication is A10; current budgets are A3. The seam-only preparation uses only the method core.
 
-Built on 2026-11-05 by the builder from A14 steps 1 to 5 plus `agent/policy.py` and `agent/executor.py`, through the OpenSpec change `dirtside-day1-gate`. On the owner's own run: 121 tests, ruff, the size budgets, `openspec validate --strict` and `hermes plugins doctor --ci` all pass against core main at 84a0301 (Python 3.14.6, macOS). Nothing is committed yet.
+Built on 2026-11-05 from A14 steps 1 to 5 plus `agent/policy.py` and `agent/executor.py`, through the OpenSpec change `dirtside-day1-gate`. On the owner's run: 121 tests, ruff, the size budgets, `openspec validate --strict` and `hermes plugins doctor --ci` all passed against core main at 84a0301 (Python 3.14.6, macOS).
 
-Deviations the builder found in the source and that are now part of the design:
+Deviations found in the source:
 
 - `executor.run(req, policy, send, *, cancel) -> tuple[Outcome, Chunk | None]`: the final tail is returned to the caller, which puts it inside the result, and cancel is a `threading.Event` the loop sets. A9's sketch had no channel for either.
 - The model's raw command travels in a `ContextVar` set by `execute()`, not an attribute on the environment. Core's deadline worker copies context, and an attribute would let concurrent calls apply policy to the wrong command (A6).
@@ -584,7 +590,7 @@ Open for the next steps, with the section each one changes:
 
 ### A16.1 Day-2 network path
 
-Built the same evening from A14 steps 6 and 7 plus every route in A11, through the OpenSpec change `dirtside-day2-network`; 169 tests, the five checks and the name scan pass on the owner's run against the same core SHA. What the source forced or the builder chose:
+Built the same evening from A14 steps 6 and 7 plus every route in A11, through the OpenSpec change `dirtside-day2-network`; 169 tests, the five checks and the name scan passed on the owner's run against the same core SHA. Implementation details:
 
 - The dashboard router module is loaded in its own namespace, so it reaches the registry and relay through the registered auth provider: `hermes_cli.dashboard_auth.get_provider("dirtside")` returns the `DirtsideDeviceAuth` instance, which carries both. That adds `hermes_cli.dashboard_auth.get_provider` and `hermes_constants.get_hermes_home` to the allowed imports in A3.
 - The chunk and result routes check that the request belongs to the posting device (`relay.accept_chunk`, `relay.accept_result`) before feeding or closing, so one device cannot finish another device's request.
@@ -615,14 +621,14 @@ The active `dirtside-day4-surfaces` change implements A14 steps 8 and 9 and the 
 - The bound text command, online-device picker and bounded quoted target facts use the existing registration contracts. Core freezes the prompt once; changing targets does not invalidate it.
 - Native Desktop discovers `desktop/plugin.js` without another manifest. The opt-in pane uses SDK REST and React Query, stops device/request polling while hidden, and scopes reads and writes by connection, profile, activation and focused durable session key. A foreign or missing owner cannot write through the active gateway.
 - The benchmark compares 50 paired commands, verifies all 10,000,000 output bytes and measures early running-command cancellation to tool return. It exposed a fixed 100 ms EOF-before-exit delay in the device executor, replaced by a bounded 10 ms process wait. No core code changes. HTTP and late cancellation are not certified by that measurement; core's adaptive polling can delay the latter by up to 200 ms.
-- README contains installation, four-command pairing, security disclosures and dated measurements. The private day-4 report records acceptance outputs and limits. Desktop runtime, physical two-host and real service-manager checks remain unperformed.
+- README contains installation, four-command pairing, security disclosures and dated measurements. Desktop runtime, physical two-host and real service-manager checks remain unperformed.
 
 ### A16.4 Day-5 Linux portability
 
 The active `dirtside-day5-linux` change fixes deadline ownership and test assumptions against the same pinned core. Linux validation remains the owner's GitHub-hosted run.
 
 - Execution and chunk retries use the same pure `device_timeout_s` calculation: the requested timeout plus one second, still capped by device policy. Cancellation does not wait for the backstop. After a gateway restart the device learns at its next poll that its running work is orphaned and stops it; the deadline remains the backstop when the device cannot reach the gateway at all.
-- The day-6 correction passes the actual handle to core without holding a finished device timeout. Finalization adds the existing timeout suffix and `hermes_timed_out` flag when device policy expires first, preserving bounded capture and spill metadata. An earlier device-policy stop returns promptly rather than waiting out the caller's longer budget.
+- Timeout finalization passes the actual handle to core without holding a finished device timeout. It adds the existing timeout suffix and `hermes_timed_out` flag when device policy expires first, preserving bounded capture and spill metadata. An earlier device-policy stop returns promptly rather than waiting out the caller's longer budget.
 - A combined timeout and output cap retains the timeout reason first and the cap notice after `; `. The environment renders the cap notice separately. Ordinary exit 124, loss 255, refusal 126 and cancellation 130 remain distinct.
 - Signal tests keep bash and a child alive with a compound command. Pool coverage uses acknowledged dispatch and whichever workers actually start, with ten-second readiness deadlines and the existing five-second cessation bounds. Cwd tests use quoted fixture paths; flush-clock boundaries and partial-output readiness do not depend on fixed sleeps.
 
@@ -699,13 +705,13 @@ Core's exit-code hint table has entries for 124, 126 and 137, not 255. Loss no l
 - `ctx.session_cwd()` reads workspace/policy state (core's `hermes_cli/plugin_session.py`, lines 33 to 40 at `84a0301`), not the private terminal cwd table.
 - Server delegates use one lazy `LocalEnvironment` handoff to retain core's credential stripping and all other local behavior until a public backend factory exists.
 - `EnvironmentConnectionError` is imported only in `environment.py`, remains necessary for core's rendering (core's `tools/terminal_tool.py`, lines 1451 to 1468, 1596 to 1597 at `84a0301`) and needs documenting in the provider contract.
-- The method core uses launch-owned provider policies and requires TokenPrincipal results (core's `hermes_cli/plugins_context.py`, `PluginContext.register_dashboard_token_route`, lines 591 to 625, and core's `hermes_cli/dashboard_auth/token_auth.py`, `_authenticate_bound_token`, lines 124 to 159 at public PR commit `7dce8c38e8c998c52c4c139df340a0bffecc77e6`). The earlier withdrawn proposal's two assumptions do not describe this gate.
+- The method core uses launch-owned provider policies and requires TokenPrincipal results (core's `hermes_cli/plugins_context.py`, `PluginContext.register_dashboard_token_route`, lines 591 to 625, and core's `hermes_cli/dashboard_auth/token_auth.py`, `_authenticate_bound_token`, lines 124 to 159 at public commit `7dce8c38e8c998c52c4c139df340a0bffecc77e6`). The earlier withdrawn proposal's two assumptions do not describe this gate.
 - Non-runtime private-core helpers live at `tests/core_runtime.py`, `tests/bench.py` and `tests/bench_client.py`, with callers updated instead of re-export shims or misleading non-test `test_` files.
 - Tests use temporary homes outside source, and `tests/test_public_surfaces.py` invokes core's unmodified private-import lint on a clean intended export to require exactly the two read-only environment import sites once each, with a safe install verdict and an allowed decision.
 
 ---
 
-### A16.8 Correction 1 boundaries
+### A16.8 Default trust and ownership boundaries
 
 An implicit device default is eligible only if its owner is the current sender, `local` or a configured owner, and normal dispatch authorization still applies. Even a privileged sender gets server rather than an unprivileged owner's implicit default. Empty `owners` still permits minting an unused default name: names are not a trust grant. Privileged explicit selection identifies an unprivileged owner in the confirmation.
 
@@ -721,13 +727,13 @@ Re-pairing preserves only a safely readable, valid existing device file's `env_p
 
 The frozen target section and every authorized turn's fact line are shared model context, not per-sender privacy. Each fact line stays in conversation history and is replayed on later turns. A later participant can receive the device name, OS, home and online state, including stale facts, while their device execution remains denied. `/land` and `/dirtside use` replies also show the home to the whole chat. A server-target command instead runs as the gateway OS user and can read `local.secret` to act as `local` on IPC. Core approvals and sender allowlists must restrict arbitrary gateway execution; device ownership cannot isolate users who can execute as that same account.
 
-### A16.9 Correction 2 lifecycle and defaults
+### A16.9 Runtime lifecycle and defaults
 
 Only a previous provider with runtime_version 2 and the same registry path can supply compatible runtime references. Version 1 and unmarked providers start a fresh Registry and Relay, avoiding reuse of the old credential lookup API.
 
 The relay's existing route gate also governs local ownership: while retired it uses Client rather than old local queues, and its parked polls return without dispatching more work.
 
-Compatible ordinary rediscovery rebinds that gate and preserves live handles, while a cached pre-disable facade reaches the new serving owner through loopback after re-enable.
+Compatible ordinary rediscovery rebinds that gate and preserves live handles, while a cached pre-disable facade reaches the new serving owner through loopback after re-enable. Closure replies and the owner-process check read the live registration for the same database, not the retired one, so the retired registration's closure no longer refuses that facade. A registration for another database, such as a profile-scoped load, keeps its own state.
 
 Local authentication rejects self-forwarding to the same incoming base URL before reading a body, so an unclaimed new runtime cannot recurse through its old owner address; independent secondary-server state forwarding remains supported.
 
@@ -753,23 +759,23 @@ Explicit-revocation tests still require automatic shutdown. The day-8 generic-re
 
 Restart after code updates to replace already-mounted method bodies; a full disable/re-enable is not an in-flight-work continuity promise.
 
-### A16.10 Correction 3 native local authority
+### A16.10 Native local authority
 
-Core's public session surface can be `local` without an active local policy, including canonical plugin slash dispatch. C3's empty-or-same-uid rule alone was insufficient because relay ingress accepts wire platform `local`; C4 narrows that branch to the actual non-relay command source. Other uid or arbitrary raw subjects remain ordinary platform-qualified senders; a messaging user id alone never grants host authority.
+Core's public session surface can be `local` without an active local policy, including canonical plugin slash dispatch. An empty-or-same-uid rule alone is insufficient because relay ingress accepts wire platform `local`; that branch also requires the actual non-relay command source. Other uid or arbitrary raw subjects remain ordinary platform-qualified senders; a messaging user id alone never grants host authority.
 
 The native integration tests use the ordinary daemon, same-user control ticket, real CLI session opening and slash dispatch, canonical TUI RPCs, loopback model turns and a signed device agent. They verify local-owned discovery, explicit target selection, server/device cd and export isolation, actual device execution, revocation and refusal of the next command without server fallback. No policy or session identity is fabricated; all three prepared cores run the same test.
 
 The owner-loss test writes its shell pid to an absolute quoted path so retained terminal cwd cannot hide it from teardown. A retained-cwd case checks the process dies and performs scoped safety cleanup even on a red assertion. Its existing wait bounds are unchanged, as is agent.loop.
 
-The optional omission of server session_defaults rows is not applied: missing rows cannot preserve the existing cross-process server-default snapshot after configuration changes. That table remains unbounded. C3 raised the access budget from 71 to its measured 73 lines; C4 budgets are recorded below. Complexity 8 and hard cap 400 remain.
+The optional omission of server session_defaults rows is not applied: missing rows cannot preserve the existing cross-process server-default snapshot after configuration changes. That table remains unbounded. At that stage the access budget grew from 71 to its measured 73 lines; current budgets are in A3. Complexity 8 and hard cap 400 remain.
 
-### A16.11 Correction 4 ingress and reload boundaries
+### A16.11 Ingress and reload boundaries
 
 At the two older prepared cores, core's `gateway/relay/ws_transport.py`, lines 198 to 238 at `84a0301` and `8d7061f`, reads platform and chat id from wire but stamps the wire-invisible relay flag itself. Chat/session id equality is not authentication. Core's `hermes_cli/plugin_command_dispatch.py`, lines 11 to 32, opts a handler into the actual source keyword; core's `gateway/run_inbound_hooks.py`, lines 288 to 299, supplies it. Commands binds it in an instance-owned ContextVar and resets it in finally. Surface `local` requires source platform value `local`, relay flag exactly false and no detached route, in addition to the existing uid rule. Turns retain their trusted policy surface. Native CLI/TUI slash and turn tests stay the positive control; real relay decode and session binding cover both empty and same-uid wire users, including a matching chat/session id.
 
 Core maps all dashboard and Webapp sign-ins, including forwarded logins, to the host owner in core's `gateway/owner_identity.py`, lines 23 to 44, identical at all three prepared revisions. They therefore act as `local` on POSIX gateways. Windows gateways' `sid:` subjects are not recognized as the host yet.
 
-Local /exec and /stream retry only raw JSON HTTP 401 detail exactly `Dirtside token routes are disabled`, closing each rejection within a fixed three-second monotonic retry window per operation and preserving the request id and captured owner. This gate runs before submission or stream consumption. Other authorization/status/transport failures and partial successful streams are never replayed. The reload regression observes live owner stream attachment before rediscovery; loaded repeats exercise each core separately.
+Local /exec and /stream retry an owner's HTTP 401 within a fixed three-second monotonic window per operation, preserving the request id and captured owner. Core's gate, the handler gate and the local-secret check all answer 401 before submission or stream consumption. Other statuses, transport failures and partial successful streams are never replayed. The reload regression observes live owner stream attachment before rediscovery; loaded repeats exercise each core separately.
 
 The owner's 2026-11-09 Mac/WSL2 observation established the file-path disclosure in A12: an absolute device read worked, but the write parent was resolved on the Mac gateway. No file-path runtime change or independent two-host reproduction is included.
 
@@ -828,11 +834,11 @@ The first draft scanned the script for absolute paths and refused anything outsi
 
 ## B10. Why there are no model tools and no device-side prompts
 
-The thread that produced this design was explicit that the model must never choose where a command runs. A device-listing tool would be an invitation to do exactly that through prompt injection. The model gets initial target facts from a frozen prompt section and current authorized facts from the public pre_llm_call hook. Hermes already asks the user in chat before a dangerous command and the provider keeps that on, so a second prompt on the device would add a third actor, a timeout policy and a UI on a machine that may have no screen. It stays on the stretch list.
+Only the user chooses where commands run. A device-listing tool would invite target changes through prompt injection. The model gets initial target facts from a frozen prompt section and current authorized facts from the public pre_llm_call hook. Hermes already asks the user in chat before a dangerous command and the provider keeps that on, so a second prompt on the device would add a third actor, a timeout policy and a UI on a machine that may have no screen. It stays on the stretch list.
 
 ## B11. Why the lints exist
 
-Every "keep files small" and "no scattered conditionals" instruction gets ignored under deadline pressure. `tools/check_sizes.py` and `mccabe.max-complexity = 8` fail CI instead. `TERMINAL`, `Credential`, `Target` and `Decision` are the same idea in type form: the next case is a variant, not a branch.
+`tools/check_sizes.py` and `mccabe.max-complexity = 8` enforce file-size and complexity limits in CI. `TERMINAL`, `Credential`, `Target` and `Decision` express variants rather than growing condition ladders.
 
 ## B12. What the review cut from the first draft
 
@@ -845,7 +851,7 @@ Every "keep files small" and "no scattered conditionals" instruction gets ignore
 - A `Settings` dataclass and three knobs that were constants. `default_target` was the original setting; the catalog review adds `owners`.
 - `session_key` and `task_id` on the wire, `token_hash` on the `Device` type, `script_sha256` and `bytes_out` columns, the poll offset field, a `Backoff` class, `hermes dirtside demo`, the gateway-side replay LRU, and the explicit `skip_container_guards` override (the ABC derives it from `is_container`; the test pins the value).
 
-## B13. What a reviewer should push back on first
+## B13. Remaining integration limits
 
 The original day-0 questions concerned token-route registration, cwd at create_environment and session-key binding in commands and prompts. A10 now requires the public provider-bound method; no private registration path remains. The shared-snapshot limitation still matters: two execute calls on one environment share one device snapshot file, as they do on SSH; core serializes environment creation per task, not execution.
 
@@ -855,6 +861,6 @@ Everything Python does on the request path adds up to under 5 ms per small messa
 
 ## B15. Why the owner keeps the relay and the clients stay thin
 
-Moving queues and cancellation into SQLite would not share pipes, wakeups or output readers. It would add competing writers, terminal-state arbitration and another process protocol while still needing IPC for bytes. A new daemon would add deployment and service ownership that Hermes already supplies. Any number of servers may mount the plugin; only the one receiving device traffic owns its relay. All others, including the unmanaged gateway auto-started by `hermes chat`, use the client, so importing or viewing another server cannot steal ownership. Loopback HTTP is the missing seam, not a second execution engine. Clients submit once, copy bytes into core's existing pipe and forward kill. They do not decide online state, run a timeout clock or reproduce the relay's state machine. A local hop costs latency; the benchmark reports it rather than hiding it inside the old in-process numbers.
+Moving queues and cancellation into SQLite would not share pipes, wakeups or output readers. It would add competing writers, terminal-state arbitration and another process protocol while still needing IPC for bytes. A new daemon would add deployment and service ownership that Hermes already supplies. Any number of servers may mount the plugin; only the one receiving device traffic owns its relay. All others, including the unmanaged gateway auto-started by `hermes chat`, use the client, so importing or viewing another server cannot steal ownership. Loopback HTTP is the missing seam, not a second execution engine. Clients retry only pre-handler 401 refusals for submission and stream attachment, within three seconds and with the same request id; accepted work is never replayed. They copy bytes into core's existing pipe and forward kill, without deciding online state or reproducing the relay's execution state machine. A local hop costs latency; the benchmark reports it rather than hiding it inside the old in-process numbers.
 
 One device upload stays in flight, with 2 MiB parts amortizing per-post round trips. A remote flood uses the measured link-probe budget from A14, not the discarded 20 Mbit/s assumption in A16.6. Pipelining would add gateway ordering, another buffer and more cancellation states; the existing synchronous post gives ordering and backpressure directly. Revisit that tradeoff only with a measured transfer that needs it.

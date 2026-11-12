@@ -2,51 +2,22 @@
 
 ## 1. Slow-link output
 
-- [x] 1.1 Coalesce pending bytes up to PART_MAX with the existing flush deadline; verify a 64 MiB flood uses at most 32 parts and 100 bytes flush by FLUSH_MS.
-- [x] 1.2 Enforce decoded and streamed chunk-body bounds and keep the pane tail bounded; verify exact-bound acceptance, oversized refusal, misleading or absent length and byte-exact pipe delivery.
-- [x] 1.3 Update README Numbers and architecture A8, A10, A16.x and one Part B note; verify arithmetic, version 1 compatibility and the pending owner-rerun cell.
+- [x] 1.1 Coalescing retains the first-byte deadline and sends a 64 MiB flood in at most 32 parts.
+- [x] 1.2 Decoded parts, streamed request bodies and the pane tail stay bounded with byte-exact delivery.
+- [x] 1.3 Maximum-part parsing and signature verification stay off the dashboard event loop.
+- [x] 1.4 Kill timing begins at RUNNING independently of first output.
 
-## 2. Truthful request states
+## 2. Request states and restart
 
-- [x] 2.1 Persist running at claim with an idempotent registry update; verify silent claimed work is running, unclaimed work is queued and chunks make no history writes.
-- [x] 2.2 Change every lost outcome to 255 and only its loss expectations; verify original reason strings, preserved partial bytes and no core timeout hint.
-- [x] 2.3 Update architecture exit codes and claim history; verify every changed existing loss assertion is listed old-to-new in the private report and timeout assertions are unchanged.
+- [x] 2.1 First claim persists running idempotently; chunks never write history.
+- [x] 2.2 Lost outcomes use 255 with the same reason and partial bytes, without timeout advice.
+- [x] 2.3 Unknown running ids are cancelled on the next poll without affecting known live work or legacy reports.
+- [x] 2.4 Ticking and silent restart scenarios retain pairing and stop orphaned work within one poll plus 10 seconds.
+- [x] 2.5 Only the exact authenticated revoked answer stops the agent; generic core and foreign 401s keep retrying.
 
-## 3. Integrated acceptance
+## 3. Link measurement
 
-- [x] 3.1 Set only minimum needed module budgets and run pytest, ruff, sizes, strict OpenSpec validation, doctor and clean-snapshot catalog validation; record exact outputs and any retries.
-- [x] 3.2 Run the loopback matrix and after benchmark; verify 8 of 8, at least 8 MB/s and unchanged history count 16.
-- [x] 3.3 Finish .notes/delegate/20261106-dirtside-day8/REPORT.md with file:line evidence, bounds, budgets, arithmetic, assertion changes and every check output; leave the change unarchived, live installs untouched and Git history unchanged.
-
-## 4. Correction 1
-
-- [x] 4.1 Trigger the benchmark kill at RUNNING without changing its command or gate; test independence from first output and record all three kill measurements.
-- [x] 4.2 Bound streamed result bodies and move signed-message JSON, verification and parsing off the event loop; test maximum results, overflow, concurrent polling and overlapping same-sequence retries.
-- [x] 4.3 Correct README's upload assumption, architecture bounds and report citations; state the per-post memory bound and minimum budgets.
-- [x] 4.4 Rerun every acceptance check, keep history at 16 and append the exact outputs and remaining limits under Correction 1 in the private report.
-
-## 5. Correction 2
-
-- [x] 5.1 Make rig waits exceed carried command timeouts by 15 s; test timeout outcomes and the unchanged 90 s default.
-- [x] 5.2 Measure the remote device path once before rows, derive and record the flood budget, and test arithmetic, public-URL posts, worker execution, cached measurement, failure evidence and unchanged loopback behavior.
-- [x] 5.3 Update README and the matrix architecture note without changing the pending cell, loopback row, assertions or production limits; state budgets.
-- [x] 5.4 Rerun acceptance, retain 16 commits and append Correction 2 with file:line evidence, test names and exact check outputs.
-
-## 6. Correction 3
-
-- [x] 6.1 Cancel unknown reported running ids inside Relay.next after recovery without touching history or legacy behavior; verify known states, repeated reports and no registry writes.
-- [x] 6.2 Keep the ticking restart phase and add a silent sleep 600 with timeout=600; reproduce the failure and prove cessation within one poll interval plus 10 s through the real row.
-- [x] 6.3 Document next-poll cancellation and unreachable-gateway backstop, check README restart wording and set only the minimum relay budget.
-- [x] 6.4 Preserve revocation after immediate orphan replies: only HTTP 401 with exact `{"detail":"device revoked"}` stops the device; core's generic 401 and foreign 401s stay retryable. Test the real middleware boundary without loosening the existing five-second check.
-- [x] 6.5 Rerun all acceptance, keep 16 commits and append Correction 3 with file:line evidence, test names, budgets and exact check outputs.
-
-## 7. Correction 4
-
-- [x] 7.1 Accept fast-link samples with upload duration at or below the round trip, preserve worker retries and return the last sample; test the finite positive fallback, floor, unchanged remote arithmetic and invalid measurements.
-- [x] 7.2 Run the real benchmark smoke with --report-only and check its summary and all six rows without requiring PASS; retain strict threshold, execution and byte-integrity checks.
-- [x] 7.3 Rerun the brief's acceptance checks, retain 17 commits, state budgets and append Correction 4 with file:line evidence and exact outputs; keep user README edits and leave the change unarchived.
-
-## Workflow follow-up
-
-- The owner reruns the real two-machine matrix and replaces the pending README flood measurement with the result.
-- Do not archive this change in this run.
+- [x] 3.1 Rig waits exceed carried command timeouts by 15 seconds, retaining the 90-second default otherwise.
+- [x] 3.2 One signed remote probe determines the flood budget with measured rate and round trip.
+- [x] 3.3 Fast-link samples retain the finite positive fallback and three-attempt policy.
+- [x] 3.4 Report-only benchmark smoke checks all six rows without weakening strict timing or byte-integrity checks.

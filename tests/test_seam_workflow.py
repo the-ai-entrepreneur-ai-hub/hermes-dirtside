@@ -16,8 +16,11 @@ def test_gate_uses_public_release_and_method_patch():
     prepare = next(step["run"] for step in steps if step.get("name") == "Prepare the core checkout")
     assert "https://github.com/NousResearch/hermes-agent" in prepare
     assert "fetch --depth=1 origin 3b421578588243f920886e6fe79a6faa87ea026e" in prepare
-    assert ("https://github.com/the-ai-entrepreneur-ai-hub/hermes-agent/commit/"
-            "7dce8c38e8c998c52c4c139df340a0bffecc77e6.patch") in prepare
+    assert "ROUTE_COMMIT=7dce8c38e8c998c52c4c139df340a0bffecc77e6" in prepare
+    assert ('fetch --depth=2 https://github.com/the-ai-entrepreneur-ai-hub/hermes-agent "$ROUTE_COMMIT"'
+            in prepare)
+    assert 'diff --binary "$ROUTE_COMMIT^" "$ROUTE_COMMIT"' in prepare
+    assert "curl" not in prepare
     assert 'git -C "$HERMES_SRC" apply --exclude=\'website/*\'' in prepare
     assert "--frozen" in prepare
     runs = "\n".join(step["run"] for step in steps if "run" in step)

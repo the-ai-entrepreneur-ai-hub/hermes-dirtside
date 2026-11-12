@@ -19,11 +19,3 @@
 
 - [x] 4.1 Implement the signed loopback benchmark and threshold tests; run it, retain its full output and verify all four measured targets.
 - [x] 4.2 Finish README installation, four-command pairing, commands, execution locations, security, disclosures and Mermaid diagram; paste measured numbers and dated matrix evidence with revision qualifiers.
-
-## 5. Integration verification
-
-- [x] 5.1 Run all acceptance checks, source/name/whitespace checks and unchanged-history verification; write the exact outputs, file counts, verified SDK calls, deviations and limitations into the private report.
-
-## Workflow follow-up
-
-- Leave this change active. Do not archive, synchronize, commit, push or create a branch.

@@ -27,4 +27,4 @@ None. The day-1 change remains active and main specifications remain untouched.
 
 ## Impact
 
-Adds device and dashboard modules and tests. Extends registry read methods and request ownership checks without changing the targets schema or target methods. Uses installed HTTP and dashboard dependencies. Commands, prompt, desktop assets, benchmarks and README belong to the other builder. Service installation, archive and main-spec sync remain out of scope.
+Adds device and dashboard modules and tests. Extends registry read methods and request ownership checks without changing the targets schema or target methods. Uses installed HTTP and dashboard dependencies. Service installation is not part of this network layer.

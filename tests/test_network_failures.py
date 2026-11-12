@@ -1,6 +1,7 @@
 """Loss, output retry and restart conformance over the production HTTP routes."""
 import shlex
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -11,7 +12,7 @@ from fastapi.responses import JSONResponse
 from network_support import listening, mounted, subprocess_agent, until
 
 from dirtside.environment import DirtsideEnvironment
-from dirtside.model import LOST_GRACE_S, OFFLINE_AFTER_S, PART_MAX, RequestState
+from dirtside.model import LOST_GRACE_S, OFFLINE_AFTER_S, PART_MAX, Outcome, RequestState
 from dirtside.relay import Relay
 from test_executor import alive, await_file
 from test_network import group, revoke, setup_agent, stop_group
@@ -108,14 +109,34 @@ def test_upload_retries_cannot_extend_device_command_timeout(tmp_path, transport
 
 class RestartedApp:
     def __init__(self, app):
-        self.app = app
+        self.app = self.original = app
+        self.active = 0
+        self.drained, self.unavailable = threading.Event(), threading.Event()
+        self.drained.set()
 
     async def __call__(self, scope, receive, send):
-        await self.app(scope, receive, send)
+        app = self.app
+        if app is None:
+            self.unavailable.set()
+            return await JSONResponse({}, status_code=503)(scope, receive, send)
+        old = app is self.original
+        if old:
+            self.active += 1
+            self.drained.clear()
+        try:
+            await app(scope, receive, send)
+        finally:
+            if old:
+                self.active -= 1
+                if self.active == 0:
+                    self.drained.set()
 
 
 def test_subprocess_gateway_restart_rejects_old_work_and_reuses_pairing(tmp_path, transport):
     with mounted(tmp_path) as (old_app, reg, old_relay, old_module):
+        old_routes = old_module.auth.routes
+        old_key = bytes(old_module.relay_key)
+        old_relay._routes_enabled = lambda: old_routes.enabled
         switch = RestartedApp(old_app)
         with listening(switch) as url:
             device, cfg = setup_agent(reg, tmp_path, url)
@@ -126,8 +147,15 @@ def test_subprocess_gateway_restart_rejects_old_work_and_reuses_pairing(tmp_path
                 pid = int(await_file(tmp_path / "restart.pid"))
                 try:
                     until(lambda: old_relay.tail(handle.req.id))
+                    switch.app = None
                     reg.mark_stale_lost(int(time.time()))
-                    old_module.auth.routes.dispose()
+                    old_routes.dispose()
+                    with old_relay._condition:
+                        old_relay._condition.notify_all()
+                    old_relay.close(handle.req.id, Outcome(RequestState.LOST, 255, 0, False, "gateway restarted"))
+                    assert switch.drained.wait(2), "old requests did not leave before replacement"
+                    assert switch.unavailable.wait(5), "agent did not see the restart interval"
+                    assert handle.wait(timeout=1) == 255
                     with mounted(tmp_path, relay=Relay(reg)) as (new_app, _, new_relay, new_module):
                         rejected, polls = [], []
 
@@ -140,7 +168,7 @@ def test_subprocess_gateway_restart_rejects_old_work_and_reuses_pairing(tmp_path
                                 polls.append(response.status_code)
                             return response
 
-                        assert bytes(new_module.relay_key) == bytes(old_module.relay_key)
+                        assert bytes(new_module.relay_key) == old_key
                         switch.app = new_app
                         until(lambda: rejected, timeout=5)
                         until(lambda: not alive(pid), timeout=5)

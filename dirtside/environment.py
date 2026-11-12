@@ -25,6 +25,9 @@ def _status_suffix(proc, timeout, code):
     return suffix + (f"\n[Dirtside: {reason}]" if reason else ""), timed_out
 
 def require_online(device, relay):
+    if (reason := getattr(relay, "_routes_reason", lambda: "")()) and relay.access.may_pair():
+        raise EnvironmentConnectionError(f"{reason} Nothing was run on the server.",
+                                         retry_hint="Run /dirtside use server.")
     if not relay.connection().is_online(device.id):
         raise EnvironmentConnectionError(f"Dirtside: device '{device.name}' is offline. Nothing was run on the server.",
                                          retry_hint="Start dirtside-agent serve or hermes dirtside serve on it, or run /dirtside use server.")

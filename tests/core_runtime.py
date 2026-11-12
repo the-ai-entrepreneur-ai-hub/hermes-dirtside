@@ -27,6 +27,7 @@ class Runtime:
             return
         from hermes_cli import web_server
         self.web = web_server
+        self.app = web_server.app
         web_server._configure_auth_gate("127.0.0.1", False, None, None)
         assert web_server.app.state.auth_required
         self.blocked = threading.Event()
@@ -51,7 +52,7 @@ class Runtime:
         if self.blocked.is_set() and scope.get("path", "").startswith("/api/plugins/dirtside/device/"):
             await JSONResponse({"detail": "rig reporting outage"}, status_code=503)(scope, receive, send)
         else:
-            await self.web.app(scope, receive, send)
+            await self.app(scope, receive, send)
 
     def info(self, _):
         from agent.terminal_env_registry import get_provider
@@ -225,14 +226,15 @@ class Runtime:
             return args["request_id"] in relay.handles and args["request_id"] not in relay._streams
 
     def registration(self, args):
+        if args["action"] not in {"profile", "duplicate", "reload"}:
+            from registration_runtime import scenario
+            return scenario(self, args)
         from hermes_cli.dashboard_auth import get_provider
         from hermes_cli.plugins import PluginContext, PluginManager
         from pathlib import Path
         previous = self.auth
         manifest = self.manager._plugins["dirtside"].manifest
         if args["action"] == "profile":
-            import shutil
-            assert shutil.disk_usage(self.manager.home_path).free >= 8 * 1024 ** 3
             profile = Path(self.manager.home_path) / "profiles/registration-control"
             profile.mkdir(parents=True)
             manager = PluginManager(scope_key=str(profile))
@@ -246,6 +248,14 @@ class Runtime:
                     "/api/plugins/dirtside/device/pair", provider="dirtside", required_scopes=("dirtside",)) is None
                 assert get_provider("dirtside") is previous and previous.routes.enabled
                 assert not previous.routes.reason and all(handle.active for handle in previous.routes.registrations)
+                from hermes_cli.plugin_command_dispatch import invoke_plugin_command
+                scoped = manager._plugin_commands["dirtside"]["handler"]
+                reason = scoped.relay._routes_reason()
+                assert scoped.relay is not previous.relay and "authentication was not registered" in reason, reason
+                changes = scoped.registry._connection().total_changes
+                assert invoke_plugin_command(scoped, "pair scoped-device") == reason
+                assert scoped.registry._connection().total_changes == changes
+                assert invoke_plugin_command(scoped, "") == reason
             finally:
                 manager.unload()
             assert get_provider("dirtside") is previous

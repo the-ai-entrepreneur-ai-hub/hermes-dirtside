@@ -18,7 +18,7 @@ class Relay:
         self._paired_keys = {}
         self._client, self._owner_pid, self._streams = None, None, {}
         self.access = Access()
-        self._routes_enabled = lambda: True
+        self._routes_enabled, self._routes_reason = (lambda: True), (lambda: "")
 
     def connection(self):
         return self if self._routes_enabled() and (self._client is None or self._owner_pid == os.getpid()) else self._client

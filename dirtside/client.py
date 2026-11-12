@@ -32,16 +32,11 @@ def check_status(response):
     detail = "".join(c for c in detail if c.isprintable())[:200]
     raise EnvironmentConnectionError(f"Dirtside owner answered {response.status_code}: {detail}")
 
-def retry_disabled(response, deadline):
+def retry_unauthorized(response, deadline):
     if response.status_code != 401 or time.monotonic() >= deadline:
         return False
     response.read()
-    try:
-        if response.json().get("detail") != "Dirtside token routes are disabled":
-            return False
-    except (ValueError, AttributeError):
-        return False
-    response.close()  # This exact pre-handler refusal has no execution or stream side effect.
+    response.close()  # Every local 401 precedes execution or stream attachment.
     time.sleep(min(0.05, max(0, deadline - time.monotonic())))
     return True
 
@@ -80,6 +75,8 @@ class Client:
                 raise ValueError("invalid owner")
             if not 0 < int(origin.rpartition(":")[2]) <= 65535:
                 raise ValueError("invalid owner port")
+            if pid == os.getpid() and self.relay._routes_reason():  # This owner's routes are closed.
+                return None
             os.kill(pid, 0)
             if data["started"] != process_started(pid):
                 return None
@@ -97,7 +94,7 @@ class Client:
                 if current is None or (origin is not None and origin != current):
                     raise EnvironmentConnectionError(OWNER_MISSING)
                 response = self.http.request(method, current + path, headers=self.headers, **kwargs)
-                if path == "/exec" and retry_disabled(response, deadline):
+                if path == "/exec" and retry_unauthorized(response, deadline):
                     continue
                 check_status(response)
                 return response.json()
@@ -130,6 +127,8 @@ class Client:
     def revoke(self, device_id):
         if origin := self.origin():
             self.request("POST", "/devices", origin=origin, json={"device_id": device_id})
+        elif self.relay._owner_pid == os.getpid():
+            self.relay.revoke(device_id)
 
     def kill(self, request_id):
         with self._lock:
@@ -166,7 +165,7 @@ class Client:
                     raise EnvironmentConnectionError(OWNER_MISSING)
                 with self.http.stream("GET", f"{origin}/stream", params={"id": handle.req.id},
                                       headers=self.headers, timeout=httpx.Timeout(2, read=None)) as response:
-                    if retry_disabled(response, deadline):
+                    if retry_unauthorized(response, deadline):
                         continue
                     check_status(response)
                     outcome = self.copy_stream(handle, response, fd)

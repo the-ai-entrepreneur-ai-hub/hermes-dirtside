@@ -21,10 +21,8 @@ The Ubuntu gate fails the same five execution tests while macOS passes. Timeout 
 
 ### Modified Capabilities
 
-None. Main specs have not been synchronized; earlier changes remain active.
+None.
 
 ## Impact
 
 The environment, domain timeout duration, executor, agent retry deadline, execution tests and test helpers change. Architecture records the revised timeout contract. No core edits, new core imports, dependencies, wire fields, manifest changes or skipped tests are needed.
-
-Linux execution belongs to the owner. This change supplies source evidence, deterministic regression coverage, local acceptance outputs and a private handoff report. It does not commit, push, branch, archive, synchronize or access real user state.

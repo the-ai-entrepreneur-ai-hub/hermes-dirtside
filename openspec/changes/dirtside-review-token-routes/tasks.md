@@ -1,50 +1,30 @@
 # Tasks
 
-Historical record through acceptance on 2026-11-10. Current support and verification follow dirtside-seam-only-registration; earlier checked items do not claim new verification.
+## 1. Registration and closure
 
-## 1. Regression tests
+- [x] 1.1 Fixed device and local paths use the public context method with exact scopes and retained disposable handles.
+- [x] 1.2 Refusal, failure, missing or noncallable registration closes every handler and disposes partial handles.
+- [x] 1.3 Dashboard sessions do not bypass closure; disabled or inactive registrations recognize no Dirtside credentials on any token route.
 
-- [x] 1.1 Add tests/test_review_token_routes.py with exact seam calls, forbidden fallback, unload disposal, mid-registration failure and None refusal.
+## 2. Live runtime continuity
 
-## 2. Red evidence
+- [x] 2.1 Mounted requests and local handlers bind to the current provider while compatible rediscovery preserves live relay state.
+- [x] 2.2 Disable/re-enable, registry replacement, in-flight work and both transports retain their defined behavior.
+- [x] 2.3 Only same-path runtime version 2 is reused; older providers start fresh, retired relays use the current Client, and unclaimed self-forwarding refuses.
+- [x] 2.4 Mounted-generation close and kill compare terminal states by value.
+- [x] 2.5 Generic and unknown-credential poll/upload failures retry; only the exact explicit-revoked signal stops an agent.
 
-- [x] 2.1 Run the new file against pristine 0ae9359, keeping the red log.
+## 3. Worker replay
 
-## 3. Implementation
+- [x] 3.1 Real-loader worker calls inside registrations 1, 5 and 9 retain one execution and complete output.
+- [x] 3.2 Execution and stream 401s retry before handler work within the same fixed deadline and request identity.
+- [x] 3.3 Other statuses and transport failures do not replay work; a permanently closed recorded owner remains bounded.
 
-- [x] 3.1 Historical (2026-11-08): implemented the then-required registration fallback and instance-owned rollback/unload. The seam-only change removes that fallback.
+## 4. Revoke exit
 
-## 4. Integration and disclosure
-
-- [x] 4.1 Historical (2026-11-08): tested both earlier registration paths and released-core flows. Current coverage uses the real public method only.
-
-## 5. Validation and checkpoint
-
-- [x] 5.1 Run package and fast suites, record green output and exact budget changes, then save WP4 checkpoints.
-
-## Correction 1
-
-- [x] C1.1 Prove forced-discovery and registry replacement red; bind each request and local handler to the current instance while preserving live relay state.
-- [x] C1.2 Verify real disable/re-enable, partial refusal, in-flight work and both transports without opening unloaded routes.
-
-## Correction 2
-
-- [x] C2.1 Prove old-provider upgrade and cached in-process/Client re-enable defects; require a runtime version, route retired relays through Client and refuse unclaimed self-forwarding without changing ordinary reload or secondary forwarding.
-- [x] C2.2 Prove retained mounted-generation close and kill defects, then normalize terminal states and compare kill states by value.
-- [x] C2.3 Prove disable's generic core 401 stops agents, then retry generic and unknown-credential errors for poll and upload while retaining exact explicit-revoked shutdown.
-
-## Correction 4
-
-- [x] C4.1 Prove exact disabled-route /exec and /stream loss on C3, add bounded same-id retry with strict refusal controls, and wait for actual stream attachment in the real reload test.
-- [x] C4.2 Run 20 fresh serial client reload cases per prepared core under measured CPU load, in addition to the whole-file correction repeats.
-
-## Revoke exit
-
-- [x] R1 Add signed route, invalid/replay, offline subprocess, real upload and re-pair regressions; preserve red evidence before the gateway fix.
-- [x] R2 Separate retained proof from active authority, archive rotated paired credentials, recheck persisted state and preserve the unchanged agent stop rule and stable same-owner choice.
-- [x] R3 Document one ten-second rule and reconcile the earlier parked-poll and generic-401 assumptions.
-- [x] R4 Historical (accepted 2026-11-10): proved released-core foreign-route exposure and the original ten-second bound. The seam-only change migrates those assertions to bound-gate refusal with positive controls.
-- [x] R5 Prove independent device clocks, repeated answers, restart, replacement without moving the original window and invalid-proof controls, with bearer-free isolation checks.
-- [x] R6 Require runtime version 2, refreshing old version 1 lookups while preserving compatible same-path version 2 state.
-
-Recognition uses the unchanged ten-second window from first revoke or replacement while routes are enabled. The whole-second gateway clock can reopen or close it after a clock change. Every qualifying signed request inside it gets the stop; late devices keep retrying until manually stopped. Foreign bound routes refuse Dirtside credentials, and legacy unbound routes skip Dirtside while it has a bound policy. A longer window is possible on the bound gate and is outside this change. Invalid proof never receives the explicit stop answer. Restart empties the replay cache; pre-version replacement credentials need manual shutdown.
+- [x] 4.1 Signed routes, invalid proof, replays, offline subprocesses, real uploads and re-pairing have regression coverage.
+- [x] 4.2 Retained proof is separate from active authority; rotated paired credentials retain the first event time and same-owner choices remain stable.
+- [x] 4.3 The ten-second window uses whole gateway seconds; a clock change can reopen or close it, and late devices need manual shutdown.
+- [x] 4.4 The 2026-11-10 released-core checks measured foreign-route exposure and the original ten-second bound. Current provider-bound tests assert refusal with working controls.
+- [x] 4.5 Independent device clocks, repeated answers, restart, replacement and invalid-proof controls preserve the original window.
+- [x] 4.6 Restart empties the replay cache; credentials replaced before retained storage existed need manual shutdown.

@@ -11,10 +11,8 @@ Review point, verbatim (2026-11-08):
 ## What changes
 
 - Add tests/test_review_token_routes.py with exact seam calls, forbidden fallback, unload disposal, mid-registration failure and None refusal.
-- Run the new file against pristine 0ae9359, keeping the red log.
 - Register only through the public method, with an instance-owned fail-closed gate, rollback and unload; pass ctx from registration.
 - Test device/local cross-credentials through the real bound gate, with gate-on and gate-off controls.
-- Run package and fast suites, record green output and exact budget changes, then save WP4 checkpoints.
 
 ## Capabilities
 
@@ -26,24 +24,24 @@ None.
 
 ## Impact
 
-Only this plugin work tree, tests, documentation and private review notes. Keep signed device protocol version 1, requires_hermes >=0.22.7, and existing dependencies. No core edits, archive, commit or network writes.
+Plugin modules, tests and documentation change without changing signed device protocol version 1 or dependencies.
 
-## Correction 1
+## Live runtime rebinding
 
 Make existing mounted routers follow successful provider replacement, preserve live relay state through forced rediscovery, and keep real disable/refusal closed without requiring a restart.
 
-## Correction 2
+## Versioned runtime continuity
 
 Carry live runtime state only from an explicitly compatible versioned provider. Make cached owner environments use the Client while their route gate is retired; accept terminal outcomes from retained module generations by state value. Agents retry generic authentication errors instead of stopping permanently on disable.
 
-## Correction 4
+## Bounded worker replay
 
-Preserve client execution and stream attachment through the short disposed/new-disabled registration window. Retry only its exact pre-handler 401 within three seconds, retaining request id and owner; observe real stream attachment before reloading.
+Client execution and stream attachment retry an owner's pre-handler 401 within three seconds, retaining request id and owner. Real-loader cases exercise registration positions 1, 5 and 9, including actual stream attachment.
 
 ## Revoke exit
 
 Retain paired credentials for proof-first revocation on every signed route, even when no poll is open. Keep active registry authority separate and preserve same-owner ids by archiving old keys and token hashes with their first revoke time, or replacement time if active. Pairing an already revoked name never starts a new window for its old credential. Keep the agent's exact-body rule and real signed HTTP, subprocess, upload, invalid/replay, restart and replacement checks.
 
-Recognize retained credentials only with routes enabled and inside the ten-second window from the credential's first revoke or replacement. The window follows the gateway's clock in whole seconds, so it lasts 9 to 10 seconds. Setting that clock back into the window reopens it, and setting it forward closes it early. Every qualifying signed request inside the window receives the stop, including retries after a lost answer or parked poll. Devices offline or backing off beyond the window keep retrying until manually stopped. A retained principal authorizes nothing inside Dirtside or on foreign bound routes. Legacy unbound routes skip Dirtside while it has a bound policy. A longer window is possible on the bound gate and is outside this change.
+Retained credentials require routes enabled, all public handles active and the ten-second window from the credential's first revoke or replacement. The window follows the gateway's clock in whole seconds, so it lasts 9 to 10 seconds. Setting that clock back into the window reopens it, and setting it forward closes it early. Every qualifying signed request inside the window receives the stop, including retries after a lost answer or parked poll. Devices offline or backing off beyond the window keep retrying until manually stopped. A retained principal authorizes nothing inside Dirtside or on foreign bound routes. Legacy unbound routes skip Dirtside while it has a bound policy; closed registrations still prevent recognition after the last policy is gone. A longer window is possible on the bound gate and is not part of this version.
 
 Invalid proof never receives the explicit stop answer; bad retained proof and unknown bearers have different generic bodies inside the window. Restart empties the replay cache, so a captured message younger than 300 seconds can be replayed and receive the stop. Credentials replaced before this version were not retained and need manual shutdown. Use core's own generic rejection for the late-device control. Runtime version 2 refreshes Registry and Relay when the previous provider is version 1, and preserves a same-path version 2 runtime.

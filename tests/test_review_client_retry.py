@@ -1,169 +1,155 @@
-"""Only a pre-handler disabled-route 401 may be replayed, with the same request."""
+"""Worker replay crosses real loader windows without duplicate execution."""
 import json
-import struct
+import os
+import secrets
+import shlex
+import socket
+import threading
 import time
-from collections import Counter
-from contextlib import contextmanager
 
-import httpx
 import pytest
-from client_support import client_relay
-from network_support import until
+from core_rig import Core, Rig, until
 
-from dirtside.client import Client
-from dirtside.environment import EnvironmentConnectionError
+from dirtside.client import OWNER_MISSING, Client
+from dirtside.environment import EnvironmentConnectionError, RemoteProcessHandle
 from dirtside.registry import Registry
 from dirtside.relay import Relay
-from test_environment import device_setup
 from test_owner_correction import recorded
 from test_registry import paired, request
 
-DISABLED = "Dirtside token routes are disabled"
+
+def call_inside_reload(tmp_path, position, stage):
+    with Rig(tmp_path / "rig") as rig:
+        rig.pair().start_agent().choose()
+        with Core(rig.core.home, env=rig.core.env, worker=True) as worker:
+            worker.call("target", session="chat", name=rig.name)
+            assert worker.terminal("printf before")["output"] == "before"
+            marker = tmp_path / "executed"
+            command = f"printf x >> {shlex.quote(str(marker))}; printf done"
+            params = dict(action="work", stage=stage, name=rig.name, command=command,
+                          request_id="r_" + secrets.token_hex(12), session="chat")
+            result = None
+            if stage == "stream":
+                result = worker.submit("registration", **params)
+                until(lambda: worker.call("registration", action="worker_ready"))
+            rig.core.call("registration", action="arm", position=position)
+            reload = rig.core.submit("registration", action="pause")
+            try:
+                until(lambda: rig.core.call("registration", action="ready"))
+                started = time.monotonic()
+                if stage == "stream":
+                    worker.call("registration", action="worker_send")
+                else:
+                    result = worker.submit("registration", **params)
+                rig.core.call("registration", action="release")
+                assert reload.result(10)["enabled"]
+                reply = result.result(12)
+                elapsed = time.monotonic() - started
+                assert reply["exit_code"] == 0 and reply["output"] == "done", reply
+                assert marker.read_text() == "x"
+                rows = [row for row in rig.core.http("GET", "/requests").json() if row["preview"] == command[:120]]
+                assert len(rows) == 1
+                return rows[0], rig.core.call("registration", action="finish"), params, elapsed
+            finally:
+                if not reload.done():
+                    rig.core.call("registration", action="release")
+                    reload.result(12)
 
 
-@contextmanager
-def client_for(tmp_path, respond):
-    reg = Registry(tmp_path / "data.db")
-    device, *_ = paired(reg, tmp_path)
-    recorded(reg)
-    client = Client(Relay(reg))
-    client.http.close()
-    client.http = httpx.Client(transport=httpx.MockTransport(respond))
+@pytest.mark.parametrize("position", [1, 5, 9])
+@pytest.mark.parametrize("stage", ["exec", "stream"])
+def test_worker_call_inside_real_reload_is_replayed_once(tmp_path, position, stage):
+    row, responses, params, _ = call_inside_reload(tmp_path, position, stage)
+    assert row["id"] == params["request_id"]
+    assert [stage, 401] in responses and [stage, 200] in responses, responses
+
+
+@pytest.mark.parametrize("position", [1, 5, 9])
+def test_worker_terminal_inside_real_reload_recovers_through_core_retry(tmp_path, position):
+    _, responses, _, elapsed = call_inside_reload(tmp_path, position, "devices")
+    assert ["devices", 401] in responses and ["devices", 200] in responses, responses
+    assert ["exec", 401] not in responses and ["stream", 401] not in responses, responses
+    assert elapsed >= 2, elapsed  # Core's first retry waits two seconds; a client replay would return sooner.
+
+
+def stale_closed_owner(tmp_path, entry):
+    with Rig(tmp_path / "rig") as rig:
+        rig.pair().start_agent().choose()
+        with Core(rig.core.home, env=rig.core.env, worker=True) as worker:
+            worker.call("target", session="chat", name=rig.name)
+            assert worker.terminal("printf before")["output"] == "before"
+            assert rig.core.call("registration", action="refuse")["local_origin"] is None
+            rig.core.call("registration", action="arm")
+            marker = tmp_path / "not-executed"
+            started = time.monotonic()
+            command = f"printf forbidden > {shlex.quote(str(marker))}"
+            if entry == "exec":
+                with pytest.raises(AssertionError, match="answered 401"):
+                    worker.call("registration", action="work", stage="exec", name=rig.name,
+                                command=command, request_id="r_" + secrets.token_hex(12))
+            else:
+                assert "answered 401" in str(worker.terminal(command))
+            elapsed = time.monotonic() - started
+            responses = rig.core.call("registration", action="finish")
+            assert not marker.exists()
+            print(json.dumps(dict(entry=entry, stale_owner_seconds=elapsed, attempts=len(responses))))
+            return elapsed, responses
+
+
+def test_worker_with_stale_closed_owner_stops_at_the_same_deadline(tmp_path):
+    elapsed, responses = stale_closed_owner(tmp_path, "exec")
+    assert 2 <= elapsed < 4.5
+    assert 2 <= len(responses) <= 100 and all(row == ["exec", 401] for row in responses)
+
+
+def test_worker_terminal_with_stale_closed_owner_ends_with_core_retries(tmp_path):
+    elapsed, responses = stale_closed_owner(tmp_path, "terminal")
+    assert 12 <= elapsed < 17
+    assert responses == [["devices", 401]] * 4, responses
+
+
+@pytest.mark.parametrize("status", [400, 403, 409, 410, 503])
+def test_other_real_owner_refusals_are_not_replayed(tmp_path, status):
+    with Rig(tmp_path / "rig") as rig:
+        rig.pair().start_agent()
+        rig.core.call("registration", action="arm")
+        message = rig.core.call("registration", action="reject", status=status, name=rig.name)
+        assert f"answered {status}" in message
+        path = "stream" if status == 410 else "exec"
+        assert rig.core.call("registration", action="finish") == [[path, status], ["devices", 200]]
+
+
+def test_dropped_connection_is_a_single_attempt(tmp_path):
+    registry = Registry(tmp_path / "data.db")
+    client = Client(Relay(registry))
+    device, *_ = paired(registry, tmp_path)
+    accepted = []
     try:
-        yield client, request(device)
+        with socket.create_server(("127.0.0.1", 0)) as server:
+            server.settimeout(0.1)
+            stop = threading.Event()
+            def drop():
+                while not stop.is_set():
+                    try:
+                        connection, _ = server.accept()
+                    except OSError:
+                        continue
+                    accepted.append(1)
+                    connection.close()
+            thread = threading.Thread(target=drop, daemon=True)
+            thread.start()
+            recorded(registry, origin=f"http://127.0.0.1:{server.getsockname()[1]}")
+            req = request(device)
+            handle = RemoteProcessHandle(client, req)
+            try:
+                with pytest.raises(EnvironmentConnectionError, match="owner is not running"):
+                    client.submit(req)
+                assert len(accepted) == 1
+                client.stream(handle, client.origin(), os.dup(handle._write_fd))
+                assert len(accepted) == 2 and handle.outcome.reason == OWNER_MISSING
+            finally:
+                handle.stdout.close()
+                stop.set()
+                thread.join(2)
     finally:
         client.http.close()
-
-
-def complete():
-    return httpx.Response(200, content=struct.pack("!I", 4) + b"done" + b"\0" * 4 + json.dumps(dict(
-        state="finished", exit_code=0, duration_ms=1, truncated=False, reason="")).encode())
-
-
-@pytest.mark.parametrize("stage", ["exec", "stream"])
-def test_exact_disabled_route_retries_preserve_request(tmp_path, stage):
-    calls, rejected = [], []
-    def respond(req):
-        route = req.url.path.rsplit("/", 1)[1]
-        calls.append((route, req.content if route == "exec" else req.url.params["id"]))
-        if route == stage and sum(name == stage for name, _ in calls) <= 3:
-            response = httpx.Response(401, json={"detail": DISABLED})
-            rejected.append(response)
-            return response
-        return httpx.Response(200, json={"state": "queued"}) if route == "exec" else complete()
-    with client_for(tmp_path, respond) as (client, req):
-        handle = client.submit(req)
-        try:
-            assert handle.wait(5) == 0, handle.outcome
-            assert handle.stdout.read() == b"done"
-            assert Counter(name for name, _ in calls) == {"exec": 4 if stage == "exec" else 1,
-                                                         "stream": 4 if stage == "stream" else 1}
-            assert {json.loads(value)["id"] for name, value in calls if name == "exec"} == {req.id}
-            assert {value for name, value in calls if name == "stream"} == {req.id}
-            assert all(response.is_closed for response in rejected)
-            assert not client.handles
-        finally:
-            handle.stdout.close()
-
-
-@pytest.mark.parametrize("stage", ["exec", "stream"])
-@pytest.mark.parametrize("status,body", [
-    (401, {"detail": DISABLED + "."}),
-    (401, {"detail": DISABLED + "\n"}),
-    (401, {"detail": "invalid local credential"}),
-    (401, [DISABLED]),
-    (401, "not json"),
-    (403, {"detail": DISABLED}),
-    (409, {"detail": DISABLED}),
-    (410, {"detail": DISABLED}),
-    (503, {"detail": DISABLED}),
-])
-def test_other_rejections_are_never_retried(tmp_path, stage, status, body):
-    calls = Counter()
-    def respond(req):
-        route = req.url.path.rsplit("/", 1)[1]
-        calls[route] += 1
-        if route == stage:
-            return httpx.Response(status, **({"text": body} if isinstance(body, str) else {"json": body}))
-        return httpx.Response(200, json={"state": "queued"})
-    with client_for(tmp_path, respond) as (client, req):
-        if stage == "exec":
-            with pytest.raises(EnvironmentConnectionError, match=f"answered {status}"):
-                client.submit(req)
-        else:
-            handle = client.submit(req)
-            try:
-                assert handle.wait(3) == 255
-                assert f"answered {status}" in handle.outcome.reason
-            finally:
-                handle.stdout.close()
-        assert calls[stage] == 1
-
-
-@pytest.mark.parametrize("stage", ["exec", "stream"])
-def test_disabled_route_retry_has_one_fixed_short_deadline(tmp_path, stage):
-    calls, responses = Counter(), []
-    def respond(req):
-        route = req.url.path.rsplit("/", 1)[1]
-        calls[route] += 1
-        response = (httpx.Response(401, json={"detail": DISABLED}) if route == stage else
-                    httpx.Response(200, json={"state": "queued"}))
-        responses.append(response)
-        return response
-    with client_for(tmp_path, respond) as (client, req):
-        started = time.monotonic()
-        if stage == "exec":
-            with pytest.raises(EnvironmentConnectionError, match=DISABLED):
-                client.submit(req)
-        else:
-            handle = client.submit(req)
-            try:
-                assert handle.wait(5) == 255
-                assert DISABLED in handle.outcome.reason
-            finally:
-                handle.stdout.close()
-        assert 2 <= time.monotonic() - started < 4.5
-        assert 2 <= calls[stage] <= 100
-        assert all(response.is_closed for response in responses)
-
-
-def test_disabled_response_does_not_retry_other_local_routes(tmp_path):
-    calls = []
-    def respond(req):
-        calls.append(req)
-        return httpx.Response(401, json={"detail": DISABLED})
-    with client_for(tmp_path, respond) as (client, _):
-        for method, path in [("GET", "/devices"), ("POST", "/devices"), ("POST", "/kill")]:
-            with pytest.raises(EnvironmentConnectionError, match=DISABLED):
-                client.request(method, path)
-        assert len(calls) == 3
-
-
-@pytest.mark.parametrize("stage", ["exec", "stream"])
-def test_real_local_route_recovers_without_duplicate_execution(tmp_path, stage):
-    relay, device, fake = device_setup(tmp_path)
-    marker = tmp_path / "executed"
-    with client_relay(relay) as worker, fake:
-        client = worker.connection()
-        transport = client.http._transport
-        attempts, rejected = [], []
-        def route(req):
-            if req.url.path.endswith("/" + stage):
-                attempts.append(req)
-                if len(attempts) <= 3:
-                    response = httpx.Response(401, json={"detail": DISABLED})
-                    rejected.append(response)
-                    return response
-            return transport.handle_request(req)
-        client.http._transport = httpx.MockTransport(route)
-        req = request(device, command=f"printf x >> '{marker}'; printf done")
-        handle = client.submit(req)
-        try:
-            assert handle.wait(6) == 0, handle.outcome
-            assert handle.stdout.read() == b"done" and marker.read_text() == "x"
-            until(lambda: not fake.running)
-            assert len(relay.registry.recent(10)) == 1 and len(attempts) == 4
-            assert all(response.is_closed for response in rejected)
-        finally:
-            handle.stdout.close()
-            transport.close()

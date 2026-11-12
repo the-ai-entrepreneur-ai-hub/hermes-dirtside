@@ -1,6 +1,6 @@
 ## Purpose
 
-Current runtime requirements use the method core and two read-only environment imports. The Correction 2, 3, 4 and 6 verification clauses preserve historical evidence through acceptance on 2026-11-10, not instructions to rerun earlier cores for this version. Current acceptance follows dirtside-seam-only-registration.
+Runtime requirements use the public token-route method and two read-only environment imports.
 
 ## ADDED Requirements
 
@@ -36,25 +36,14 @@ README MUST state what the frozen target section reveals and that server executi
 - **WHEN** a sender runs server-target commands as the gateway user
 - **THEN** the temporary local secret permits local IPC and README points to core approvals and allowlists rather than claiming isolation
 
-### Requirement: Correction 2 verification evidence
-The historical Correction 2 record MUST preserve its behavioral red/green evidence, earlier core suites, then-current three-site import inventory, matrix, benchmark and five correction-file rounds without claiming those outputs verify the seam-only source.
-
-#### Scenario: correction_2_final_gates
-- **WHEN** the final intended source is verified
-- **THEN** exact outputs, failures, budget changes, inventories since C1 and WP5, cumulative checkpoints and remaining limits appear in the private report
-
-### Requirement: Correction 3 verification evidence
-Correction 3 MUST prove native CLI/TUI local identity red and green on both prepared cores, clean up every process its tests start, and rerun every requested final gate plus five serial whole-file repeats of all C1-C3 changed tests and helpers without relaxing a bound.
+### Requirement: Retained-directory subprocess cleanup
+Owner-loss test teardown MUST stop its test process even when that process retains a working directory different from its fixture directory.
 
 #### Scenario: test_core_owner_loss_midstream_has_no_timeout_hint
 - **WHEN** the owner-loss test runs with a persistent cwd different from its fixture work directory
 - **THEN** its bash loop is stopped by the test teardown and no descendant remains
 
-#### Scenario: correction_3_final_gates
-- **WHEN** the historical Correction 3 record is read
-- **THEN** its exact earlier outputs, then-current import inventory, inventories since C2 and WP5, reconstructed checkpoints and optional-optimization decision remain attributed to that source
-
-### Requirement: Accurate correction 4 operator guidance
+### Requirement: Accurate operator guidance
 README and architecture MUST disclose actual core login authority, unsupported Windows host subjects, safe pairing syntax and gateway-side file-path resolution. Core citations MUST NOT resemble repository-local file-and-line references.
 
 #### Scenario: test_core_login_and_device_limits_are_explicit
@@ -64,13 +53,6 @@ README and architecture MUST disclose actual core login authority, unsupported W
 #### Scenario: test_core_citations_do_not_look_repository_local
 - **WHEN** repository markdown is read
 - **THEN** core citations use explicit core filenames and prose line references
-
-### Requirement: Correction 4 verification evidence
-Correction 4 MUST retain red/green evidence, all prior final gates, five whole-file correction rounds and 20 serial loaded client reload cases on each prepared core, with no owned process left running.
-
-#### Scenario: correction_4_final_gates
-- **WHEN** the final intended source is delivered uncommitted
-- **THEN** exact outputs, all failed attempts, budgets, reconstructed C4 checkpoints, inventories since C3 and WP5, cleanup and remaining limits appear in the appended private report
 
 ### Requirement: Descriptor-independent bounded pipe waits
 All runtime pipe readiness waits MUST support descriptor numbers above 1024 without changing existing flush, read, feed, cancellation or output bounds.
@@ -127,10 +109,3 @@ Automatic revocation shutdown MUST work without an admitted poll during the ten-
 #### Scenario: test_restart_keeps_window_and_resets_replay_guard
 - **WHEN** the gateway restarts inside the window
 - **THEN** its empty replay cache permits a captured message younger than 300 seconds to receive the stop answer
-
-### Requirement: Correction 6 verification evidence
-Correction 6 MUST retain red/green evidence, analysis of all available supplied Linux counts with unavailable records disclosed, both full prepared-core macOS suites with zero descriptor-guard failures, all requested static/admission/matrix/benchmark/citation checks and three serial changed-file rounds including helpers.
-
-#### Scenario: correction_6_final_gates
-- **WHEN** the intended source is delivered without commits or core edits
-- **THEN** the appended private report records exact outputs, every failed attempt, unchanged bounds, cumulative reconstructed C6 checkpoints, invariant and process audits, cleanup and the owner's remaining Linux verification

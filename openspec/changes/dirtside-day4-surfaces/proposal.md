@@ -25,8 +25,8 @@ The execution and network paths work, but users cannot yet select devices in cha
 
 ### Modified Capabilities
 
-None. The main-spec inventory is empty; earlier changes remain unsynchronized.
+None.
 
 ## Impact
 
-Registry schema, provider, registration, dashboard target routes, core test rig, new command/prompt/Desktop/benchmark files and tests, README. No core edits, extra dependency, events, settings page, service operation, archive or spec sync.
+Registry schema, provider, registration, dashboard target routes, core test rig, command/prompt/Desktop/benchmark files, tests and README. No core edits, extra dependency, events, settings page or service operation.

@@ -8,11 +8,13 @@ Catalog admission needs token routes registered through the public context metho
 
 - **BREAKING:** Require `ctx.register_dashboard_token_route` for all four device and five local paths. Older Hermes loads the plugin with those routes closed.
 - Keep atomic rollback and unload disposal. Explain a missing method, a refusal or a failure in the warning and route-dependent replies, without exposing exception contents.
-- Recognize no credentials while routes are closed, including on other token routes, and keep an already enabled runtime intact when registration repeats without unload.
+- Recognize no credentials while routes are disabled or a public route handle is inactive, including on other token routes, and keep an already enabled runtime intact when registration repeats without unload.
+- Give senders who may pair the closure reason when selecting, listing or using devices. A closed owner acts locally and can still revoke and cancel live work.
+- Replay pre-handler local execution and stream 401s within the existing three-second bound, preserving request identity.
 - Replace successful registration stand-ins with the real core context, manager, discovered mount and token middleware.
 - Assert the owning provider and required scopes, including foreign-route refusal with working own-route controls.
-- Keep the ten-second revoke window unchanged. A longer window is possible with the bound gate and is outside this change.
-- Build CI's one Ubuntu/macOS matrix from Hermes 0.23.1 and the public method patch until a release contains the method. Rewrite current support claims; preserve dated history.
+- Keep the ten-second revoke window unchanged. A longer window is possible with the bound gate and is not part of this version.
+- CI's one Ubuntu/macOS matrix fetches Hermes 0.23.1 and the exact public method commit with its parent, then applies their difference without `website/*`.
 
 ## Capabilities
 
@@ -26,4 +28,4 @@ None. The root capability inventory is empty; this record supersedes the earlier
 
 ## Impact
 
-Production changes stay in route registration and the replies that depend on it. Protocol 1, dependencies, actor rules, the hook and the read-only `LocalEnvironment` and `EnvironmentConnectionError` imports remain unchanged. `requires_hermes` stays at its current value until the method ships; it is not evidence of support for an older core. No data migration or re-pairing is needed.
+Production changes stay in route registration, recognition, worker retries and route-dependent replies. Protocol 1, dependencies, actor rules, the hook and the read-only `LocalEnvironment` and `EnvironmentConnectionError` imports remain unchanged. The version stays `0.1.0` and `requires_hermes` stays `>=0.22.7`; both move together when a Hermes release has the method. The current floor is not evidence of support for an older core. No data migration or re-pairing is needed.

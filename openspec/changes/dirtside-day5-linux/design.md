@@ -51,15 +51,15 @@ For parallelism, use a poll-observed Event after all three requests have been ac
 - Inspect all tests and helpers for bash path/version, `ps`/`kill` flags, `readlink -f`, random-data throughput and real timing contracts. Keep PATH bash resolution and POSIX syntax. Existing random-byte conformance uses one pre-generated file; benchmark bytes come from `/dev/zero`, not random-device throughput.
 - Keep genuine performance and loss/cancellation bounds unchanged. The Linux runner must still meet them; no blanket timeout or threshold widening is permitted.
 
-### Correction 1: CI scratch and background log acknowledgement
+### CI scratch and background log acknowledgement
 
 The owner's workflow run `42100714688` on `a927f83` passes all 262 tests on Ubuntu, then fails doctor staging. The macOS job exposes an incomplete background-log handshake.
 
-Core defaults scratch to `HERMES_HOME/cache/scratch` (core's `hermes_bootstrap.py`, lines 456 to 466 at `84a0301`). Doctor creates its temporary staging directory there and refuses overlap with the plugin source (core's `hermes_cli/plugin_dev.py`, lines 31 to 56, 68 to 78 at `84a0301`). Set home, runtime and TMPDIR under `runner.temp` in the acceptance step's environment, where the runner context is supported, and create those directories before checks. The runner context is unavailable in job-level environment expressions. Doctor must still stage the actual checkout. `conftest.py:12-24` remains the sole owner of pytest state: it overrides inherited home, runtime, HOME and temporary settings only within pytest and its children, not the parent shell or subsequent doctor process.
+Core defaults scratch to `HERMES_HOME/cache/scratch` (core's `hermes_bootstrap.py`, lines 456 to 466 at `84a0301`). Doctor creates its temporary staging directory there and refuses overlap with the plugin source (core's `hermes_cli/plugin_dev.py`, lines 31 to 56, 68 to 78 at `84a0301`). CI's check step creates home, runtime and TMPDIR under `runner.temp`; that context is unavailable in job-level environment expressions. Doctor still stages the actual checkout. `conftest.py:12-24` overrides inherited home, runtime, HOME and temporary settings only within pytest and its children, not the parent shell or subsequent doctor process.
 
 Core's environment poller reads a log delta, appends it, then checks process liveness (core's `tools/process_registry.py`, lines 1427 to 1458, 1460 to 1471 at `84a0301`). On exit it finishes and returns without another log read. `read_log` only reads the retained buffer (core's `tools/process_registry.py`, lines 2017 to 2045 at `84a0301`), so waiting after exit cannot recover a missed final delta. No Dirtside log-path defect is established.
 
-The test command prints each fragment and waits for its own file acknowledgement. Release the first gate after observing `first`, and the exit gate only after the registry reports exact `firstsecond`. Then require exit 7 and the exact retained log as before. Reuse the existing conditional file-poll interval, without a fixed readiness sleep. A 30-second readiness deadline allows the extra core poll on a busy runner. Clean up both gates and any unfinished owned job. No production or core code changes are needed for this correction.
+The test command prints each fragment and waits for its own file acknowledgement. The first signal follows observed `first`, and exit is released only after the registry reports exact `firstsecond`. Exit 7 and the retained log remain exact. Conditional polling replaces fixed readiness sleeps, with a 30-second readiness deadline for an extra core poll on a busy runner. Teardown removes its signals and any unfinished job.
 
 ## Risks / Trade-offs
 
@@ -70,4 +70,4 @@ The test command prints each fragment and waits for its own file acknowledgement
 
 ## Migration Plan
 
-Validate all planning artifacts strictly before code. Add deterministic regressions, implement the change, run focused checks, then run the five acceptance checks and verify unchanged history. Update architecture and write the private report with exact outputs and final file:line evidence. No database, manifest or protocol migration is needed. Leave the change active and unsynchronized.
+No database, manifest or protocol migration is needed.

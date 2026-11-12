@@ -5,7 +5,7 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
-from hermes_cli.dashboard_auth import token_auth
+from hermes_cli.dashboard_auth import get_provider, token_auth
 from hermes_constants import hermes_home_key
 from nacl.signing import SigningKey
 from route_support import MissingMethodContext, plugin_context, record_routes, register
@@ -179,3 +179,32 @@ def test_registration_is_instance_owned(tmp_path, monkeypatch):
         bad = register_device_routes(MissingMethodContext(ctx))
         assert good.routes.enabled and not bad.enabled
         working_local(good, tmp_path)
+
+
+@pytest.mark.parametrize("closed", ["missing", "refused", "unloaded"])
+def test_closed_handlers_reject_dashboard_session(tmp_path, monkeypatch, closed):
+    with plugin_context() as ctx:
+        provider = register(ctx, tmp_path, monkeypatch)
+        with mounted(tmp_path, provider=provider, relay=provider.relay) as (app, *_):
+            app.get("/api/session-control")(lambda: {"ok": True})
+            with TestClient(app, client=("127.0.0.1", 10)) as web:
+                session = {"Authorization": "Bearer " + DESKTOP_TOKEN}
+                assert web.get("/api/plugins/dirtside/devices", headers=session).status_code == 200
+                assert web.post("/api/plugins/dirtside/pairing", headers=session,
+                                json={"name": "before"}).status_code == 200
+                ctx._manager.unload()
+                if closed != "unloaded":
+                    if closed == "refused":
+                        record_routes(ctx, monkeypatch, 5, "none")
+                    provider = register(MissingMethodContext(ctx) if closed == "missing" else ctx,
+                                        tmp_path, monkeypatch)
+                assert get_provider("dirtside") is provider and not provider.routes.enabled
+                assert web.get("/api/session-control", headers=session).status_code == 200
+                changes = provider.registry._connection().total_changes
+                responses = [web.request(method, "/api/plugins/dirtside" + path,
+                                         headers=session, json={"name": "after"})
+                             for method, path in (("GET", "/devices"), ("POST", "/pairing"))]
+                assert [response.status_code for response in responses] == [401, 401]
+                assert all(response.json() == {"detail": "Dirtside token routes are disabled"}
+                           for response in responses)
+                assert provider.registry._connection().total_changes == changes

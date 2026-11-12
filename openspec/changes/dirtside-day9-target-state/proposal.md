@@ -23,8 +23,8 @@ A live conversation switched devices after changing directory, and the next devi
 
 ### Modified Capabilities
 
-None. There are no archived main specs; the active day-7 owner/client requirements remain unchanged.
+None. The existing owner/client requirements remain unchanged.
 
 ## Impact
 
-The conversation facade, its existing delegates, real-core test rig, conformance tests, README and architecture documentation are in scope. The pinned core's cwd accessors may be used without editing or rebinding core. No new dependency, command, device protocol field, wire version, commit or deployment is needed.
+The conversation facade, its existing delegates, real-core test rig, conformance tests, README and architecture documentation are in scope. No new dependency, command, device protocol field or wire version is needed.

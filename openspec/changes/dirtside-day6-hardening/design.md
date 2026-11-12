@@ -2,13 +2,13 @@
 
 ## Context
 
-See proposal.md for motivation. Core remains read-only at 84a0301. A5's shared pool and A8's missing gateway replay guard are superseded here, not by editing the architecture reference. Earlier changes are unarchived and the canonical spec inventory is empty.
+See proposal.md for motivation. Core evidence is from 84a0301. Separate pools and the gateway replay guard replace the original shared-pool design.
 
 ## Goals / Non-Goals
 
 **Goals:** repair the confirmed failure paths with failing-before regression tests, exact boundary parsing, mccabe at most eight and minimal module growth.
 
-**Non-Goals:** another transport, persistent live handles, new dependencies, core patches, sandboxing, changes to user state or Git history.
+**Non-Goals:** another transport, persistent live handles, new dependencies, core patches or sandboxing.
 
 ## Decisions
 
@@ -34,4 +34,4 @@ See proposal.md for motivation. Core remains read-only at 84a0301. A5's shared p
 
 ## Migration Plan
 
-Deploy the gateway and device together for recovery. Version 1 and empty legacy poll bodies remain accepted. Regenerate already installed service units with `install-service`. No schema migration is needed. Run strict specification validation before code and retain the active change without archiving.
+Deploy the gateway and device together for recovery. Version 1 and empty legacy poll bodies remain accepted. Regenerate already installed service units with `install-service`. No schema migration is needed.

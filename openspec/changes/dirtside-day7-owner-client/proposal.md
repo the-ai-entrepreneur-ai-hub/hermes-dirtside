@@ -25,7 +25,7 @@ The day-7 addendum also reports a cached environment retaining another conversat
 
 ### Modified Capabilities
 
-None. Main specifications have not yet been synchronized from the earlier changes.
+None.
 
 ## Impact
 

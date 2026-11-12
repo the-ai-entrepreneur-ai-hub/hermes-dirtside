@@ -11,10 +11,8 @@ Review point, verbatim (2026-11-08):
 ## What changes
 
 - Add tests/test_review_target_state.py for no terminal imports, task/session mismatch, idle switches, three round trips and core-local credential control.
-- Run new tests on a pristine 0ae9359 export and preserve the red output.
 - Replace core cwd access in provider.py with plugin history, explicit facade execution and public middleware; isolate the local factory and consolidate the error import.
 - Update real-core rig to use core's tool execution middleware path without editing day-9 test files.
-- Run all day-9 tests unchanged, package tests and the fast suite; record exact budgets and save WP3 checkpoints.
 
 ## Capabilities
 
@@ -26,16 +24,16 @@ None.
 
 ## Impact
 
-Only this plugin work tree, tests, documentation and private review notes. Keep signed device protocol version 1, requires_hermes >=0.22.7, and existing dependencies. No core edits, archive, commit or network writes.
+Plugin modules, tests and documentation change without changing signed device protocol version 1 or dependencies.
 
-## Correction 1
+## Context-free snapshot cleanup
 
 Remove cleanup's dependency on current-turn identity while keeping all model execution authorized and preserving fixed, bounded snapshot deletion.
 
-## Correction 2
+## Durable conversation defaults
 
 Snapshot the configured default per conversation at first prompt/status/display/dispatch resolution. Existing conversations retain that name across reload and idle recreation; new conversations get the new default. Keep explicit target changes live.
 
-## Correction 4
+## Gateway-resolved file paths
 
 Narrow device-routing claims to terminal commands and disclose gateway-side file-path resolution. This is documentation of the owner's supplied Mac/WSL2 observation, not a file-path implementation change.

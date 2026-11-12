@@ -2,7 +2,7 @@
 
 ## Why
 
-Expose only the three unavoidable transitional runtime imports to core's own catalog lint and document the seams honestly.
+Expose only the two read-only environment imports to core's catalog lint and document the remaining seams.
 
 Review point, verbatim (surface and disclosure follow-up to all points):
 
@@ -16,11 +16,9 @@ Review point, verbatim (surface and disclosure follow-up to all points):
 
 ## What changes
 
-- Add tests/test_public_surfaces.py using core private_import_findings and a clean git-tracked/current intended export.
-- Run that test against pristine 0ae9359 and keep the 29-finding red log.
+- Cover core's private_import_findings on a clean export in tests/test_public_surfaces.py.
 - Move internal-import dev tooling to tests and update all import paths, CI, matrix and benchmark entry points and exact budgets.
-- Write README and architecture rules and the notes-only SEAM-REQUESTS.md; update README test count from pinned collection.
-- Run strict OpenSpec, both full core suites, both doctor/clean-export validators, ruff, sizes, pinned matrix and benchmark, and 20 repeats of new/day-9 files; save WP5 checkpoints and REPORT.md.
+- Describe trust limits and collected test counts in README and architecture.
 
 ## Capabilities
 
@@ -32,24 +30,24 @@ None.
 
 ## Impact
 
-Only this plugin work tree, tests, documentation and private review notes. Keep signed device protocol version 1, requires_hermes >=0.22.7, and existing dependencies. No core edits, archive, commit or network writes.
+Plugin modules, tests and documentation change without changing signed device protocol version 1 or dependencies.
 
-## Correction 1
+## Shared prompt and host execution
 
-Disclose frozen shared target facts, gateway-user server execution, pairing availability, preserved re-pair names and exact WSL interop behavior. Record correction red/green evidence and the required two-core gates, five serial repeats and C1 checkpoints.
+Disclose frozen shared target facts, gateway-user server execution, pairing availability, preserved re-pair names and exact WSL interop behavior.
 
-## Correction 2
+## Runtime continuity and defaults
 
-Record Correction 2 lifecycle, default-snapshot and revocation decisions with red/green evidence, both-core admission and full-suite checks, strict benchmark, matrix, five serial C1/C2 file-union repeats and cumulative C2 checkpoints.
+Preserve compatible runtimes and durable default snapshots while retaining proof-first revocation.
 
-## Correction 3
+## Native identity and retained state
 
-Record real native local identity red/green evidence, correct owner-loss test teardown, repeat all C1-C3 changed test/helper files five times and rerun every final gate. Keep the optional server-row optimization out because it would weaken C2's durable server-default snapshot contract without a larger change.
+Native CLI/TUI identity and owner-loss cleanup use real core paths. Server rows remain necessary to preserve durable server-default snapshots.
 
-## Correction 4
+## Login and file-path boundaries
 
-Correct every core citation across repository documentation, login/Windows authority, safe pairing examples and device file-tool claims. Run the actual unchanged citation checker. Preserve prior report history, add C4 red/green and all gates, five whole-file correction rounds, 20 loaded client reload runs per core, reconstructed C4 checkpoints and inventories since C3 and WP5.
+Describe actual login and Windows authority, safe pairing syntax and device file-tool limits, with explicit core source references.
 
-## Correction 6
+## Descriptor ownership and revocation
 
-Remove the runtime select descriptor ceiling from device reads, relay writes and local streaming without changing timing or output bounds. Add real high-descriptor streaming tests and an autouse descriptor guard with a stated margin of two. Give test database connections, subprocess pipes, retained stream handles and the lazily started core LSP service explicit teardown owners. Reproduce the network revocation timeout separately and synchronize its explicit-revocation scenario with an admitted poll, preserving generic-401 retry and the five-second shutdown assertion. Analyze every available supplied Linux count, disclose missing records, compare measured macOS descriptor types, rerun all requested gates and three serial whole-file correction rounds, and save cumulative C6 checkpoints and exact report outputs.
+Remove the runtime select descriptor ceiling from device reads, relay writes and local streaming without changing timing or output bounds. Real high-descriptor streaming tests and an autouse descriptor guard cover the limit. Test database connections, pipes, retained streams and started LSP services have explicit teardown. Revocation coverage distinguishes authenticated proof from retryable generic 401s and retains the five-second shutdown bound.

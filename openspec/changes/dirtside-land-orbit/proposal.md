@@ -18,7 +18,7 @@ a second authorization path.
 
 ### Modified capabilities
 
-None. Existing changes stay unarchived.
+None.
 
 ## Impact
 

@@ -8,9 +8,7 @@ At pinned core, core's `hermes_cli/env_loader.py`, lines 420 to 431 at `84a0301`
 
 Rejected: deleting variables from os.environ would damage the agent; a provider-key blacklist misses unknown credentials; a gateway option would let the gateway widen device policy.
 
-## Validation and migration
-
-Each scenario names its regression test below. Run every new file on a pristine git archive of 0ae9359 with only the test files copied in, then on this tree; keep logs in the supplied notes folder. Existing compatibility controls may already pass on the old code and are reported separately, never claimed as red fixes. Use temporary HOME and HERMES_HOME for every process. Run package and fast suites before the next package. Save cumulative tracked diff and untracked tar checkpoints. Final verification uses both supplied core interpreters without changing core or installing a replacement CLI.
+## Regression coverage
 
 - `test_executor_exact_environment`: Minimal child environment.
 - `test_login_environment`: Login isolation.
@@ -19,10 +17,10 @@ Each scenario names its regression test below. Run every new file on a pristine 
 - `test_policy_cli`: Device policy CLI.
 - `test_serve_dotenv_isolation`: Real serve isolation.
 
-## Correction 1
+## Re-pairing policy continuity
 
 Re-pairing reads and validates the existing device file before contacting the gateway and preserves its env_passthrough names, never values. Other policy fields retain the existing default-reset behavior. A fresh pairing still starts with no passthrough. test_repair_preserves_passthrough_names exercises the real CLI handler and signed HTTP pairing twice.
 
-## Correction 4
+## Recovery from damaged configuration
 
-The earlier validated-file requirement applies when that file can be read safely and validated. Pairing must still recover credentials when it cannot: catch only configuration read/validation failures before the network operation, print a constant names-only warning and retain an empty tuple. Keep DeviceConfig.load strict for serve/status/policy and preserve atomic private save. Do not catch gateway or credential failures as old-config recovery. Real signed pairing tests cover permission denial, widened mode, malformed JSON and the reviewer's private empty object, alongside valid-name continuity.
+The earlier validated-file requirement applies when that file can be read safely and validated. Pairing recovers from configuration read/validation failures before the network operation, prints a constant names-only warning and retains an empty tuple. DeviceConfig.load remains strict for serve/status/policy, and save remains atomic and private. Gateway or credential failures do not become old-config recovery. Real signed pairing tests cover permission denial, widened mode, malformed JSON and an empty object, alongside valid-name continuity.

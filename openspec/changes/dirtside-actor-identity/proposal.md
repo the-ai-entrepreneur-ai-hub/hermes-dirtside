@@ -1,6 +1,6 @@
 # Proposal
 
-Historical record through acceptance on 2026-11-10. Current support and verification follow dirtside-seam-only-registration; earlier checked items do not claim new verification.
+Actor identity behavior recorded on 2026-11-10. Current route-registration requirements are in dirtside-seam-only-registration.
 
 ## Why
 
@@ -27,4 +27,4 @@ None. The main specification inventory is empty; earlier ownership changes remai
 
 ## Impact
 
-The accepted actor step changed access, the sender-less resolver guard, the server fact line and typed status refusal. Commands, terminal/file dispatch, awareness, frozen sections and worker IPC share sender authority. Protocol 1, dependencies, hooks, revoke behavior, default capture, known-sender and listed empty-route fallback are unchanged by seam-only preparation. Current route registration and the two-site read-only import inventory are owned by the seam-only change.
+Actor identity uses the shared access lookup, sender-less resolver guard, server fact line and typed status refusal. Commands, terminal/file dispatch, awareness, frozen sections and worker IPC share sender authority. Protocol 1, dependencies, hooks, revoke behavior, default capture, known-sender and listed empty-route fallback remain unchanged.

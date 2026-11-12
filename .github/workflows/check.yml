@@ -1,4 +1,4 @@
-name: Token-route gate
+name: Token-route checks
 on: [push, pull_request]
 permissions:
   contents: read
@@ -27,8 +27,9 @@ jobs:
           git -C "$HERMES_SRC" remote add origin https://github.com/NousResearch/hermes-agent
           git -C "$HERMES_SRC" fetch --depth=1 origin 3b421578588243f920886e6fe79a6faa87ea026e
           git -C "$HERMES_SRC" checkout --detach FETCH_HEAD
-          curl -fL --retry 3 --output "$RUNNER_TEMP/token-routes.patch" \
-            https://github.com/the-ai-entrepreneur-ai-hub/hermes-agent/commit/7dce8c38e8c998c52c4c139df340a0bffecc77e6.patch
+          ROUTE_COMMIT=7dce8c38e8c998c52c4c139df340a0bffecc77e6
+          git -C "$HERMES_SRC" fetch --depth=2 https://github.com/the-ai-entrepreneur-ai-hub/hermes-agent "$ROUTE_COMMIT"
+          git -C "$HERMES_SRC" diff --binary "$ROUTE_COMMIT^" "$ROUTE_COMMIT" > "$RUNNER_TEMP/token-routes.patch"
           git -C "$HERMES_SRC" apply --exclude='website/*' "$RUNNER_TEMP/token-routes.patch"
           cd "$HERMES_SRC"
           UV_PROJECT_ENVIRONMENT=venv uv sync --frozen
@@ -36,7 +37,7 @@ jobs:
           printf 'HERMES_SRC=%s\n' "$HERMES_SRC" >> "$GITHUB_ENV"
       - name: Install OpenSpec
         run: npm i -g @fission-ai/openspec@1.16.0
-      - name: Run acceptance checks
+      - name: Run checks
         env:
           HERMES_HOME: ${{ runner.temp }}/ci-home
           HERMES_RUNTIME_DIR: ${{ runner.temp }}/ci-runtime

@@ -20,10 +20,6 @@
 - [x] 3.1 Run the pinned catalog private-import validator, use public auth exports, remove the unsupported manifest field and add catalog validation to CI; verify the manifest and remaining import inventory.
 - [x] 3.2 Add a report-only benchmark threshold flag and CI invocation, verify misses still print and return success only in that mode, and retain failure on command or byte-integrity errors.
 
-## 4. Integration evidence
+## 4. Feed cancellation
 
-- [x] 4.1 Run every requested acceptance check, record exact outputs and justified minimal budget deviations in the private report, and verify unchanged Git history with no archive.
-
-## 5. Correction 1
-
-- [x] 5.1 Reduce feed select slices to 250 ms without changing the total bound or existing assertions; prove the slice regression red/green, run both requested test modules and the full suite, and append Correction 1 evidence.
+- [x] 4.1 Feed readiness slices are at most 250 ms without changing the total feed bound.

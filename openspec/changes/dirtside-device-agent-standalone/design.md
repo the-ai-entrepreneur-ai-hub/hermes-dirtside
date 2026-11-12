@@ -23,4 +23,4 @@ The new override must not escape test isolation. Clear an outer DIRTSIDE_HOME be
 
 dirtside/__init__.py, agent/config.py, new agent/home.py and agent/console.py, cli.py, commands.py, pyproject.toml, plugin.yaml, README and size budgets.
 
-Tests run with isolated homes and ephemeral ports under nice. Each scenario below maps to the named test in tasks.md. First copy tests into a pristine archive of tree b67971b30ee06d71c69950e52f4bd135fc542afc and record red, then test the work tree and record green. No index changes, core edits, protocol changes or new private core imports. Shared docs and budgets may accumulate later package edits, recorded in the report.
+Regression coverage imports the device without core, checks state lookup and service rendering, and runs signed terminal/revoke behavior through a standalone install.

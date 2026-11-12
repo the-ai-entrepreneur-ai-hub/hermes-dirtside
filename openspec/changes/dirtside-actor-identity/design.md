@@ -1,6 +1,6 @@
 # Design
 
-Historical record through acceptance on 2026-11-10. Current support and verification follow dirtside-seam-only-registration; earlier checked items do not claim new verification.
+Actor identity behavior recorded on 2026-11-10. Current route-registration requirements are in dirtside-seam-only-registration.
 
 ## Context
 
@@ -21,15 +21,15 @@ See proposal.md for motivation. All sender decisions converge on Access.identity
 - Replace the relay-local fixture's fabricated context with the actual `SessionContext` using common fields. No guessed version-specific fields are added. Its no-facts assertions stay; the single old silence assertion now expects the fixed server line only for an unauthorized implicit default.
 - The integration fixture builds actual shared `SessionSource`, `MessageEvent` and `SessionContext` objects, calls the core binder and `absorb_turn_input`, and retains a copied tool context across the merge. Named-route merged negatives refuse chosen and default devices without host writes or more device requests. Real-binder tests also cover canonical CLI `local`, `webhook`, `api_server` and wire-relay-labelled `local` with named routes, owner and same-sender controls for both choices; they do not claim normal core merges on those surfaces or exercise relay admission. Constructed empty-route shared bindings on `webhook`, `api_server`, `msgraph_webhook` and `local` retain default-to-server fallback after the actor clears; a chosen device refuses, and Telegram refuses both. The bundled Telegram paths set the shared-session flag on non-DM input. A bundled group-DM path also sets it, but its `dm` classification retains the route user. The relay decoder carries neither that flag nor an event user. A valid named webhook sender keeps its device; a missing identity or unprintable webhook user beside a named route refuses both chosen and default devices. A small rig helper runs real `AIAgent.run_conversation` against core's scripted loopback server: the first tool call reaches the device, redirect absorbs another sender, and the second refuses while the original device facts remain and the hook count stays one. No hand-invoked mid-turn hook stands in for core behavior. A real `TurnState` and `scoped_turn_actor` test checks follower authority, opener steering and restoration. Inputs come from the owned stdio rig, not a live chat service. The real-core scenarios run on the method core.
 - Remove all inherited `HERMES_SESSION_*` names and `HERMES_CRON_SESSION` before test collection. Tests deliberately planting values still do so after startup. A child launched with planted session and cron values imports test setup and reports the remaining environment, public values and missing sender, proving isolation even from a clean parent shell.
-- CI for this prepared version is the seam-only change's single method-core Ubuntu/macOS matrix. The actor step's earlier two-job setup is historical.
+- CI uses a single method-core Ubuntu/macOS matrix.
 
 ## Risks / Trade-offs
 
 - This version serves only the method core. The actor step's older-core comparison is historical and does not define current device support.
 - Frozen sections and shared conversation history retain earlier facts and participants' text. Mitigation: refuse an empty identity with a named route on every platform instead of silently switching to the host, test the real loop with unchanged facts, disclose legitimate server fallback only at turn start, and explain that device authority is not input or history privacy. A constructed empty-route merge on a listed surface still falls back from a default device; no bundled path was found to produce it off Telegram, which is unlisted and refuses. Do not rebuild cached prompts.
 - Direct ACP can bind a key and cwd without a public surface. Mitigation: preserve refusal of an explicit device and existing default-to-server fallback when identity and route are both empty; actor support invents no missing provenance.
-- The two read-only environment imports and process-owned dashboard auth remain. Verify their exact inventory and the clean-export safe install decision on the method core.
+- The two read-only environment imports and process-owned dashboard auth remain.
 
 ## Migration Plan
 
-No data migration or device re-pairing is required. The actor step's short multi-core verification plan is historical. Current acceptance follows the seam-only change: quick gates before freezing, then the method-core full suite, doctor, clean-export checks, old-release closure, matrix and three serial changed-file rounds. Preserve earlier dated results without treating them as new checks.
+No data migration or device re-pairing is required.

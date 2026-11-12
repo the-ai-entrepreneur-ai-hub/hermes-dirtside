@@ -11,10 +11,8 @@ Review point, verbatim (2026-11-08):
 ## What changes
 
 - Add tests/test_review_device_env.py for exact child names, login, stdin, passthrough, policy migration and CLI names-only output.
-- Run the new tests on a pristine archive of 0ae9359 with only tests copied in; keep the red log.
 - Edit model.Policy, agent/config.py, agent/executor.py and cli.py; keep four-key files readable and serve's startup disclosure names-only.
 - Add tests/test_review_device_env_core.py using the real serve CLI and core terminal in both transports with fake .env keys.
-- Run package tests and the fast suite, record green logs and any budget changes, then save WP1.diff and WP1-untracked.tgz.
 
 ## Capabilities
 
@@ -26,12 +24,12 @@ None.
 
 ## Impact
 
-Only this plugin work tree, tests, documentation and private review notes. Keep signed device protocol version 1, requires_hermes >=0.22.7, and existing dependencies. No core edits, archive, commit or network writes.
+Plugin modules, tests and documentation change without changing signed device protocol version 1 or dependencies.
 
-## Correction 1
+## Re-pairing policy continuity
 
 Preserve device-owned passthrough names when pairing again instead of silently clearing them; keep disclosure names-only and document the unchanged reset of other policy fields.
 
-## Correction 4
+## Recovery from damaged configuration
 
 Recover re-pairing from unreadable, unsafe or invalid existing device configuration with a short constant warning and empty passthrough names. Preserve valid names and keep all non-pair configuration reads strict.

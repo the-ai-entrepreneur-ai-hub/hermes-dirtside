@@ -16,9 +16,4 @@
 
 - [x] 3.1 Pass the default-run slow subprocess SIGKILL test with 50-second loss detection, exit 124 and retained partial output.
 - [x] 3.2 Pass subprocess failed-chunk retry and gateway-restart tests without duplicated bytes or re-pairing.
-- [x] 3.3 Pass subprocess SIGINT/SIGTERM, pinned-key/replay and parallel-cancellation coverage, then run all acceptance checks and write the private report with exact outputs, line counts and registration handoff.
-
-## Workflow follow-up
-
-- Keep the change active. Do not archive or sync main specs.
-- Leave all work uncommitted and preserve the other builder's owned files.
+- [x] 3.3 Subprocess SIGINT/SIGTERM, pinned-key/replay and parallel cancellation have regression coverage.

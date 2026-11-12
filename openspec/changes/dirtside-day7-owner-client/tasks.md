@@ -22,15 +22,9 @@
 - [x] 3.2 Fix remote worker import order; test the documented invocation without PYTHONPATH and run the loopback matrix.
 - [x] 3.3 Add non-gating client pwd latency measurements alongside existing measurements; verify benchmark reporting tests and record measured p50/p95.
 
-## 4. Acceptance
+## 4. Ownership and discovery
 
-- [x] 4.1 Run every requested acceptance command and the unchanged commit count; record exact outputs and any failures or retries.
-- [x] 4.2 Complete the private day-7 report with file:line evidence, budgets, test coverage, measurements and deviations; leave this change unarchived and Git history unchanged.
-
-## 5. Correction 1
-
-- [x] 5.1 Earn ownership only on device traffic; forward secondary-server pane state, tails and revoke; test real mounted subprocesses and absent/dead owner state everywhere.
-- [x] 5.2 Publish loopback discovery on real wildcard listeners, accept mapped loopback peers, verify pid start identity and preserve bounded HTTP status details; add regressions.
-- [x] 5.3 Use fixed stream/kill query paths without exemption growth, offload stream SQLite work and fix status/use error handling; test each boundary.
-- [x] 5.4 Document the corrected process/restart model and verified public Host refusal, add the CLI hint test and measured README client rows, and update minimum budgets.
-- [x] 5.5 Rerun every acceptance check and append Correction 1 with exact outputs, failure messages, test names and file:line evidence; leave history and core unchanged.
+- [x] 4.1 Device traffic alone earns ownership; secondary servers forward pane state, tails and revoke, including absent/dead-owner controls.
+- [x] 4.2 Loopback discovery works on wildcard listeners, accepts mapped loopback peers and checks PID start identity with bounded HTTP status details.
+- [x] 4.3 Fixed stream/kill query paths avoid exemption growth, and stream SQLite work stays off the event loop.
+- [x] 4.4 The CLI explains public Host refusal, while measured client latency remains separate from in-process results.

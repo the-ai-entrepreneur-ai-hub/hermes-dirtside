@@ -26,4 +26,4 @@ The plugin SHALL provide the behavior below without changing core, protocol vers
 
 #### Scenario: test_termux_signed_path
 - **WHEN** the real Termux Docker image runs through the rig
-- **THEN** shebang, python3, PREFIX, nonzero exit, cancellation and revoke work; the full container scenario is owner-run and is not claimed by the builder
+- **THEN** shebang, python3, PREFIX, nonzero exit, cancellation and revoke work; this covers a container userland, not a physical phone or Android services

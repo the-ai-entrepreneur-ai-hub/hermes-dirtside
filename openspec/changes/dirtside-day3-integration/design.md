@@ -2,7 +2,7 @@
 
 ## Context
 
-See proposal.md. Core evidence below was rechecked against revision `84a03014`. Paths and line numbers refer to that read-only checkout. The day-2 report correctly identified separate directory and dashboard namespaces and the in-process gateway model.
+See proposal.md. Core evidence below refers to revision `84a03014`. Directory and dashboard namespaces are separate, while the gateway runs in process.
 
 ## Day-0 answers
 
@@ -29,23 +29,22 @@ The existing shared-disk tests do not establish separate-filesystem correctness.
 - Matrix loopback owns both processes. A two-machine rig can use an explicit device-process command and a public gateway URL forwarded to the managed listener; it must not restart arbitrary existing user services. Missing fault-control access must fail visibly, never become a passing row.
 - Follow the architecture's amendments rather than the old plan's obsolete sketches: loss is 45 plus 5 seconds, restart rejects stale uploads with 410, output cap defaults to 64 MB, no reset message or folder sandbox, and concurrency follows core's actual environment keys.
 - Service rendering is pure data for a supplied platform. Installation pins the resolved executable, HOME and HERMES_HOME, writes private logs, and uses only the current user's launchd domain or systemd user manager. Dry-run precedes every write and subprocess. Repeated install/remove is safe; unavailable managers leave the rendered installation without attempting a load.
-- Add runtime changes only after a failing integration regression. In particular, cached environments bypass the provider's creation-time offline check; test the next call after the real offline window before choosing the smallest correction.
+- Cached environments bypass the provider's creation-time offline check, so every dispatch also checks contact.
 
 ## Risks / Trade-offs
 
-- Real loss windows make the suite slower. Mark terminal integration slow but keep it in the default acceptance run.
+- Real loss windows make terminal integration slower; those tests remain in the default suite.
 - Local output contains changing durations, recovery-file names and backend labels. Compare semantic terminal payloads, cwd separately and full recovered bytes. Assert the deterministic upstream remote-file warning separately, as described below; all other file fields compare exactly.
 - A configured gateway cwd is a path on the selected device. Use isolated known directories and do not introduce unrequested cwd translation.
-- User-service rendering is testable here; reboot recovery and Linux manager behavior require their actual hosts and remain an owner check.
-- Explicit server selection over a non-server default remains with the other builder. These tests use the target methods as they exist and do not migrate them.
+- User-service rendering is covered by tests; reboot recovery and real Linux manager behavior remain untested.
 
 ## Migration Plan
 
-No database migration or core change. Install the plugin normally, enable it and select the backend. Service installation is opt-in and reversible with `--remove`. Leave this change active, without archive or spec sync.
+No database migration or core change. Install the plugin normally, enable it and select the backend. Service installation is opt-in and reversible with `--remove`.
 
 ## Verified integration findings
 
-- A cached core environment bypasses `DirtsideProvider.create_environment` on later calls. Before correction, the next command after a real device outage returned a generic timeout rather than the offline message. The environment now checks the same shared online guard before every dispatch. The failing regression and successful fixed run are retained privately. Core's foreground retry loop still adds roughly 14 seconds to this connection error; no server command executes.
+- A cached core environment bypasses `DirtsideProvider.create_environment` on later calls. Without a per-dispatch check, the next command after a real device outage returned a generic timeout rather than the offline message. The environment now checks the same shared online guard before every dispatch. Core's foreground retry loop still adds roughly 14 seconds to this connection error; no server command executes.
 - core's `tools/file_tools.py`, lines 679 to 680 at `84a0301` only obtains a pre-read version when `_file_ops_uses_host_paths` is true. `_record_successful_read` at lines 534 to 600 therefore marks remote reads partial even when all 100 KB was returned. Core's `tools/file_state.py`, lines 127 to 170 at `84a0301` adds a pagination warning to the subsequent remote patch, while local adds none. Changing core is out of scope. The conformance test requires exactly that warning on remote, requires its absence locally, and compares every other file field and final bytes exactly. This is an explicit diagnostic exception to literal whole-payload parity.
 - The terminal entry strips trailing output whitespace, supplies optional changed-cwd display metadata and bounds large output with recovery paths. The conformance test compares output, exit and error, checks cached cwd separately, and validates all 1 MB of both recovery files rather than comparing their changing paths.
 - The raw recovery files also retain core's PIPESTATUS and cwd trailers. Core's `tools/environments/base_output.py`, lines 52 to 74, 199 to 206 at `84a0301` spills the raw stream before core's `base.py`, lines 630 to 656 at `84a0301` strips those records from the rendered result. Their marker session ids differ between environments. The test compares every recovery byte after normalizing only those ids and requires exactly 1 MB of payload plus the expected trailer. Core's spill cap is 5,000,000 characters (core's `base_output.py`, lines 34 to 35 at `84a0301`), independently of the device's 64 MB limit.
@@ -59,8 +58,8 @@ No database migration or core change. Install the plugin normally, enable it and
 
 Run `bash scripts/two_machine_matrix.sh --loopback`. Each row owns a fresh gated gateway and paired subprocess device. It checks loss after 45 plus 5 seconds (also a normal timeout), a killed gateway process, a restarted device process, overlapping core tool calls, correctly signed stale/future hellos, the 64 MB device cap, an empty signed 25-second heartbeat, and core's thread-local interrupt with exit 130 and group cleanup. Transport loss is a device-path 503 fault outside the untouched core app, not an assertion about a physical network cable.
 
-For two machines, use `--gateway-url https://<forwarded-host> --port 9119 --device laptop --device-command 'ssh <host> /absolute/core/venv/bin/python /absolute/plugin/tools/run_matrix.py --device-worker /absolute/private/rehearsal-home'`. The owner supplies the existing HTTPS forwarding route and matching remote checkout. The remote helper pairs with credentials on stdin, starts the real agent and stops it on stdin EOF. No arbitrary existing agent or user service is restarted. The same helper protocol is tested in a separate local process, including EOF cleanup. A physical second host and production proxy remain an owner validation because this run has neither.
+For two machines, use `--gateway-url https://<forwarded-host> --port 9119 --device laptop --device-command 'ssh <host> /absolute/core/venv/bin/python /absolute/plugin/tools/run_matrix.py --device-worker /absolute/private/rehearsal-home'`. The existing HTTPS forwarding route and remote checkout must match. The remote helper pairs with credentials on stdin, starts the real agent and stops it on stdin EOF. No arbitrary existing agent or user service is restarted. The same helper protocol is tested in a separate local process, including EOF cleanup. A physical second host and production proxy remain untested.
 
 Every row prints one status line and retains its detail or traceback under `evidence/<UTC-date>/<run>/`. Failures return nonzero and do not skip later independent rows. Rig homes are temporary private directories under `.notes/test-home/tmp`; cleanup tests verify real failure, active-command group termination, gateway/device exit, and listener closure.
 
-The root plugin doctor refuses a TMPDIR anywhere inside its source tree (core's `hermes_cli/plugin_dev.py`, lines 31 to 56 at `84a0301`), even though registration itself uses a private temporary home. The installed-copy doctor test avoids that overlap naturally. The literal root acceptance check therefore needs a disposable TMPDIR outside this repository; its HOME and launch HERMES_HOME remain isolated and the scratch directory must be removed afterward.
+The root plugin doctor refuses a TMPDIR anywhere inside its source tree (core's `hermes_cli/plugin_dev.py`, lines 31 to 56 at `84a0301`), even though registration itself uses a private temporary home. The installed-copy doctor test avoids that overlap.

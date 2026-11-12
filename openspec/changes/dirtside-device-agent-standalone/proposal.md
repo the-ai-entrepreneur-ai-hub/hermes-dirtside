@@ -16,7 +16,7 @@ Lazy gateway imports, compatible device state discovery, bounded HTTPX dependenc
 
 ### Modified capabilities
 
-None. Existing changes stay unarchived.
+None.
 
 ## Impact
 

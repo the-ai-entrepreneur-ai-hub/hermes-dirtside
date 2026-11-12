@@ -35,20 +35,17 @@ effective-backend probe from the fallback.
 
 New awareness module, registration, use reply, manifest, README, ARCHITECTURE and core-rig tests. No core changes.
 
-Absolute-file and known-limit tests pin existing behavior and pass on the base; the hook and selection-home guards fail there. Tests run with isolated homes and ephemeral ports under nice. Each scenario below maps to the named test in tasks.md. First copy tests into a pristine archive of tree b67971b30ee06d71c69950e52f4bd135fc542afc and record red, then test the work tree and record green. No index changes, core edits, protocol changes or new private core imports. Shared docs and budgets may accumulate later package edits, recorded in the report.
+Absolute-file and known-limit tests cover existing path behavior alongside hook facts and selection-home guards.
 
 The rig sends next-turn metadata through its already loaded manager's invoke_hook method, the same dispatcher used by core's `hermes_cli/plugins.py`, lines 1800 to 1811 at `84a0301`. It does not import private turn-context helpers or duplicate message assembly. Core's independent injection path is traced at core's `agent/turn_context.py`, lines 849 to 907 at `84a0301`. Existing registration fakes now accept the hook and named shortcuts, and patch both the lazy public storage definition and the base tree's old alias. Their default-target guard also checks the hook and shared shortcut command object.
 
-Correction 3 first records negative checks against the previous implementation.
 Real slash and hook cases boot a configuration naming local and verify core
 also reports local, without requiring online device execution. They compare
 silent cases with their original replies and facts, including an unreadable
 config path. Reader-exception and bounded-value checks supplement dispatch.
-The Android test variable rename is non-behavioral; do not invent a failing
-assertion for it. Final validation uses one frozen export on both cores.
 
-The rebase adds real prompt-call coverage for saved and configured-default
-targets. Review extends real slash, hook and prompt coverage to missing and
+Real prompt-call coverage includes saved and configured-default
+targets. Slash, hook and prompt coverage includes missing and
 empty settings with no environment, and to dirtside/docker environment
 fallbacks including surrounding whitespace. Configured local, dirtside,
 non-string, reader failures and already-bridged unreadability stay covered.

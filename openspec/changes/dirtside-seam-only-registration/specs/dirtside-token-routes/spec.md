@@ -28,11 +28,19 @@ The plugin SHALL open its four device and five local paths only after all public
 - **THEN** the working launch provider, routes and status remain unchanged
 
 ### Requirement: Closed credentials are inert
-While its routes are closed for any reason, the provider SHALL recognize no credential before any lookup. Device, local and dashboard control routes SHALL stay closed, while authorized chat revoke remains available.
+While its routes are disabled or any public route handle is inactive, the provider SHALL recognize no credential before any lookup. Device, local and dashboard control routes SHALL stay closed, while authorized chat revoke remains available.
 
 #### Scenario: Another token route after closure
 - **WHEN** the method is missing, registration is refused part-way or the plugin is unloaded
 - **THEN** active bearers, pending codes, local secrets and retained bearers all receive 401 on a legacy token route, while that route's own token still succeeds
+
+#### Scenario: Targeted unload before provider removal
+- **WHEN** core disposes route handles before unregistering the provider or calling the unload callback
+- **THEN** all four credential kinds receive 401 on the drain route even while the instance flag is still enabled, and the drain route's own token succeeds
+
+#### Scenario: Dashboard session after closure
+- **WHEN** the method is missing, registration is refused part-way or the plugin is unloaded
+- **THEN** the dashboard session token receives 401 with `Dirtside token routes are disabled` on device listing and pairing while unrelated session routes still work
 
 ### Requirement: Closure without the method
 The plugin SHALL load without opening device or local routes when the public method is missing or noncallable. Its bounded warning SHALL identify that cause without exception contents.
@@ -53,11 +61,23 @@ On the supported core the plugin's credentials SHALL NOT authorize another provi
 - **THEN** core returns 403 for insufficient scope and the correctly scoped credentials still work
 
 ### Requirement: Current closure guidance
-Pairing and status replies SHALL explain the current route closure cause without changing sender authorization. Device pairing authentication errors SHALL identify the required gateway method conditionally, without claiming every 401 proves an old Hermes or making another request.
+Senders who may pair SHALL receive the current closure reason from pairing, status, device selection, device lists and terminal prechecks, without advice to start the device. Other senders SHALL retain their usual replies. Explicit server selection SHALL remain available, without automatic server execution in place of a device. Device pairing authentication errors SHALL identify the required gateway method conditionally, without claiming every 401 proves an old Hermes or making another request.
 
 #### Scenario: Commands with closed routes
-- **WHEN** an authorized sender asks to pair or inspect status after registration cannot succeed
-- **THEN** the reply names the current closure cause and pairing does not mint an unusable code
+- **WHEN** a sender who may pair chooses, lists or uses a device after registration cannot succeed
+- **THEN** the reply names the current closure cause, gives no device-start advice and never executes on the server instead
+
+#### Scenario: Refused reload after device contact
+- **WHEN** an owner record names this process and the fifth registration is refused during a real reload
+- **THEN** commands act locally, revoke succeeds and cancels live work, and device-dependent replies explain closure
+
+#### Scenario: Cached conversation after re-enable
+- **WHEN** a conversation cached before a disable runs a command after the plugin is enabled again in the same process
+- **THEN** it reaches the current owner through loopback and is not answered with the retired registration's closure reason
+
+#### Scenario: Profile-scoped load beside an open launch registration
+- **WHEN** the plugin is also loaded for a profile whose database differs from the launch registration's
+- **THEN** that load's pairing and status give its own closure reason, and pairing mints no code
 
 #### Scenario: Remote pairing authentication failure
 - **WHEN** the device receives an authentication failure while pairing
@@ -69,3 +89,14 @@ Retained credentials SHALL remain recognized only while routes are enabled and t
 #### Scenario: Window boundaries
 - **WHEN** valid retired-device proof arrives before the window, inside it, at its endpoint or after a clock change
 - **THEN** the existing recognition and proof-first stop rules hold without extending the window or authorizing foreign bound routes
+
+### Requirement: Bounded worker replay
+Local execution and stream attachment SHALL retry an owner's pre-handler 401 within one fixed three-second deadline per operation, using the same request id and captured owner. Other statuses, transport failures and successful streams SHALL NOT be replayed.
+
+#### Scenario: A call inside real reload
+- **WHEN** a worker call reaches the owner during registration 1, 5 or 9
+- **THEN** it receives core's actual 401 before handler work, retries after reload and produces one marker append, one history row and the complete outcome
+
+#### Scenario: A permanently closed recorded owner
+- **WHEN** a worker execution request repeatedly receives the owner's 401
+- **THEN** the same deadline ends replay without submitting work; core may independently retry a terminal failure

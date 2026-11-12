@@ -101,7 +101,7 @@ When a matrix run has an external gateway URL, the rig SHALL probe one maximum s
 
 ### Requirement: Non-gating hosted benchmark smoke
 
-The benchmark subprocess smoke SHALL use --report-only and verify exit zero, the summary, four measured rows and two report-only client rows, without requiring PASS verdicts. Strict local acceptance SHALL retain the existing benchmark defaults and gates.
+The benchmark subprocess smoke SHALL use --report-only and verify exit zero, the summary, four measured rows and two report-only client rows, without requiring PASS verdicts. Strict benchmark mode SHALL retain the existing defaults and thresholds.
 
 #### Scenario: Hosted throughput is below eight MB/s
 

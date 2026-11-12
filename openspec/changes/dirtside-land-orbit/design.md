@@ -14,4 +14,4 @@ Both handlers declare keyword-only source and forward it through select into Com
 
 New shortcuts module, package wiring, README commands and real core dispatch tests.
 
-Tests run with isolated homes and ephemeral ports under nice. Each scenario below maps to the named test in tasks.md. First copy tests into a pristine archive of tree b67971b30ee06d71c69950e52f4bd135fc542afc and record red, then test the work tree and record green. No index changes, core edits, protocol changes or new private core imports. Shared docs and budgets may accumulate later package edits, recorded in the report.
+Real dispatch tests cover selection, picker, usage, native source forwarding, signed execution and relay refusal.

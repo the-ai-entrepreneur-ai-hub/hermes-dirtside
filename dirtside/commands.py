@@ -17,6 +17,9 @@ class Commands:
     def visible(self):
         return [d for d in self.registry.devices() if self.access.can(d)]
 
+    def closed_reason(self):
+        return getattr(self.relay, "_routes_reason", lambda: "")() if self.access.may_pair() else ""
+
     def __call__(self, raw_args: str, *, source=None) -> str:
         token = self.access.command_source.set(source)
         try:
@@ -46,7 +49,7 @@ class Commands:
             return f"No device applies to a turn without a sender. {exc}"
         except EnvironmentConnectionError:
             target = None
-        if self.access.may_pair() and (reason := getattr(self.relay, "_routes_reason", lambda: "")()):
+        if reason := self.closed_reason():
             return reason
         name = self.label(target.device) if isinstance(target, OnDevice) else (
             "an unpaired device" if target is None else "server")
@@ -60,6 +63,8 @@ class Commands:
     def devices(self, argument):
         if argument:
             return USAGE
+        if reason := self.closed_reason():
+            return reason
         names = "; ".join(self.label(d) for d in self.visible())
         return f"Paired devices: {names}." if names else "No devices are paired."
 
@@ -67,6 +72,8 @@ class Commands:
         key = session_identity()
         if not key:
             return "No conversation is bound; the target was not changed."
+        if name != "server" and (reason := self.closed_reason()):
+            return reason
         if not name:
             choices = [d.name for d in self.visible() if self.relay.connection().is_online(d.id)] + ["server"]
             name = self.ctx.ask_choice("Where should this conversation run commands?", choices)
@@ -87,7 +94,7 @@ class Commands:
     def pair(self, name):
         if not self.access.may_pair() or not self.access.name_allowed(self.registry, name):
             return "Pairing is unavailable for this sender."
-        if reason := getattr(self.relay, "_routes_reason", lambda: "")():
+        if reason := self.closed_reason():
             return reason
         sender = self.access.identity()
         code = self.registry.mint(name, int(time.time()), owner=sender, privileged=self.access.privileged(sender))

@@ -18,7 +18,7 @@ The fresh-context review found delivery, authentication and lifecycle failures i
 
 ### New Capabilities
 
-The canonical specification inventory is empty. Reuse the capability paths used by the earlier, unarchived changes:
+The capability paths retain the existing product boundaries:
 
 - `dirtside-relay`: recoverable dispatch, independent feeds and gateway replay rejection.
 - `dirtside-agent-loop`: bounded uploads, signed running acknowledgements and deliberate revocation exit.
@@ -31,4 +31,4 @@ None in the canonical inventory.
 
 ## Impact
 
-Touches the relay, protocol boundary, HTTP router, device loop, environment adapters, registry, service rendering, README, manifest and CI. No new dependencies, core edits, architecture edits, Git history changes or archive operation. The private report records regressions, remaining core couplings, exact check outputs and any minimal budget increases.
+Touches the relay, protocol boundary, HTTP router, device loop, environment adapters, registry, service rendering, README, manifest and CI without changing dependencies or core.

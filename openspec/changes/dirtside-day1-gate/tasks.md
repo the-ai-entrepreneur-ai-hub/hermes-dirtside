@@ -26,9 +26,3 @@
 
 - [x] 5.1 Finish target resolution and provider creation. Pass `test_provider_flags`, `test_resolve_target_table`, `test_offline_fails_closed`, identity fallback and revoked-target tests.
 - [x] 5.2 Prove the server target uses core's local environment and preserves pwd/cd behavior with `test_server_target_local`.
-- [x] 5.3 Run all acceptance commands, record their exact output and the day-0 answers in the private report, and verify no commits, forbidden new source words, core changes, archives or spec sync.
-
-## Workflow follow-up
-
-- Leave this change active for review. Do not archive or sync main specs in this run.
-- Steps 6 to 12 remain outside this change.

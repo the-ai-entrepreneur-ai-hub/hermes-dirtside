@@ -71,7 +71,7 @@ An already-mounted router MUST use the currently registered provider and its reg
 Registration MUST reuse only a same-path runtime explicitly marked version 2. Version 1 MUST build a fresh Registry and Relay. Cached retired environments MUST reach the current serving owner or fail quickly, never queue into a relay no device polls.
 
 #### Scenario: test_upgrade_from_unmarked_provider_starts_fresh_runtime
-- **WHEN** the previous provider has the catalog-pin shape without C1 runtime fields
+- **WHEN** the previous provider has the previous catalog version's shape without versioned runtime fields
 - **THEN** registration succeeds with a fresh compatible runtime
 
 #### Scenario: test_reload_refreshes_v1_lookup_and_keeps_v2_runtime
@@ -128,28 +128,32 @@ The agent MUST stop permanently only for exact HTTP 401 detail=device revoked. G
 - **WHEN** the thread agent completes real execution and interruption but receives only generic 401 after revocation
 - **THEN** it stays alive through retries until its owner stops it without leaking the thread
 
-### Requirement: Bounded exact reload-window retry
-The client MUST limit retries to /exec and /stream HTTP 401 with raw JSON detail exactly Dirtside token routes are disabled, within one fixed three-second deadline per operation with unchanged request id and captured owner. No ambiguous execution or successful stream MAY be replayed.
+### Requirement: Bounded reload-window retry
+The client MUST limit retries to an owner's /exec and /stream HTTP 401, which precedes handler work, within one fixed three-second deadline per operation with unchanged request id and captured owner. No other status, transport failure, ambiguous execution or successful stream MAY be replayed.
 
-#### Scenario: test_exact_disabled_route_retries_preserve_request
-- **WHEN** either execution submission or stream attachment sees three exact disabled-route refusals before success
-- **THEN** the same request id is used and every rejected response is closed
+#### Scenario: test_worker_call_inside_real_reload_is_replayed_once
+- **WHEN** a worker reaches the real owner during registration 1, 5 or 9, including before execution submission or stream attachment
+- **THEN** core's actual 401 precedes recovery, the same request id is retained, and one marker append, one history row and the complete outcome prove one execution
 
-#### Scenario: test_other_rejections_are_never_retried
-- **WHEN** detail spelling or status differs, or the rejection body is malformed
-- **THEN** execution fails or the handle becomes lost after one attempt without replay
+#### Scenario: test_worker_terminal_inside_real_reload_recovers_through_core_retry
+- **WHEN** a worker terminal call reads device state from the real owner during registration 1, 5 or 9
+- **THEN** the client does not replay the refused read, and core's own terminal retry completes the call at least two seconds later with one marker append and one history row
 
-#### Scenario: test_disabled_route_retry_has_one_fixed_short_deadline
-- **WHEN** the exact disabled-route refusal persists
-- **THEN** retries stop after the fixed short window with the original refusal and closed responses
+#### Scenario: test_other_real_owner_refusals_are_not_replayed
+- **WHEN** the real owner returns 400, 403, 409, 410 or 503
+- **THEN** the client reports that refusal after one attempt without adding work, and a live local state control still succeeds
 
-#### Scenario: test_disabled_response_does_not_retry_other_local_routes
-- **WHEN** device-state or cancellation routes receive that exact refusal
-- **THEN** each call fails without retry
+#### Scenario: test_worker_with_stale_closed_owner_stops_at_the_same_deadline
+- **WHEN** a recorded owner has permanently closed routes
+- **THEN** execution replay ends at the same three-second client deadline without work
 
-#### Scenario: test_real_local_route_recovers_without_duplicate_execution
-- **WHEN** a real signed device command encounters the exact refusal before /exec or /stream
-- **THEN** recovery produces one device marker append, one history row and the complete outcome
+#### Scenario: test_worker_terminal_with_stale_closed_owner_ends_with_core_retries
+- **WHEN** a worker terminal call finds a recorded owner with permanently closed routes
+- **THEN** each of core's four terminal attempts makes one refused device-state read, and the call ends without work
+
+#### Scenario: test_dropped_connection_is_a_single_attempt
+- **WHEN** the recorded owner drops the connection during execution submission or stream attachment
+- **THEN** the client makes one attempt and reports the missing owner
 
 ### Requirement: Proof-first revocation on every signed route
 A retained paired credential MUST receive exact HTTP 401 detail=device revoked inside its ten-second window only after valid signature, 300-second freshness, nonce, sender and route-kind checks. No open poll is required. Default registry authority MUST remain active-only. Rejected traffic MUST NOT publish ownership or update liveness or work.

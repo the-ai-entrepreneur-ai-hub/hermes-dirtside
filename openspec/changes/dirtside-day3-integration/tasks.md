@@ -15,7 +15,3 @@
 
 - [x] 3.1 Add the eight-row bash matrix and necessary Python control helper; verify loopback execution, failure transcripts, cleanup and nonzero failure status.
 - [x] 3.2 Document managed two-machine invocation and amended row expectations; verify help and a loopback transcript.
-
-## 4. Acceptance
-
-- [x] 4.1 Run the full existing and new tests, lint, sizes, strict change validation, root plugin doctor and loopback matrix; record exact outputs, deviations and unchanged history in the day-3 report.

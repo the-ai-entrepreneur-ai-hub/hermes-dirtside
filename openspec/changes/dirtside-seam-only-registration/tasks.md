@@ -1,22 +1,28 @@
 # Tasks
 
-## 1. Baseline and contract
+## 1. Public registration
 
-- [x] 1.1 Run unchanged full pytest, doctor, validate and the loopback matrix, classify each failure, and record the bound-gate contract with core file and line references.
+- [x] 1.1 All nine paths register through the public context method with their existing scopes and atomic rollback.
+- [x] 1.2 Missing, noncallable, refused and raising registration leave every handler closed with a bounded cause warning.
+- [x] 1.3 Recognition rejects every credential while disabled or while any public route handle is inactive.
 
-## 2. Public registration and guidance
+## 2. Route-dependent behavior
 
-- [x] 2.1 Remove private route registration and retain atomic rollback; prove missing, noncallable, refused and raising registration stays closed with bounded cause warnings and real-method success controls.
-- [x] 2.2 Explain closure in authorized pairing, status and conditional device pairing errors; prove no unusable code is minted, no extra request is sent, sender refusals remain and secrets are redacted.
+- [x] 2.1 Senders who may pair see the closure reason in pairing, status, device selection, device lists and terminal prechecks; other senders retain their usual replies.
+- [x] 2.2 A recorded closed owner in this process answers commands locally and revoke cancels its retained live requests.
+- [x] 2.3 Worker execution and stream calls during real reload registrations 1, 5 and 9 preserve request identity and execute once; permanent closure keeps the same retry deadline, and a dropped connection is one attempt.
+- [x] 2.4 Dashboard session credentials do not bypass missing-method, refusal or unload closure.
 
-## 3. Real gate and lifecycle
+## 3. Lifecycle and isolation
 
-- [x] 3.1 Replace successful method stand-ins with real contexts and mounts; pass provider/scope tests with foreign and own-route controls, and update the corresponding README, architecture and earlier token-route record.
-- [x] 3.2 Retain revoke-window and rediscovery coverage on the actual gate, correct the two baseline post-disable response assertions, and pass the affected test files without changing timing bounds.
-- [x] 3.3 Reject every credential on closure, check rollback before helper cleanup, and retain working launch routes and truthful status through real reload, duplicate registration and profile loading.
+- [x] 3.1 Compatible reload, duplicate registration and profile loading retain working launch routes.
+- [x] 3.2 Foreign bound and legacy unbound token routes reject Dirtside credentials with working own-route controls.
+- [x] 3.3 Simulated restart uses a 503 interval, releases old requests before replacement and retains the original pairing and relay key.
+- [x] 3.4 The ten-second retained-credential window, actor rules, protocol and dependencies remain unchanged.
+- [x] 3.5 A conversation cached before a disable reaches the re-enabled owner; a retired relay reads the live registration for the same database, and a profile-scoped load keeps its own closed state.
 
-## 4. Release preparation
+## 4. Release compatibility
 
-- [x] 4.1 Replace older CI jobs with one Ubuntu/macOS matrix using Hermes 0.23.1 and the public patch until a release contains the method, check the workflow structure and shell syntax, and document the release-time updates.
-- [x] 4.2 Match measured budgets and collected counts, keep exactly two private import sites and a safe install decision, and pass lint, citation and strict specification validation.
-
+- [x] 4.1 CI fetches the exact public commit and its parent by object id and applies their difference without website paths.
+- [x] 4.2 The version label stays `0.1.0` and the manifest floor stays `>=0.22.7`; they move together when a release contains the method.
+- [x] 4.3 The previous version on the repository's default branch runs on released Hermes until that release exists.
