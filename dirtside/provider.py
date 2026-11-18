@@ -123,8 +123,8 @@ class ConversationEnvironment:
 
     def __getattr__(self, name):
         # Unknown probes must stay registry-free.
-        getattr(self.__dict__.get("_last"), name)
-        return getattr(self._current(name == "execute"), name)
+        last = getattr(self.__dict__.get("_last"), name)
+        return last if name == "cleanup_stops_processes" else getattr(self._current(name == "execute"), name)
 
     @property
     def cwd(self):
