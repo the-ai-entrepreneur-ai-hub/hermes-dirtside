@@ -1,5 +1,6 @@
 """Compare output, status and cwd against core local execution on the same host."""
 import os
+import re
 import shlex
 import sys
 import threading
@@ -29,9 +30,13 @@ def remote_environment(request):
         yield create
 
 
+def shown(output):  # Core wrappers differ in length per backend, so bash line numbers do too.
+    return re.sub(r"bash: line \d+:", "bash: line N:", output)
+
+
 def compare(local, remote, command, **kwargs):
     left, right = local.execute(command, **kwargs), remote.execute(command, **kwargs)
-    assert right["output"] == left["output"]
+    assert shown(right["output"]) == shown(left["output"])
     assert right["returncode"] == left["returncode"]
     assert remote.cwd == local.cwd
     return right
@@ -98,7 +103,7 @@ def test_conformance_missing_cwd(tmp_path, remote_environment):
             missing = str(tmp_path / "does-not-exist")
             left, result = local.execute("pwd", cwd=missing), remote.execute("pwd", cwd=missing)
             if "cwd_fallback" not in left:  # Hermes 0.23.2 lets only its local backend pick another folder.
-                assert (result["output"], result["returncode"]) == (left["output"], left["returncode"])
+                assert (shown(result["output"]), result["returncode"]) == (shown(left["output"]), left["returncode"])
             assert result["returncode"] == 126
             assert "does-not-exist" in result["output"]
             assert remote.cwd == str(tmp_path)
